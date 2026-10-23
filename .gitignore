@@ -1,0 +1,40 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testing & linting cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Android APK analysis & packet captures
+*.apk
+*.xapk
+*.apks
+apk_dump/
+captures/
+*.har
+*.pcap
+*.pcapng
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Tool indexing caches
+.codegraph/
+graphify-out/
