@@ -4,9 +4,9 @@ from __future__ import annotations
 import logging
 import os
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN, PLATFORMS
 
@@ -60,73 +60,13 @@ async def _async_register_card(hass: HomeAssistant) -> None:
 # Effetto collaterale utile: i logger dei moduli core/ ora rispondono a `manifest.loggers`.
 
 
-async def _async_register_adoption_service(hass: HomeAssistant) -> None:
-    """Registra il servizio di adozione delle entita' della linea `omoda_jaecoo`.
-
-    E' un SERVIZIO e non un passo automatico del setup, di proposito. Un'integrazione che
-    si prende le entita' di un'altra senza che nessuno l'abbia chiesto e' inaccettabile
-    anche quando ha ragione, e questa gira su un'API che nessuna delle 1401 integrazioni di
-    serie usa. Lo deve chiedere una persona, sapendo cosa comporta.
-    """
-    from .legacy import LEGACY_DOMAIN, adotta, recupera_storico
-
-    if hass.services.has_service(DOMAIN, "adopt_legacy_entities"):
-        return
-
-    async def _esegui(call) -> None:
-        dry = call.data.get("dry_run", True)
-        # L'integrazione vecchia deve essere SCARICATA: Home Assistant rifiuta di spostare
-        # un'entita' gia' montata ("Only entities that haven't been loaded can be migrated").
-        # Meglio dirlo prima che fallire cinquanta volte di fila.
-        caricate = [e for e in hass.config_entries.async_entries(LEGACY_DOMAIN)
-                    if e.state == ConfigEntryState.LOADED]
-        if caricate:
-            raise HomeAssistantError(
-                f"L'integrazione {LEGACY_DOMAIN} e' ancora attiva. Disattivala "
-                "(Impostazioni, Dispositivi e servizi, menu della vecchia, Disattiva), "
-                "poi rilancia questo servizio.")
-
-        for entry in hass.config_entries.async_entries(DOMAIN):
-            rapporto = await hass.async_add_executor_job(adotta, hass, entry, dry)
-            _LOGGER.warning(
-                "Omoda9 adozione%s: %d adottate, %d sostituite, %d non migrabili, %d saltate",
-                " (prova a vuoto)" if dry else "",
-                len(rapporto["adottate"]), rapporto["sostituite"],
-                len(rapporto["non_migrabili"]), len(rapporto["saltate"]))
-            for vecchio, motivo in rapporto["non_migrabili"]:
-                _LOGGER.warning("Omoda9 adozione: %s non migrabile - %s", vecchio, motivo)
-            for vecchio, motivo in rapporto["saltate"]:
-                _LOGGER.warning("Omoda9 adozione: %s saltata - %s", vecchio, motivo)
-
-    hass.services.async_register(DOMAIN, "adopt_legacy_entities", _esegui)
-
-    async def _recupera(call) -> None:
-        """Il caso di chi ha gia' disinstallato la vecchia: le entita' non ci sono piu', i
-        dati si'. Non serve che l'integrazione vecchia esista, ne' che sia spenta."""
-        dry = call.data.get("dry_run", True)
-        for entry in hass.config_entries.async_entries(DOMAIN):
-            r = await recupera_storico(hass, entry, dry_run=dry)
-            _LOGGER.warning(
-                "Omoda9 recupero storico%s: %d serie statistiche, %d cronologie, "
-                "%d non migrabili, %d saltate",
-                " (prova a vuoto)" if dry else "",
-                len(r["statistiche"]), len(r["cronologia"]),
-                len(r["non_migrabili"]), len(r["saltate"]))
-            for vecchio, nuovo in r["statistiche"]:
-                _LOGGER.warning("Omoda9 recupero: statistiche %s -> %s", vecchio, nuovo)
-            for vecchio, motivo in r["non_migrabili"] + r["saltate"]:
-                _LOGGER.warning("Omoda9 recupero: %s non recuperata - %s", vecchio, motivo)
-
-    hass.services.async_register(DOMAIN, "recover_legacy_history", _recupera)
-
-
 async def _async_migrate_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Porta gli entity_id gia' registrati ai nomi inglesi, una volta sola e in silenzio.
 
     Perche' serve, e perche' il codice da solo non basta. Home Assistant ritrova un'entita'
     dal suo `unique_id` e riusa l'`entity_id` che ha gia' in registro: l'`entity_id` che il
     codice calcola vale solo alla PRIMA registrazione. Senza questa funzione chi e' gia'
-    installato terrebbe `sensor.omoda9_batteria` per sempre e solo le installazioni nuove
+    installato terrebbe i vecchi ID per sempre e solo le installazioni nuove
     avrebbero i nomi inglesi - il peggiore dei due mondi, perche' una issue aperta da due
     utenti diversi parlerebbe di due entita' con nomi diversi.
 
@@ -152,7 +92,7 @@ async def _async_migrate_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> 
     for voce in er.async_entries_for_config_entry(reg, entry.entry_id):
         piattaforma, _, object_id = voce.entity_id.partition(".")
         old_key = None
-        for prefix in (f"{DOMAIN}_", "omoda9_"):
+        for prefix in (f"{DOMAIN}_",):
             if object_id.startswith(prefix):
                 old_key = object_id[len(prefix):]
                 break
@@ -180,24 +120,6 @@ async def _async_migrate_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> 
         "Lepas: %d entita' rinominate ai nomi inglesi. Storico e statistiche seguono; "
         "i riferimenti scritti a mano in automazioni e dashboard vanno aggiornati.", fatti)
 
-    # Un elenco dentro un file del repository non lo apre nessuno, e la domanda che l'utente
-    # si fa e' "quali sono le mie?". Home Assistant ha il posto giusto per rispondere: un
-    # avviso di riparazione, che compare in Impostazioni e resta finche' non lo si chiude.
-    # Non e' "fixabile" perche' non c'e' niente che possiamo riparare al posto suo: le sue
-    # automazioni le conosce solo lui. Serve a dire COSA e' successo e DOVE guardare.
-    from homeassistant.helpers import issue_registry as ir
-    ir.async_create_issue(
-        hass, DOMAIN, f"entity_ids_rinominati_{entry.entry_id}",
-        is_fixable=False,
-        severity=ir.IssueSeverity.WARNING,
-        translation_key="entity_ids_renamed",
-        translation_placeholders={
-            "count": str(fatti),
-            "url": ("https://github.com/chery-connect-ha/lepas-ha/blob/master/"
-                    "docs/entity-id-rename.md"),
-        },
-    )
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Inizializza l'integrazione da un config entry."""
@@ -218,9 +140,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Card Lovelace: registrata una volta sola (no-op dal secondo veicolo in poi).
     await _async_register_card(hass)
-
-    # Servizio di adozione: disponibile sempre, eseguito solo se qualcuno lo chiama.
-    await _async_register_adoption_service(hass)
 
     # Il monitor diagnostico va armato PRIMA del primo controllo sessione. È quel
     # controllo a decidere se aprire la riautenticazione, ed è esattamente l'evento che si
@@ -300,7 +219,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if coordinator is not None:
             # async_stop è bloccante (loop_stop fa join del thread paho) → executor.
             await hass.async_add_executor_job(coordinator.async_stop)
-        # P1-4/P2-6: qui si ripulivano `OMODA_PIN` e `OMODA_EMAIL` da `os.environ`, dove il
+        # P1-4/P2-6: in passato si ripulivano i segreti da `os.environ`, dove il
         # config flow li scriveva per passarli ai moduli core/. Non serve più — ed è la
         # garanzia più forte: con il contesto per-chiamata quei segreti nell'ambiente del
         # processo Home Assistant **non ci finiscono mai**, quindi non c'è nulla da

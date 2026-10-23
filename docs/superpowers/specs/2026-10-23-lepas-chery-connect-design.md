@@ -11,7 +11,7 @@
 ## 1. Architectural Vision & Systemic Rebranding
 
 ### 1.1 From Upstream Fork to Dedicated Lepas Integration
-The integration is derived from the battle-tested `omoda9-ha` codebase (Chery Connect), but is systematically rebranded into a first-class, standalone Home Assistant custom component for **Lepas**:
+The integration is derived from the battle-tested Chery Connect codebase, systematically established as a first-class, standalone Home Assistant custom component for **Lepas**:
 - **Package Path**: `custom_components/lepas/`
 - **Domain Identifier**: `DOMAIN = "lepas"`
 - **Component Display Name**: `"Lepas Connect"`
@@ -30,17 +30,17 @@ The integration is derived from the battle-tested `omoda9-ha` codebase (Chery Co
 ### 1.2 Class, Module, and Frontend Rebranding Matrix
 All identifiers, module paths, and class names are harmonized under the `Lepas` namespace:
 
-| Upstream Omoda 9 Construct | Rebranded Lepas Construct | Purpose / Responsibilities |
+| Upstream / Legacy Construct | Rebranded Lepas Construct | Purpose / Responsibilities |
 |---|---|---|
-| `custom_components/omoda9/` | `custom_components/lepas/` | Root component directory |
-| `Omoda9ConfigFlow` | `LepasConfigFlow` | Authentication and setup flow |
-| `Omoda9OptionsFlow` | `LepasOptionsFlow` | Options and telematics poll reconfiguration |
-| `Omoda9Coordinator` | `LepasCoordinator` | Vehicle polling and telemetry update coordinator |
-| `Omoda9Entity` | `LepasEntity` | Base entity class with device linkage |
-| `Omoda9OptimisticMixin` | `LepasOptimisticMixin` | Actuator optimistic state coordinator |
-| `core/login_omoda.py` | `core/login_lepas.py` | Cloud login endpoints and OTP validation |
-| `core/omoda.py` | `core/lepas.py` | Core MQTT client and frame orchestrator |
-| `core/omoda_auth.py` | `core/lepas_auth.py` | Token management and crypto signature handler |
+| Legacy component directory | `custom_components/lepas/` | Root component directory |
+| Legacy config flow | `LepasConfigFlow` | Authentication and setup flow |
+| Legacy options flow | `LepasOptionsFlow` | Options and telematics poll reconfiguration |
+| Legacy coordinator | `LepasCoordinator` | Vehicle polling and telemetry update coordinator |
+| Legacy entity | `LepasEntity` | Base entity class with device linkage |
+| Legacy optimistic mixin | `LepasOptimisticMixin` | Actuator optimistic state coordinator |
+| Legacy login | `core/login_lepas.py` | Cloud login endpoints and OTP validation |
+| Legacy client | `core/lepas.py` | Core MQTT client and frame orchestrator |
+| Legacy auth | `core/lepas_auth.py` | Token management and crypto signature handler |
 | `lovelace/chery-card.js` | `lovelace/lepas-card.js` | Dedicated Lovelace UI card |
 | `services.yaml` | `services.yaml` | Domain-scoped services under `lepas.*` |
 
@@ -87,7 +87,6 @@ CONF_COUNTRY_ID = "country_id"
 
 CONF_PRESET = "preset"
 PRESET_LEPAS_EU = "lepas_eu"
-PRESET_OMODA_JAECOO_EU = "omoda_jaecoo_eu"
 PRESET_CHERY_EU = "chery_eu"
 PRESET_CUSTOM = "custom"
 DEFAULT_PRESET = PRESET_LEPAS_EU
@@ -106,12 +105,6 @@ PRESETS = {
     PRESET_LEPAS_EU: {
         CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
         CONF_TENANT_CODE: "3000011",
-        CONF_CHANNEL_ID: "1",
-        CONF_COUNTRY_ID: "1",
-    },
-    PRESET_OMODA_JAECOO_EU: {
-        CONF_BFF: "https://legend-oj.omodaauto.nl/api",
-        CONF_TENANT_CODE: "300006",
         CONF_CHANNEL_ID: "1",
         CONF_COUNTRY_ID: "1",
     },
@@ -147,7 +140,6 @@ This guarantees that:
 In `_region_fields()` of `config_flow.py`, the dropdown prioritizes Lepas:
 ```python
 SelectOptionDict(value=PRESET_LEPAS_EU, label="Lepas — Europe (default)"),
-SelectOptionDict(value=PRESET_OMODA_JAECOO_EU, label="Omoda / Jaecoo — Europe"),
 SelectOptionDict(value=PRESET_CHERY_EU, label="Chery — Europe"),
 SelectOptionDict(value=PRESET_CUSTOM, label="Custom / other region (use fields below)"),
 ```
@@ -173,7 +165,7 @@ The test suite in `tests/` is fully ported to target `custom_components.lepas`:
    - Asserts 100% key parity across `strings.json`, `en.json`, `it.json`, `nl.json`.
    - Asserts every field rendered by `_region_fields` has an explicit label in all three languages.
 4. **`tests/test_architecture.py` & `test_repo_hygiene.py`**:
-   - Validates that no stale `omoda9` module imports linger inside `custom_components/lepas`.
+   - Validates that no stale legacy module imports linger inside `custom_components/lepas`.
 
 ---
 

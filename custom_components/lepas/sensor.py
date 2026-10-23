@@ -84,7 +84,7 @@ class _RtSpec:
     # chiave nel dict realtime. Una TUPLA elenca nomi alternativi per la stessa grandezza,
     # e vince il primo presente nel frame: modelli diversi la chiamano in modo diverso
     # (una BEV manda `dynamicPureElectricRange` dove la PHEV manda `pureElectricRange`).
-    # Su Omoda 9 il primo nome è quello che arriva già oggi → nessun cambiamento.
+    # Su Lepas L8 il primo nome è quello che arriva già oggi → nessun cambiamento.
     field: str | tuple[str, ...]
     device_class: SensorDeviceClass | None = None
     unit: str | None = None
@@ -116,7 +116,7 @@ FAST_GUN_MAP = {"0": "Scollegata", "1": "Collegata", "2": "Collegata (ricarica r
 
 
 # Nomi alternativi dell'autonomia elettrica: la PHEV manda `pureElectricRange`, una BEV
-# (Omoda E5) manda `dynamicPureElectricRange`. Un unico elenco, usato sia dalle spec sia
+# manda `dynamicPureElectricRange`. Un unico elenco, usato sia dalle spec sia
 # dai calcoli qui sotto, così non si sfilano fra loro.
 ELEC_RANGE_FIELDS = ("pureElectricRange", "dynamicPureElectricRange")
 
@@ -163,7 +163,7 @@ def _cruise_range_miglia(rt: dict):
 
     ── Il fatto misurato ────────────────────────────────────────────────────────────────
     Il centralino manda ALCUNE grandezze due volte, in due unità, come campi fratelli.
-    Frame reale di un'Omoda 9 PHEV, 2026-08-24:
+    Frame reale di un veicolo PHEV, 2026-08-24:
 
         mileageSurplus     209 km   ↔  cruiseRange            130   (rapporto 1,6077)
         pureElectricRange  145 km   ↔  pureElectricRangeMile   90   (rapporto 1,6111)
@@ -178,8 +178,8 @@ def _cruise_range_miglia(rt: dict):
     ── Perché non basta più inchiodare le miglia ────────────────────────────────────────
     Il sensore dichiarava miglia per costante. Se su un altro modello quel campo fosse in
     chilometri, Home Assistant convertirebbe un valore già metrico e mostrerebbe 1,6 volte
-    l'autonomia vera. ⚠️ **Non è dimostrato che accada**: la misura di @ThomasMeyer1970 sul
-    Jaecoo J7 riguarda `mileageSurplus`, non questo campo, e la lettura che chiuderebbe la
+    l'autonomia vera. ⚠️ **Non è dimostrato che accada**: la misura di @ThomasMeyer1970 su
+    un altro modello riguarda `mileageSurplus`, non questo campo, e la lettura che chiuderebbe la
     questione è stata chiesta (issue #3, e il filo su #7) e non è ancora tornata. Questa
     funzione è quindi una difesa, non la correzione di un difetto osservato.
 
@@ -373,7 +373,7 @@ _RT_SENSORS: list[_RtSpec] = [
 
 # ── Adattamento ai modelli SOLO ELETTRICI ────────────────────────────────────────────────
 # Regola: si cambia qualcosa SOLO con `powerType == 0` dichiarato dal backend. Capability
-# sconosciuta ⇒ tutto come su Omoda 9 / Jaecoo, entità comprese.
+# sconosciuta ⇒ tutto come sul modello base Lepas, entità comprese.
 
 # Sensori che parlano del motore termico: su una BEV confermata non vengono proprio creati,
 # invece di restare `unknown` per sempre. `range_combinato` è qui perché è `mileageSurplus`
@@ -433,7 +433,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     #   consumi, ricarica, clima target —
     # Su BEV CONFERMATA (powerType == 0) si tolgono i sensori del motore termico e si
     # aggiungono i campi che mandano solo le elettriche. Capability sconosciuta ⇒ elenco
-    # invariato: su Omoda 9 / Jaecoo esce esattamente ciò che usciva prima.
+    # invariato: su Lepas L8 esce esattamente ciò che usciva prima.
     bev = coord.is_pure_electric()
     specs = [s for s in _RT_SENSORS if not (bev and s.suffix in _SENSORI_SOLO_TERMICO)]
     if bev:
@@ -458,7 +458,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
 
 
 class _LepasRestoreSensor(LepasEntity, RestoreSensor):
-    """Base sensore Omoda 9 che sopravvive al riavvio di HA.
+    """Base sensore Lepas che sopravvive al riavvio di HA.
 
     Lo stato (telemetria 5A02, realtime, diagnostica) è in-memory nel coordinator
     → dopo un restart torna `unknown`. Qui ripristiniamo l'ultimo valore noto e lo

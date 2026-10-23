@@ -63,7 +63,7 @@ ATTESO = {
 # 2. Due delle tre sono contate su un profilo che nessuno ha ancora dimostrato di poter
 #    esercitare. I contatori leggono `chargingPower`, classificato BEV-only in
 #    `_RT_SENSORI_BEV` sulla base di una cattura del 2026-06-25 presa ad auto SCOLLEGATA,
-#    dove quel campo non poteva esserci comunque. Non esiste alcuna cattura di un'Omoda 9
+#    dove quel campo non poteva esserci comunque. Non esiste alcuna cattura
 #    fatta durante una carica. Se `chargingPower` arrivasse anche su una PHEV quella lista ha
 #    una voce di troppo; se non arrivasse, i due contatori vanno nel ramo BEV. Serve UN frame
 #    di sola lettura da un'auto attaccata alla spina.

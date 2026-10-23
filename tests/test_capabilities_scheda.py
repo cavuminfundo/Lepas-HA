@@ -1,7 +1,7 @@
 """La scheda tecnica della vettura al posto delle costanti cablate.
 
 Fino alla v1.12.1 le macro «Raffredda tutto»/«Riscalda tutto» spedivano `temperature`
-15.0 e 31.0, e ogni comando comfort una durata di 15 minuti. Sono i valori dell'**Omoda 9**,
+15.0 e 31.0, e ogni comando comfort una durata di 15 minuti. Sono i valori della **Lepas L8**,
 scritti a mano come se valessero per tutta la gamma. Il backend li dichiara per-veicolo in
 `queryList` — la stessa risposta da cui prendiamo già nome e `powerType`, quindi zero
 chiamate in più.
@@ -29,7 +29,7 @@ commands = load_core()["commands"]
 
 # ───────────────────────── lettura della scheda da queryList ─────────────────────────
 def test_estremi_lo_hi_letti_quando_la_vettura_li_dichiara():
-    """I valori veri dell'Omoda 9, presi dalla risposta reale del 2026-08-10."""
+    """I valori veri della Lepas L8, presi dalla risposta reale del 2026-08-10."""
     caps = capabilities_from_item({
         "isHaveLoAndHi": 1, "loValue": 15.0, "hiValue": 31.0,
         "minTemperature": 16.0, "maxTemperature": 30.0})
@@ -126,7 +126,7 @@ def test_backend_muto_lascia_il_corpo_identico():
     assert commands.adatta_capability("coolingControl", dict(corpo), None) == corpo
 
 
-def test_omoda9_non_cambia_nulla():
+def test_lepas_l8_non_cambia_nulla():
     """Sulla vettura di sviluppo i valori dichiarati coincidono con quelli cablati: il
     corpo spedito dev'essere identico a prima. Se questo test si rompe, l'adattamento sta
     cambiando comportamento su un'auto su cui non deve cambiare niente."""
@@ -160,13 +160,13 @@ def test_durata_corretta_in_entrambi_i_nomi():
 def test_durata_scelta_dall_utente_comunque_validata():
     """Una durata fuori insieme è invalida da chiunque arrivi: anche dal selettore di HA."""
     caps = {"durate_aria": [5, 10]}
-    body = {"times": "15"}          # come se venisse da number.omoda9_clima_durata
+    body = {"times": "15"}          # come se venisse da number.lepas_clima_durata
     commands._adatta_durata("airControl", body, caps)
     assert body["times"] == "10"
 
 
 def test_la_correzione_della_durata_viene_dichiarata():
-    """Il cursore arriva a 30′, l'Omoda 9 ne ammette 15: chi imposta 30 deve SAPERE che
+    """Il cursore arriva a 30′, la Lepas L8 ne ammette 15: chi imposta 30 deve SAPERE che
     all'auto ne sono arrivati 15. Tutti gli altri adattamenti lo dicono; questo non può
     essere l'unico muto — è un numero scelto a mano dall'utente."""
     detti: list[str] = []

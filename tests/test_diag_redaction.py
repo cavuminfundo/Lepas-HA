@@ -1,6 +1,6 @@
 """Test BLOCCANTE: il monitor diagnostico non deve far uscire segreti.
 
-Il file `omoda9_<VIN>_diag.jsonl` nasce redatto ed è pensato per essere allegato a una
+Il file `lepas_<VIN>_diag.jsonl` nasce redatto ed è pensato per essere allegato a una
 issue. Questi test sono la garanzia di quel claim: verificano che VIN, email, PIN, token,
 taskId e GPS non compaiano MAI né nel ring buffer né nel file su disco — nemmeno dentro
 campi dal nome sconosciuto, che la deny-list per chiave non coprirebbe.
@@ -53,7 +53,7 @@ PAYLOAD = {
     "lon": LON,
     "position": {"latitude": LAT, "longitude": LON},
     "seq": f"{VIN}-1721390000",
-    "certs_src": f"/config/omoda9_{VIN}_certs",
+    "certs_src": f"/config/lepas_{VIN}_certs",
     "nested": {"deep": {"vin": VIN, "auth": f"Bearer {TOKEN}"}},
     # campi dal nome SCONOSCIUTO: nessuna deny-list li copre
     "campo_ignoto": f"il veicolo {VIN} di {EMAIL} usa {TOKEN}",

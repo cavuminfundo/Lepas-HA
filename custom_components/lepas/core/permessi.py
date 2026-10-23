@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 """`permessi.py` — adatta i comandi a ciò che il backend autorizza SU QUEL veicolo.
 
-**Il problema.** Il catalogo comandi (`commands.py`) è cablato sull'Omoda 9 di chi ha scritto
-l'integrazione: un endpoint fisso per funzione, e le macro comfort spedite sempre intere. Su un
-veicolo diverso questo produce fallimenti totali dove l'app ufficiale invece riesce — è il caso
-dell'issue #1 (Jaecoo 7 PHEV: sedili, sbrinamento lunotto e macro rispondono tutti `A00084`).
+**Il problema.** Il catalogo comandi (`commands.py`) era storicamente cablato sul profilo di riferimento:
+un endpoint fisso per funzione, e le macro comfort spedite sempre intere. Su un
+veicolo diverso questo produceva fallimenti totali dove l'app ufficiale invece riesce
+(sedili, sbrinamento lunotto e macro rispondono tutti `A00084` se non autorizzati).
 
 **Cosa abbiamo misurato (2026-08-09), e che qui diventa codice.** Il backend **valida il corpo
 campo per campo** contro le voci figlie della categoria dell'endpoint chiamato. Due esperimenti
@@ -40,7 +40,7 @@ l'app che pota il corpo campo per campo. Le tabelle qui sotto ricalcano quella m
 ⚠️ **REGOLA NON NEGOZIABILE — FALLIMENTO PERMISSIVO.** Lista non letta, illeggibile, endpoint in
 timeout (osservato: due volte oltre i 60 s), categoria o voce sconosciuta ⇒ **ci si comporta
 esattamente come prima**, corpo intero ed endpoint di sempre. Non si toglie mai una funzione per
-un problema di rete. Corollario: sull'Omoda 9, dove tutto ciò che usiamo è consentito, questo
+un problema di rete. Corollario: su profili veicolo completi, dove tutto ciò che usiamo è consentito, questo
 modulo è un **no-op** — nessuna entità cambia, nessun endpoint cambia (`tests/test_permessi.py`).
 
 ⚠️ **Questo modulo NON crea e NON toglie entità.** Filtrare le entità con questa lista è stato
@@ -162,7 +162,7 @@ RIPIEGO = {
 # campi: non è un modo di aggirare il diniego, è la porta che quel backend autorizza — la stessa
 # cosa che l'utente otterrebbe premendo nell'app il clima e poi i due sedili uno per uno.
 #
-# ⚠️ **MISURATO, non dedotto** (issue #1, 2026-08-11, Jaecoo 7 PHEV EU, auto ferma):
+# ⚠️ **MISURATO, non dedotto** (issue #1, 2026-08-11, piattaforma PHEV EU, auto ferma):
 #   POST /asc/vehicleControl/airControl
 #   {"airControlType":"1","airType":"1","temperature":"16.0","times":"15",
 #    "mSeatAiry":"3","pSeatAiry":"3"}                                        → A00079
@@ -193,7 +193,7 @@ _RINOMINA = {"duration": "times"}
 # quando l'endpoint è cambiato.
 # ⚠️ NON basta `commands._limita_temperatura`, e crederlo è costato un difetto: quella ripiega su
 # LO..HI quando la vettura non dichiara il range impostabile, e LO..HI **contiene LO**, quindi su
-# questo percorso il controllo passava sempre. Senza scheda partiva il 15.0 dell'Omoda 9.
+# questo percorso il controllo passava sempre. Senza scheda partiva il 15.0 di default.
 #
 # ⚠️ **La lunghezza è un vincolo, non uno stile.** Questo avviso convive nella stessa riga da 255
 # caratteri con l'esito del comando (135 caratteri sulla macro freddo) e con l'elenco dei campi
@@ -209,7 +209,7 @@ MSG_RICOMPOSTA = ("questa auto non autorizza il comando unico: "
 # lo si ACCENDE accendendo il campo e lo si SPEGNE spegnendolo, esattamente come fanno le macro.
 # È un effetto collaterale dichiarato, non un incidente, e si attiva solo su veicoli dove oggi
 # quel comando fallirebbe comunque al 100%.
-# ⚠️ `temperature` e `times` qui sono SEGNAPOSTO: sono i valori dell'Omoda 9, e questo modulo non
+# ⚠️ `temperature` e `times` qui sono SEGNAPOSTO: sono i valori standard di riferimento, e questo modulo non
 # conosce la scheda tecnica della vettura. Chi chiama DEVE farli ripassare dagli adattatori alla
 # scheda DOPO l'instradamento, perché quelli girano PRIMA (a quel punto l'endpoint era ancora
 # quello dedicato e questi due valori non esistevano nel corpo).
@@ -295,7 +295,7 @@ def pota(endpoint: str, body: dict, perms: dict) -> tuple[dict, list]:
     """Toglie dal corpo i campi la cui voce figlia è negata su questo veicolo.
 
     Ritorna `(corpo, saltati)` dove `saltati` è la lista dei nomi di campo rimossi. Se non c'è
-    niente da togliere ritorna il corpo **identico** (stesso contenuto), così sull'Omoda 9 il
+    niente da togliere ritorna il corpo **identico** (stesso contenuto), così sui profili completi il
     comportamento è bit-per-bit quello di prima."""
     tabella = POTABILI.get(endpoint)
     if not perms or not tabella:
@@ -322,7 +322,7 @@ def porta_chiusa(endpoint: str, perms: dict) -> bool:
     scattasse mai, e la funzione restasse rotta **proprio sul veicolo per cui era stata scritta**.
 
     ⚠️ Sul veicolo dell'issue #1 le cose stanno diversamente da come si era supposto, e ora il
-    dato grezzo c'è (`45_capability/permessi_jaecoo7_phev_eu.json`, 280 voci contro le nostre
+    dato grezzo c'è (`45_capability/permessi_phev_eu.json`, 280 voci contro le nostre
     334): gli otto figli `2141`-`2148` **ci sono tutti, e valgono tutti 0**, insieme alla
     categoria 214. Il difetto restava reale, solo per un'altra strada. La vecchia stima «~200
     voci» era di seconda mano ed era sbagliata.
@@ -441,7 +441,7 @@ def ricomponi(endpoint: str, body: dict, perms: dict) -> tuple[str, dict, str | 
 
     1. **la macro del costruttore è aperta** ⇒ non si tocca niente. Ricomporre quando la via
        ufficiale funziona sarebbe sostituire un comando che l'auto conosce con una nostra
-       imitazione: sull'Omoda 9 questa funzione è un no-op letterale;
+       imitazione: sui profili completi questa funzione è un no-op letterale;
     2. **anche la porta di destinazione è chiusa** ⇒ non si tocca niente. Non si ricompone verso
        un secondo diniego: il comando parte com'era e l'utente riceve il rifiuto vero, che è
        un'informazione;

@@ -1,7 +1,7 @@
 """Login con password (ROPC): la password è cifrata, va nel body, e non trapela.
 
 Il login diretto conia il token con `grant_type=password`: la password è cifrata AES-128-CBC
-(`omoda_auth.aes_cbc_password`) e mandata nel BODY, che il server decifra (`needDecode=1`).
+(`lepas_auth.aes_cbc_password`) e mandata nel BODY, che il server decifra (`needDecode=1`).
 Scelte non ovvie, verificate dal vivo il 2026-08-24, che questi test presidiano:
 
   * la password è AES-CBC (NON SM4, che cifra il codice OTP): in chiaro nel body il server dà
@@ -28,7 +28,7 @@ PWD = "S3cr3t-Pa55phrase!"
 def test_la_password_e_cifrata_aes_cbc_nei_parametri(core):
     """Nei parametri la password non è in chiaro: è AES-128-CBC, e si decifra al valore atteso
     (il giro completo che fa il server con `needDecode=1`)."""
-    pt, A = core["prova_token"], core["omoda_auth"]
+    pt, A = core["prova_token"], core["lepas_auth"]
     p = pt.build_params_password("mario@rossi.it", PWD)
 
     assert p["password"] != PWD, "password in chiaro nei parametri"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-wake.py — "Sveglia auto" Omoda 9: replica ESATTA del flusso dell'app ufficiale
+wake.py — "Sveglia auto" Lepas: replica ESATTA del flusso dell'app ufficiale
           (1× smsAwaken → poll realtime/location), pensato per essere richiamato
           dal pulsante Home Assistant esposto da ha_bridge.py.
 
@@ -61,7 +61,7 @@ def _chiavi(o):
 # Ogni quanto si concede un nuovo tentativo con un refresh_token che il server ha già
 # respinto: abbastanza raro da non essere martellamento, abbastanza spesso da rimettersi
 # in pari da soli se quel rifiuto fosse stato un abbaglio del gateway.
-RITENTA_REFRESH_DOPO_S = int(os.environ.get("OMODA_RETRY_REFRESH", "3600"))
+RITENTA_REFRESH_DOPO_S = int(os.environ.get("LEPAS_RETRY_REFRESH", "3600"))
 
 COOLDOWN_S = int(os.environ.get("WAKE_COOLDOWN", "300"))   # min secondi tra due smsAwaken inviati
 POLL_N     = int(os.environ.get("WAKE_POLL_N", "12"))      # n. cicli di poll
@@ -265,11 +265,11 @@ def _bff_login(ctx, _allow_refresh=True):
         # del corpo. Il corpo stesso resta a DEBUG, perche' home-assistant.log e' il file che
         # la gente allega alle issue pubbliche.
         _LOGGER.warning(
-            "Omoda9 login BFF: HTTP %s con un corpo non-JSON (%s, %d byte). "
+            "Lepas login BFF: HTTP %s con un corpo non-JSON (%s, %d byte). "
             "Sessione trattata come non valida. [%s]",
             r.status_code, r.headers.get("content-type", "senza content-type"),
             len(r.content or b""), _regione(ctx))
-        _LOGGER.debug("Omoda9 login BFF: corpo non-JSON: %s", (r.text or "")[:300])
+        _LOGGER.debug("Lepas login BFF: corpo non-JSON: %s", (r.text or "")[:300])
         return None, None
     d = j.get("data", {}) if isinstance(j, dict) else None
     # P1-3: il gate del refresh sta sull'ASSENZA di userToken, non sul solo `data` non-dict.
@@ -282,9 +282,9 @@ def _bff_login(ctx, _allow_refresh=True):
         # vuoto arrivano all'utente come la stessa identica frase. `code` e' il codice
         # d'errore del server, non un dato personale; il `message` resta a DEBUG.
         _LOGGER.warning(
-            "Omoda9 login BFF: HTTP %s rifiutato, code=%s, nessun userToken (data: %s). [%s]",
+            "Lepas login BFF: HTTP %s rifiutato, code=%s, nessun userToken (data: %s). [%s]",
             r.status_code, _code_of(j), _chiavi(d), _regione(ctx))
-        _LOGGER.debug("Omoda9 login BFF: message=%s", str(j.get("message"))[:200] if isinstance(j, dict) else "-")
+        _LOGGER.debug("Lepas login BFF: message=%s", str(j.get("message"))[:200] if isinstance(j, dict) else "-")
         # sessione scaduta: prova UN rinnovo automatico del token e ritenta una sola volta.
         # `_refresh_token` e' il wrapper booleano di `_refresh_token_detail`, che ha gia' il
         # marcatore stabile del PERCHE' ("assente" / "rete:<Tipo>" / "rifiutato:<key>" /
@@ -292,10 +292,10 @@ def _bff_login(ctx, _allow_refresh=True):
         # un piano piu' sotto. Su un PRIMO login il motivo atteso e' "assente": leggerne un
         # altro dice che il flusso e' arrivato dove non doveva.
         if not _allow_refresh:
-            _LOGGER.warning("Omoda9 login BFF: rinnovo gia' tentato in questo giro, non ritento.")
+            _LOGGER.warning("Lepas login BFF: rinnovo gia' tentato in questo giro, non ritento.")
             return None, None
         rinnovato, motivo = _refresh_token_detail(ctx)
-        _LOGGER.warning("Omoda9 login BFF: rinnovo automatico %s%s.",
+        _LOGGER.warning("Lepas login BFF: rinnovo automatico %s%s.",
                         "riuscito" if rinnovato else "non riuscito",
                         "" if rinnovato else f" ({motivo or 'senza motivo'})")
         if rinnovato:

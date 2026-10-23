@@ -17,7 +17,7 @@ vince. Questi test guardano perciò `coordinator.data["cmd_status"]` — cioè q
 vede davvero — e non la lista dei messaggi prodotti.
 
 Vale per l'intera famiglia degli avvisi pre-invio (durata, campi potati, categoria negata, ciclo
-dei giorni non ammesso), non solo per la durata: sull'Omoda 9 si manifesta solo quello perché
+dei giorni non ammesso), non solo per la durata: sul profilo completo si manifesta solo quello perché
 gli altri non scattano su un veicolo che ha tutti i permessi.
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ def test_gli_avvisi_seguono_lesito():
 
 
 def test_senza_avvisi_lesito_resta_identico():
-    """Il rumore nuovo per chi non ha nulla da sapere dev'essere ZERO: su un'Omoda 9 con la
+    """Il rumore nuovo per chi non ha nulla da sapere dev'essere ZERO: su un veicolo con la
     durata giusta la riga non deve cambiare di un carattere."""
     assert unisci_esito_e_note("Clima acceso ✅", []) == "Clima acceso ✅"
     assert unisci_esito_e_note("Clima acceso ✅", None) == "Clima acceso ✅"
@@ -226,7 +226,7 @@ async def test_gli_avvisi_non_si_trascinano_sul_comando_successivo(hass, integra
 
 
 async def test_un_comando_senza_avvisi_non_aggiunge_rumore(hass, integrazione_avviata, cloud):
-    """Su un'Omoda 9 con una durata ammessa la riga dev'essere esattamente quella di prima."""
+    """Su un veicolo con una durata ammessa la riga dev'essere esattamente quella di prima."""
     coord = _coordinator(hass, integrazione_avviata)
     _prepara(coord, cloud)
 

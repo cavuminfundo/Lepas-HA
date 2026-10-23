@@ -64,7 +64,7 @@ def test_brand_png_dimensions_and_rgba_format(filename, width, height):
 
 @pytest.mark.parametrize("filename,width,height", BRAND_SPECS)
 def test_brand_png_not_legacy_upstream(filename, width, height):
-    """Brand assets must not match upstream legacy Omoda/Jaecoo icons."""
+    """Brand assets must not match upstream legacy icons."""
     asset_path = f"{REPO}/custom_components/lepas/brand/{filename}"
     data = Path(asset_path).read_bytes()
     digest = hashlib.sha256(data).hexdigest()

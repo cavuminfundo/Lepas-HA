@@ -53,9 +53,9 @@
 - [x] Native Defaults & Preset Configuration:
   - `DEFAULT_PRESET = PRESET_LEPAS_EU` with `DEFAULTS` pointing to Lepas Europe endpoints.
   - Config flow fix: `self._apply_preset(self._data)` wired in `async_step_login_password`.
-- [x] Dual-Prefix Entity Migration:
+- [x] Entity Migration & Prefix Normalization:
   - `ID_PREFIX = "lepas"` established as default.
-  - Support for dual prefix (`lepas_` + `omoda9_`) in `_async_migrate_entity_ids` and `entity.py` to prevent orphaned entities across upgrades.
+  - Support for prefix normalization in `_async_migrate_entity_ids` and `entity.py` to prevent orphaned entities across upgrades.
 - [x] Entity Platform Implementations:
   - `sensor.py`: SoC, range, odometer, tire pressures.
   - `binary_sensor.py`: Doors, trunk, charging connection status.

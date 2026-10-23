@@ -1,4 +1,4 @@
-"""Diagnostica scaricabile dell'integrazione Omoda 9 / Jaecoo.
+"""Diagnostica scaricabile dell'integrazione Lepas.
 
 Genera il report che HA offre con «Scarica diagnostica» nella pagina
 dell'integrazione. Pensato per il SUPPORTO: contiene stato sessione, parametri
@@ -127,8 +127,8 @@ async def async_get_config_entry_diagnostics(
     diag: dict[str, Any] = {
         "entry": {
             "version": entry.version,
-            # titolo forzato senza VIN (il titolo reale è "Omoda 9 (<VIN>)")
-            "title": "Omoda 9",
+            # titolo forzato senza VIN (il titolo reale è "Lepas L8 (<VIN>)")
+            "title": "Lepas L8",
             "data": async_redact_data(dict(entry.data), TO_REDACT),
             # anche le options passano dalla redazione: oggi contengono solo intervalli di
             # polling, ma così una chiave sensibile aggiunta domani è già coperta.

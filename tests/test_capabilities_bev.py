@@ -1,7 +1,7 @@
-"""Adattamento ai modelli SOLO ELETTRICI, senza toccare il comportamento su Omoda 9.
+"""Adattamento ai modelli SOLO ELETTRICI, senza toccare il comportamento sui modelli PHEV.
 
-Il componente nasce su una Omoda 9 PHEV, ma il canale telemetria è lo stesso per tutta la
-gamma e le BEV (Omoda E5) mandano un sottoinsieme diverso di campi. L'adattamento c'è, ma
+Il componente nasce su modelli PHEV, ma il canale telemetria è lo stesso per tutta la
+gamma e le BEV mandano un sottoinsieme diverso di campi. L'adattamento c'è, ma
 è deliberatamente **timido**: si cambia qualcosa solo quando il backend dichiara
 `powerType == 0` in `queryList`. Capability sconosciuta ⇒ tutto come prima.
 

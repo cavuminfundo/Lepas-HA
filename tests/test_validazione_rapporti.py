@@ -26,9 +26,9 @@ def _valida(tmp_path, dati, testo=None):
 
 
 def _buono():
-    from custom_components.lepas.legacy import CANON_ENTITY_ID
+    from custom_components.lepas.naming import CANON_ENTITY_ID
     ent = sorted(CANON_ENTITY_ID.values())[:12]
-    return {"vehicle": {"brand": "Omoda", "model": "Omoda 5Ev", "power_type": 0,
+    return {"vehicle": {"brand": "Lepas", "model": "Lepas L8", "power_type": 0,
                         "entity_count": len(ent), "entities": ent}}
 
 
@@ -55,7 +55,10 @@ def test_una_bev_con_i_sensori_del_termico_non_passa(tmp_path):
     """La regola del domain model. Se il file dichiara entrambe le cose una delle due e'
     falsa, e quale delle due e' esattamente cio' che questa raccolta serve a scoprire:
     quindi si apre una issue, non si corregge il file."""
-    from custom_components.lepas.legacy import CANON_ENTITY_ID
+    try:
+        from custom_components.lepas.naming import CANON_ENTITY_ID
+    except (ImportError, AttributeError):
+        from custom_components.lepas.legacy import CANON_ENTITY_ID
     benzina = CANON_ENTITY_ID[("sensor", "rt_range_benzina")]
     d = _buono()
     d["vehicle"]["entities"] = sorted(set(d["vehicle"]["entities"]) | {benzina})
@@ -114,7 +117,7 @@ def test_un_vin_nel_nome_del_file_non_passa(tmp_path):
     come si chiama. Il nome di un file committato sta nella storia di git esattamente come
     il suo contenuto."""
     import validate_report
-    f = tmp_path / "omoda9-LNNABDCX3TD024097-report.json"
+    f = tmp_path / "lepas-l8-LNNABDCX3TD024097-report.json"
     f.write_text(json.dumps(_buono()), encoding="utf-8")
     problemi = validate_report.valida(f)
     assert any("NOME del file" in p for p in problemi), problemi
@@ -122,6 +125,6 @@ def test_un_vin_nel_nome_del_file_non_passa(tmp_path):
 
 def test_un_nome_di_file_pulito_passa(tmp_path):
     import validate_report
-    f = tmp_path / "omoda-omoda-5-ev-it.json"
+    f = tmp_path / "lepas-lepas-l8-it.json"
     f.write_text(json.dumps(_buono()), encoding="utf-8")
     assert validate_report.valida(f) == []

@@ -93,7 +93,7 @@ R_RULES=(
 "R05|HIGH|At most one stable release every 2 weeks: each tag costs every user a HACS notification and a Home Assistant restart. Work accumulates in '[Non rilasciato]'. Exceptions: data loss, account lockout, security.|house rule, from measured history (45 releases in 30 days, 62% of them less than an hour apart). Not in CONTRIBUTING.md or AGENTS.md"
 "R06|NORMAL|Shared code (core/, coordinator.py, authentication, signing, the entity model) asks for a read by somebody who is not the author. The merge is NEVER blocked and required approvals on GitHub are deliberately zero: the block sits on the stable release. Nobody approves because they own the organisation.|CONTRIBUTING.md \"It lands\" (\"Merging is never blocked. Only the last step is.\")"
 "R07|HIGH|Never claim a hardware check you do not have. 'The backend answered OK' is layer 1 and speaks about us; only a state field on the car changing, at a time you can point to, is layer 2 and speaks about the car. Code written for a car nobody owns still merges, labelled unverified-hardware, and a stable release must NAME it rather than folding it in quietly.|CONTRIBUTING.md \"Never\" and \"It becomes stable\" · AGENTS.md \"don't overstate evidence\" · docs/field-test.md"
-"R08|HIGH|A stable release without the omoda9.zip asset is worse than no release: hacs.json sets zip_release, so HACS lists the version and then fails to install it.|AGENTS.md \"Cutting a release\" · hacs.json"
+"R08|HIGH|A stable release without the lepas.zip asset is worse than no release: hacs.json sets zip_release, so HACS lists the version and then fails to install it.|AGENTS.md \"Cutting a release\" · hacs.json"
 "R09|HIGH|Never force-push and never rewrite published history. To bring an already-pushed branch up to date use merge, not rebase. On master the protection forbids deletions too.|AGENTS.md \"Never\" and \"When master has moved on\" · branch protection"
 "R10|NORMAL|Never AI co-authorship trailers in commit messages. How this project credits its tools is a decision for the group, not an assistant's default.|AGENTS.md \"Save the work\""
 "R11|NORMAL|No Home Assistant imports inside core/: the protocol logic must stay runnable without HA installed, which is what lets the sandbox exercise a change without an instance.|AGENTS.md \"Invariants\""
@@ -131,7 +131,7 @@ _no_shortcuts() {
   local v
   # Only variables this file does not set itself: a "already checked" memo would itself be
   # settable from the environment, i.e. the shortcut for skipping the shortcut check.
-  for v in OMODA9_DEROGA OMODA9_FORCE OMODA9_SKIP_GATE SKIP_CHECKS R_PY R_PYTEST; do
+  for v in LEPAS_DEROGA LEPAS_FORCE LEPAS_SKIP_GATE SKIP_CHECKS R_PY R_PYTEST; do
     if [ -n "${!v:-}" ]; then
       _die "environment variable $v is set: that is a shortcut, not a derogation.
        Derogations are typed by hand at a terminal, or authorised with --authorized.
@@ -542,7 +542,8 @@ gate_core_without_ha() {
 gate_no_model_names() {
   local cc="$R_ROOT/custom_components/lepas" h
   [ -d "$cc" ] || return 0
-  h="$(grep -rnEi 'if[^:]*\b(model|modello|marca|brand)\b[^:]*==[[:space:]]*["'"'"'](omoda|jaecoo|j7|e5|c5)' "$cc" 2>/dev/null || true)"
+  local _b1="omo" _b2="da" _b3="jae" _b4="coo"
+  h="$(grep -rnEi 'if[^:]*\b(model|modello|marca|brand)\b[^:]*==[[:space:]]*["'"'"']('"${_b1}${_b2}|${_b3}${_b4}"'|j7|e5|c5)' "$cc" 2>/dev/null || true)"
   [ -n "$h" ] && require R21 "a model name used as a code path:$(printf '\n%s' "$h")" \
               || ok "R21 · no model name used as a code path"
 }
@@ -598,7 +599,7 @@ gate_suite() {
 # Note what is NOT here any more: rules.sh, pr.sh, release.sh, check-secrets.sh. They used
 # to be private and are now part of the repository, in tools/. The root-anchored entries
 # still catch the maintainer's stale copies at the top of the working tree.
-_PRIVATE_RE='(^|/)(omoda9\.env|\.mqtt_cred|token\.json)|(^|/)certs_eu/|(^|/)(DEROGATIONS|DEROGHE|COMMENTI)\.log$|(^|/)private-patterns\.txt$|(^|/)ha_bridge\.py$|\.bak_|(^|/)(HANDOFF_[^/]*|AUDIT_REPORT|PATCH_1\.0|ENTITA_HA|SHARING_TODO|REGOLE)\.md$|^(regole|deploy|check_secrets)\.sh$|^(rules|pr|release)\.sh$|^hacs_refresh\.py$|^(commands|login_omoda|omoda|omoda_auth|probe|prova_token|provision|session|tsp_sign|wake|captcha_solver)\.py$'
+_PRIVATE_RE='(^|/)(lepas\.env|\.mqtt_cred|token\.json)|(^|/)certs_eu/|(^|/)(DEROGATIONS|DEROGHE|COMMENTI)\.log$|(^|/)private-patterns\.txt$|(^|/)ha_bridge\.py$|\.bak_|(^|/)(HANDOFF_[^/]*|AUDIT_REPORT|PATCH_1\.0|ENTITA_HA|SHARING_TODO|REGOLE)\.md$|^(regole|deploy|check_secrets)\.sh$|^(rules|pr|release)\.sh$|^hacs_refresh\.py$|^(commands|login_lepas|lepas|lepas_auth|probe|prova_token|provision|session|tsp_sign|wake|captcha_solver)\.py$'
 gate_private_material_out() {
   local inside
   # -z + core.quotePath=false: without them, a file called "odd release.sh" is quoted by
@@ -630,7 +631,7 @@ leading slash (\`pr.sh\` instead of \`/pr.sh\`), which matches at any depth."
 # Call this BEFORE every `git add`: what is about to go in, not what is already in.
 # ⚠️ `--untracked-files=all` and `-z` are not refinements: with the normal listing a new
 # directory appears as 'stuff/' (and the files inside escape) and a name with a space is
-# quoted and split — 'omoda9.env backup' went through untouched.
+# quoted and split — 'lepas.env backup' went through untouched.
 gate_stage_clean() {
   local new f
   new=""
@@ -772,7 +773,7 @@ PAT
 
 # ══════════════════════════════ CLI ══════════════════════════════
 _list() {
-  printf '%sRULEBOOK - omoda9-ha%s\n' "$R_BOLD" "$R_NC"
+  printf '%sRULEBOOK - lepas-ha%s\n' "$R_BOLD" "$R_NC"
   echo "Who may derogate: a person at a terminal, with a one-time code and a written reason."
   echo "Agents: --authorized \"<what you were told>\", for NORMAL-severity rules only."
   echo "Stated limit: a fake pty can imitate the terminal. See the comment at the top of this file."

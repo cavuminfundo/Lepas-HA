@@ -128,7 +128,7 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"), "**VIN**"),
     (re.compile(r"\b\d{15,}\b"), "**NUM**"),          # tUserId & affini (id numerici lunghi)
     (re.compile(r"\b[0-9a-fA-F]{32,}\b"), "**HEX**"),  # token/hash/SM4
-    (re.compile(r"/config/(?:omoda9|lepas)_\S*"), "**PATH**"),   # path per-VIN nella config dir
+    (re.compile(r"/config/lepas_\S*"), "**PATH**"),   # path per-VIN nella config dir
     # COORDINATA GEOGRAFICA in un campo dal nome qualsiasi. `DROP_KEYS` toglie la
     # posizione quando la si riconosce dal NOME della chiave; questo pattern la prende
     # anche quando il nome non dice nulla — è il caso che ha causato la fuga vista in

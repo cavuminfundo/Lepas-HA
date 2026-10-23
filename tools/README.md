@@ -4,7 +4,7 @@
 same thing written so a machine can check it before something irreversible happens.
 
 It arrives here because @drake69 asked for it on
-[#25](https://github.com/chery-connect-ha/omoda9-ha/pull/25#issuecomment-5395878567): a
+[#25](https://github.com/chery-connect-ha/lepas-ha/pull/25#issuecomment-5395878567): a
 rule only one machine can enforce is a rule the other three of us are guessing at. He also
 said the interesting half is the checklist rather than the shell, and he is right — the
 table below is the part that ports without change.
@@ -95,7 +95,7 @@ to argument like everything else.
 | **R05** | HIGH | At most one stable release every two weeks | **house rule**, from measured history (45 releases in 30 days) | blocks |
 | **R06** | NORMAL | Shared code asks for a read by somebody who is not the author | `CONTRIBUTING.md` *It lands* | **warns** — the source says merging is never blocked |
 | **R07** | HIGH | Never claim a hardware check you do not have; the unverified gets **named** | `CONTRIBUTING.md`; `AGENTS.md`; `docs/field-test.md` | asks, and labels `unverified-hardware` |
-| **R08** | HIGH | No stable release without the `omoda9.zip` asset | `AGENTS.md` *Cutting a release*; `hacs.json` | blocks — archive built and validated **before** the tag |
+| **R08** | HIGH | No stable release without the `lepas.zip` asset | `AGENTS.md` *Cutting a release*; `hacs.json` | blocks — archive built and validated **before** the tag |
 | **R09** | HIGH | No force-push, no rewriting published history | `AGENTS.md` *Never*; branch protection | blocks |
 | **R10** | NORMAL | No AI co-authorship trailers in commits | `AGENTS.md` *Save the work* | blocks |
 | **R11** | NORMAL | No Home Assistant imports inside `core/` | `AGENTS.md` *Invariants* | blocks |
@@ -112,7 +112,7 @@ to argument like everything else.
 | **R22** | HIGH | The token is never committed nor left in `.git/config` | derived from `AGENTS.md` *Invariants*; `SECURITY.md` | blocks |
 | **R23** | HIGH | `manifest.json` already matches the tag | `AGENTS.md` *Cutting a release* | blocks |
 | **R24** | NORMAL | After an update: HA `RUNNING`, the entity count the test asserts, none unavailable | `tests/test_entity_count.py`; the inspection itself is a **house rule** | none |
-| **R25** | HIGH | Say **who** did the work a claim rests on: a person, or an agent they drive | `CONTRIBUTING.md` *Never*, merged in [#28](https://github.com/chery-connect-ha/omoda9-ha/pull/28); @drake69's convention in [#7](https://github.com/chery-connect-ha/omoda9-ha/issues/7) | asks and records — it cannot verify |
+| **R25** | HIGH | Say **who** did the work a claim rests on: a person, or an agent they drive | `CONTRIBUTING.md` *Never*, merged in [#28](https://github.com/chery-connect-ha/lepas-ha/pull/28); @drake69's convention in [#7](https://github.com/chery-connect-ha/lepas-ha/issues/7) | asks and records — it cannot verify |
 | **R26** | HIGH | Re-read the thread before publishing a reply: somebody may have written since you drafted | a real mistake on 2026-08-24 | **not here** — it lives in the maintainer's local drafting tool |
 
 Two of those deserve a footnote.
@@ -158,7 +158,7 @@ checker at all.
 
 - **Fork or upstream.** `pr.sh` pushes to `origin` and opens the pull request against the
   upstream repository, using `owner:branch` as the head when they differ. Set
-  `OMODA9_REPO` if you work against a different upstream. A beta build is never cut from a
+  `LEPAS_REPO` if you work against a different upstream. A beta build is never cut from a
   fork.
 - **Python.** Home Assistant needs 3.13+. The suite gate looks at `$VIRTUAL_ENV`, then
   `.venv/`, `.venv-test/`, `venv/`, `env/` inside the checkout, then

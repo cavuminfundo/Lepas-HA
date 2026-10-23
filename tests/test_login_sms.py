@@ -97,8 +97,8 @@ def test_request_otp_usa_il_ramo_sms_e_non_mette_il_numero_in_argv(core, ctx, mo
 
     assert "invia-sms" in visto["argv"], "account col telefono: deve partire il ramo SMS"
     assert FX.PHONE not in " ".join(visto["argv"]), "numero in argv: visibile in `ps`"
-    assert visto["env"]["OMODA_PHONE"] == FX.PHONE
-    assert visto["env"]["OMODA_AREA"] == FX.AREA_CODE
+    assert visto["env"]["LEPAS_PHONE"] == FX.PHONE
+    assert visto["env"]["LEPAS_AREA"] == FX.AREA_CODE
 
 
 def test_senza_telefono_resta_il_ramo_email(core, ctx, monkeypatch):

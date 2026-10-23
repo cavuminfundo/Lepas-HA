@@ -1,11 +1,11 @@
 """L'unità dell'autonomia è una proprietà del VEICOLO, non una costante del codice.
 
 Il centralino manda alcune grandezze in due unità come campi fratelli: `mileageSurplus` in
-chilometri e `cruiseRange` in miglia (misurato dal vivo su Omoda 9: 209 km ↔ 130). Il
+chilometri e `cruiseRange` in miglia (misurato dal vivo su Lepas L8: 209 km ↔ 130). Il
 sensore diagnostico dichiarava miglia **per costante**, da due campioni su una sola auto.
 
-⚠️ Non è dimostrato che su un altro modello quel campo sia in chilometri: la misura sul
-Jaecoo J7 riguarda `mileageSurplus` (issue #3, e il filo su #7), non questo campo. Questi
+⚠️ Non è dimostrato che su un altro modello quel campo sia in chilometri: la misura su
+un veicolo gemello riguarda `mileageSurplus` (issue #3, e il filo su #7), non questo campo. Questi
 test fissano quindi una DIFESA, non la correzione di un difetto osservato — e soprattutto
 fissano le tre cose da cui la difesa deve difendersi, perché ognuna, sbagliata, farebbe
 danno a chi oggi funziona.
@@ -18,13 +18,13 @@ from custom_components.lepas.sensor import _cruise_range_miglia
 
 MIGLIO_KM = 1.609344
 # Frame vero, 2026-08-24. Serve come base a cui togliere un pezzo per volta.
-OMODA9 = {"mileageSurplus": "209", "cruiseRange": "130",
-          "pureElectricRange": "145", "pureElectricRangeMile": "90"}
+LEPAS_L8 = {"mileageSurplus": "209", "cruiseRange": "130",
+            "pureElectricRange": "145", "pureElectricRangeMile": "90"}
 
 
 # ── il caso che NON deve cambiare ────────────────────────────────────────────────────
-def test_omoda9_reale_passa_intatto():
-    assert _cruise_range_miglia(OMODA9) == 130.0
+def test_lepas_l8_reale_passa_intatto():
+    assert _cruise_range_miglia(LEPAS_L8) == 130.0
 
 
 @pytest.mark.parametrize("km,mi", [("182", "113"), ("215", "134")])
@@ -67,11 +67,11 @@ def test_senza_ancora_non_si_pubblica_un_numero_possibilmente_falso():
 
 def test_un_frame_parziale_non_sporca_la_serie():
     """Sequenza reale: frame pieno, frame senza ancora, frame pieno. In mezzo nessun salto."""
-    pieno = _cruise_range_miglia(OMODA9)
-    parziale = _cruise_range_miglia({k: v for k, v in OMODA9.items() if k != "mileageSurplus"})
+    pieno = _cruise_range_miglia(LEPAS_L8)
+    parziale = _cruise_range_miglia({k: v for k, v in LEPAS_L8.items() if k != "mileageSurplus"})
     assert pieno == 130.0
     assert parziale is None          # ⇒ RestoreSensor tiene 130, nessuna spuntata a 336 km
-    assert _cruise_range_miglia(OMODA9) == 130.0
+    assert _cruise_range_miglia(LEPAS_L8) == 130.0
 
 
 # ── (2) e (3) le due guardie ─────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ def test_se_la_coppia_gemella_nega_i_km_non_si_decide():
     """`pureElectricRange`/`pureElectricRangeMile` sono gemelli per NOME: se il loro
     rapporto non è ~1,609, i campi senza suffisso di quest'auto non sono metrici e l'ancora
     non vale."""
-    rt = dict(OMODA9, mileageSurplus="130", pureElectricRange="145", pureElectricRangeMile="145")
+    rt = dict(LEPAS_L8, mileageSurplus="130", pureElectricRange="145", pureElectricRangeMile="145")
     assert _cruise_range_miglia(rt) == 130.0
 
 

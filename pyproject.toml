@@ -1,6 +1,6 @@
 [project]
 name = "lepas-ha"
-version = "1.15.0"
+version = "1.15.1"
 description = "Home Assistant custom integration and async client for Lepas L8 (Chery EU platform)"
 readme = "README.md"
 requires-python = ">=3.13"

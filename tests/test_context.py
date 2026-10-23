@@ -81,7 +81,7 @@ async def test_ha_non_scrive_mai_segreti_nell_ambiente(hass, integrazione_avviat
     dentro Home Assistant (altre integrazioni, template, add-on con accesso a `/proc`);
     li si ripuliva all'unload. Ora non ci finiscono mai: non c'è nulla da ripulire, che
     è una garanzia diversa e migliore — non dipende dal fatto che l'unload avvenga."""
-    for chiave in ("OMODA_PIN", "OMODA_EMAIL"):
+    for chiave in ("LEPAS_PIN", "LEPAS_EMAIL"):
         assert os.environ.get(chiave) is None, (
             f"{chiave} è finita nell'ambiente del processo Home Assistant"
         )
@@ -97,11 +97,11 @@ def test_l_ambiente_del_sottoprocesso_e_effimero(core, ctx):
     session = core["session"]
     prima = dict(os.environ)
 
-    env = session._subenv(ctx, OMODA_OTP="123456")
+    env = session._subenv(ctx, LEPAS_OTP="123456")
 
-    assert env["OMODA_EMAIL"] == ctx.email
-    assert env["OMODA_OTP"] == "123456"
-    assert env["OMODA_TOKEN_PATH"] == ctx.token_path
+    assert env["LEPAS_EMAIL"] == ctx.email
+    assert env["LEPAS_OTP"] == "123456"
+    assert env["LEPAS_TOKEN_PATH"] == ctx.token_path
     assert dict(os.environ) == prima, "os.environ è stato modificato dalla chiamata"
 
 
@@ -111,7 +111,7 @@ def test_l_ambiente_del_sottoprocesso_e_effimero(core, ctx):
                   "DIAG_HOOK", "_LOCKOUT", "_TASKID_CACHE", "_PIN_FAIL")),
     ("wake", ("VIN", "TSP_HOST", "TOKEN_PATH", "_TOKEN_LOCK", "_BUSY", "WAKE_STATE")),
     ("probe", ("VIN", "_BUSY", "_last_run")),
-    ("session", ("EMAIL", "OMODA_DIR")),
+    ("session", ("EMAIL", "LEPAS_DIR")),
 ])
 def test_nessuna_configurazione_per_account_nei_global(core, modulo, attributi):
     """Guard-rail strutturale: reintrodurre un global per-account riaprirebbe in un colpo

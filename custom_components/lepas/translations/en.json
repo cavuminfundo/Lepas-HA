@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Lepas Connect",
-        "description": "Choose how to sign in to your Omoda/Jaecoo account. Use the phone option if your account is registered with a phone number instead of an email.",
+        "description": "Choose how to sign in to your Lepas account. Use the phone option if your account is registered with a phone number instead of an email.",
         "menu_options": {
           "login_email": "Sign in with email",
           "login_phone": "Sign in with phone number (SMS)",
@@ -12,7 +12,7 @@
       },
       "login_email": {
         "title": "Sign in with email",
-        "description": "Enter your Omoda/Jaecoo account email and vehicle PIN. An OTP code will be sent to your email; VIN and account ID are detected automatically.{reason}",
+        "description": "Enter your Lepas account email and vehicle PIN. An OTP code will be sent to your email; VIN and account ID are detected automatically.{reason}",
         "data": {
           "preset": "Brand / region preset",
           "email": "Account email",
@@ -28,12 +28,12 @@
           "certs_src": "Folder with mutual-TLS certs to import (optional)"
         },
         "data_description": {
-          "preset": "Lepas (Europe), Omoda/Jaecoo (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
+          "preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
         }
       },
       "login_phone": {
         "title": "Sign in with phone (SMS)",
-        "description": "Enter the phone number registered on your Omoda/Jaecoo account, its country code (Italy = 39, without +) and the vehicle PIN. A verification code will be sent by SMS; VIN and account ID are detected automatically.{reason}",
+        "description": "Enter the phone number registered on your Lepas account, its country code (Italy = 39, without +) and the vehicle PIN. A verification code will be sent by SMS; VIN and account ID are detected automatically.{reason}",
         "data": {
           "preset": "Brand / region preset",
           "phone": "Phone number (without country code)",
@@ -50,7 +50,7 @@
           "certs_src": "Folder with mutual-TLS certs to import (optional)"
         },
         "data_description": {
-          "preset": "Lepas (Europe), Omoda/Jaecoo (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
+          "preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
         }
       },
       "otp": {
@@ -108,7 +108,7 @@
       },
       "reconfigure_phone": {
         "title": "Receive the code by SMS",
-        "description": "The verification code will be sent to this number from now on. Write the number without the country code, and the country code as digits only (Italy = 39, no +).\n\nYour current session stays valid: only the next code changes route. If the number is not the one registered with your Omoda/Jaecoo account the SMS will not arrive — you can switch back to email from this same menu.",
+        "description": "The verification code will be sent to this number from now on. Write the number without the country code, and the country code as digits only (Italy = 39, no +).\n\nYour current session stays valid: only the next code changes route. If the number is not the one registered with your Lepas account the SMS will not arrive — you can switch back to email from this same menu.",
         "data": {
           "phone": "Phone number (without country code)",
           "area_code": "Country code, digits only (Italy = 39)"
@@ -133,7 +133,7 @@
           "certs_src": "Folder with mutual-TLS certs to import (optional)"
         },
         "data_description": {
-          "preset": "Lepas (Europe), Omoda/Jaecoo (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
+          "preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
         }
       },
       "reauth_password": {
@@ -184,10 +184,6 @@
           "entry_not_found": "Integration not found — reload Home Assistant and try again."
         }
       }
-    },
-    "entity_ids_renamed": {
-      "title": "Lepas: {count} entities were renamed",
-      "description": "The entity ids of this integration moved from Italian to English: `sensor.omoda9_batteria` is now `sensor.lepas_battery`, and {count} entities on this vehicle were renamed.\n\n**Your history came with them.** Graphs, long-term statistics and the energy dashboard followed the rename automatically. There is nothing to reinstall and nothing to log in to again.\n\n**What did not follow: names you typed yourself.** Automations, scripts, template sensors and dashboard cards that refer to an entity by name still point at the old one. Home Assistant shows those as unknown entities.\n\nWhere to look: Settings, Automations and scenes, then any automation flagged with an unknown entity. The full old-to-new list is here: {url}\n\nDismiss this notice once you have been through them."
     }
   },
   "options": {

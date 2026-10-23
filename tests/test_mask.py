@@ -1,7 +1,7 @@
 """`core/mask.py` — la regola unica di mascheratura dei dati personali.
 
 Perché questo file esiste. Prima dell'accodamento del login via SMS la stessa mascheratura
-era scritta **quattro volte** (`core/session.py`, `core/login_omoda.py`, `core/prova_token.py`,
+era scritta **quattro volte** (`core/session.py`, `core/login_lepas.py`, `core/prova_token.py`,
 `coordinator.py`) e le quattro copie **stavano già dando risposte diverse** sullo stesso
 ingresso: tre restituivano `***`, una il solo prefisso senza asterischi, e `_mask_identity`,
 sotto le 4 cifre, restituiva **il valore in chiaro**. Il progetto aveva già scritto altrove la
@@ -105,7 +105,7 @@ def test_identita_maschera_il_primo_campo_se_non_e_un_prefisso():
 def test_identita_non_ristampa_una_testa_che_non_e_il_modulo(ingresso, vietato):
     """`rpartition('@')` da sola non verifica NULLA: prendeva per «modulo» qualunque cosa
     precedesse l'ultima chiocciola e la ristampava in chiaro. Con un valore che arriva grezzo
-    dall'ambiente (`OMODA_PHONE` non passa dalla normalizzazione del config flow) usciva un
+    dall'ambiente (`LEPAS_PHONE` non passa dalla normalizzazione del config flow) usciva un
     indirizzo intero. Stesso principio sul PRIMO campo del corpo: non è un prefisso ⇒ mascherato."""
     assert vietato not in mask.identita_mobile(ingresso)
 

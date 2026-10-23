@@ -30,7 +30,7 @@ from custom_components.lepas.const import (
     DOMAIN,
     PRESET_CUSTOM,
     PRESET_LEPAS_EU,
-    PRESET_OMODA_JAECOO_EU,
+    PRESET_CHERY_EU,
 )
 
 
@@ -462,17 +462,17 @@ def test_apply_preset_default_fallback():
     assert target[CONF_COUNTRY_ID] == "1"
 
 
-def test_apply_preset_omoda_jaecoo_eu():
-    """Verifica il preset alternativo Omoda/Jaecoo Europe."""
+def test_apply_preset_chery_eu():
+    """Verifica il preset Chery Europe."""
     flow = LepasConfigFlow()
-    data = {CONF_PRESET: PRESET_OMODA_JAECOO_EU}
+    data = {CONF_PRESET: PRESET_CHERY_EU}
     res = flow._apply_preset(data)
     target = res if isinstance(res, dict) else data
     assert CONF_PRESET not in target
-    assert target[CONF_BFF] == "https://legend-oj.omodaauto.nl/api"
-    assert target[CONF_TENANT_CODE] == "300006"
-    assert target[CONF_CHANNEL_ID] == "1"
-    assert target[CONF_COUNTRY_ID] == "1"
+    assert target[CONF_BFF] == "https://eu-chery.cheryinternational.com/api"
+    assert target[CONF_TENANT_CODE] == "300001"
+    assert target[CONF_CHANNEL_ID] == "2"
+    assert target[CONF_COUNTRY_ID] == "2"
 
 
 def test_apply_preset_custom():

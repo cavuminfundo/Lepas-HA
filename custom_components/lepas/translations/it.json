@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Lepas Connect",
-        "description": "Scegli come accedere al tuo account Omoda/Jaecoo. Usa l'opzione telefono se il tuo account è registrato con un numero di telefono invece che con un'email.",
+        "description": "Scegli come accedere al tuo account Lepas. Usa l'opzione telefono se il tuo account è registrato con un numero di telefono invece che con un'email.",
         "menu_options": {
           "login_email": "Accedi con email",
           "login_phone": "Accedi con numero di telefono (SMS)",
@@ -12,7 +12,7 @@
       },
       "login_email": {
         "title": "Accedi con email",
-        "description": "Inserisci l'email del tuo account Omoda/Jaecoo e il PIN del veicolo. Riceverai un codice OTP via email; VIN e ID account vengono rilevati automaticamente.{reason}",
+        "description": "Inserisci l'email del tuo account Lepas e il PIN del veicolo. Riceverai un codice OTP via email; VIN e ID account vengono rilevati automaticamente.{reason}",
         "data": {
           "preset": "Preset marchio / regione",
           "email": "Email dell'account",
@@ -28,12 +28,12 @@
           "certs_src": "Cartella coi certificati mutual-TLS da importare (opzionale)"
         },
         "data_description": {
-          "preset": "Lepas (Europa), Omoda/Jaecoo (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
+          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
         }
       },
       "login_phone": {
         "title": "Accedi con telefono (SMS)",
-        "description": "Inserisci il numero di telefono registrato sul tuo account Omoda/Jaecoo, il prefisso internazionale (Italia = 39, senza +) e il PIN del veicolo. Riceverai un codice via SMS; VIN e ID account vengono rilevati automaticamente.{reason}",
+        "description": "Inserisci il numero di telefono registrato sul tuo account Lepas, il prefisso internazionale (Italia = 39, senza +) e il PIN del veicolo. Riceverai un codice via SMS; VIN e ID account vengono rilevati automaticamente.{reason}",
         "data": {
           "preset": "Preset marchio / regione",
           "phone": "Numero di telefono (senza prefisso)",
@@ -50,7 +50,7 @@
           "certs_src": "Cartella coi certificati mutual-TLS da importare (opzionale)"
         },
         "data_description": {
-          "preset": "Lepas (Europa), Omoda/Jaecoo (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
+          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
         }
       },
       "otp": {
@@ -108,7 +108,7 @@
       },
       "reconfigure_phone": {
         "title": "Ricevi il codice via SMS",
-        "description": "D'ora in poi il codice di verifica arriverà a questo numero. Scrivi il numero senza prefisso internazionale, e il prefisso solo in cifre (Italia = 39, senza +).\n\nLa sessione in corso resta valida: cambia solo dove arriverà il prossimo codice. Se il numero non è quello registrato sul tuo account Omoda/Jaecoo l'SMS non arriverà — puoi tornare all'email da questo stesso menu.",
+        "description": "D'ora in poi il codice di verifica arriverà a questo numero. Scrivi il numero senza prefisso internazionale, e il prefisso solo in cifre (Italia = 39, senza +).\n\nLa sessione in corso resta valida: cambia solo dove arriverà il prossimo codice. Se il numero non è quello registrato sul tuo account Lepas l'SMS non arriverà — puoi tornare all'email da questo stesso menu.",
         "data": {
           "phone": "Numero di telefono (senza prefisso internazionale)",
           "area_code": "Prefisso internazionale, solo cifre (Italia = 39)"
@@ -133,7 +133,7 @@
           "certs_src": "Cartella coi certificati mutual-TLS da importare (opzionale)"
         },
         "data_description": {
-          "preset": "Lepas (Europa), Omoda/Jaecoo (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
+          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
         }
       },
       "reauth_password": {
@@ -184,10 +184,6 @@
           "entry_not_found": "Integrazione non trovata — ricarica Home Assistant e riprova."
         }
       }
-    },
-    "entity_ids_renamed": {
-      "title": "Lepas: {count} entita' rinominate",
-      "description": "Gli identificativi delle entita' di questa integrazione sono passati dall'italiano all'inglese: `sensor.omoda9_batteria` adesso e' `sensor.lepas_battery`, e su questo veicolo sono state rinominate {count} entita'.\n\n**Il tuo storico e' venuto dietro.** Grafici, statistiche a lungo termine e dashboard Energia hanno seguito il cambio da soli. Non c'e' niente da reinstallare e nessun accesso da rifare.\n\n**Quello che non ha seguito: i nomi che hai scritto tu.** Automazioni, script, sensori template e schede della dashboard che nominano un'entita' puntano ancora al vecchio nome. Home Assistant te li segnala come entita' sconosciute.\n\nDove guardare: Impostazioni, Automazioni e scene, e poi ogni automazione segnalata con un'entita' sconosciuta. L'elenco completo vecchio-nuovo e' qui: {url}\n\nChiudi questo avviso quando le hai sistemate."
     }
   },
   "options": {

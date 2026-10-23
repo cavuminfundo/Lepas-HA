@@ -21,7 +21,7 @@ except ImportError:
     import mask
 
 # dove salvare il token coniato (per-account); il bridge/coordinator legge lo stesso path
-_TOKEN_OUT = os.environ.get("OMODA_TOKEN_PATH", "token.json")
+_TOKEN_OUT = os.environ.get("LEPAS_TOKEN_PATH", "token.json")
 
 TOKEN_PATH = "/auth/oauth2/token"
 
@@ -46,7 +46,7 @@ def _dept(area):
     lasciato al default italiano anche per chi accede con un numero straniero. Questo modulo
     gira come sottoprocesso senza `CoreCtx`, quindi il valore va passato a mano: il prefisso
     ce l'ha già, ed è il momento in cui conta di più — il conio del token.
-    Dizionario vuoto se non c'è nulla di sensato: così vale il default di `omoda_auth`."""
+    Dizionario vuoto se non c'è nulla di sensato: così vale il default di `lepas_auth`."""
     cifre = "".join(ch for ch in str(area or "") if ch.isdigit()).lstrip("0")
     return {"dept_id": cifre} if cifre else {}
 
@@ -57,7 +57,7 @@ def build_params_mobile(phone, area, code, codefmt="plain"):
     come l'email. NB: questi vanno inviati nel BODY, non in query (vedi `call`).
 
     ⚠️ ORDINE — verificato dal vivo (2026-08-24) confrontando due login sullo STESSO account
-    Omoda (numero + e-mail): l'ordine `<numero>_<area>` fa risolvere il backend a un account
+    Lepas (numero + e-mail): l'ordine `<numero>_<area>` fa risolvere il backend a un account
     FANTASMA vuoto (crea un utente con `areaCode`/`phone` invertiti, senza veicoli né utente TSP
     → `getTuserId` = "0", `login` = `app.service.failed`), mentre `<area>_<numero>` risolve
     all'account REALE con il veicolo (stesso tUserId del login e-mail). Era la causa del
@@ -207,15 +207,15 @@ def _redact(obj):
     return obj
 
 if __name__ == "__main__":
-    # P1-4: email e codice OTP possono arrivare dall'ambiente (OMODA_EMAIL/OMODA_OTP) invece
+    # P1-4: email e codice OTP possono arrivare dall'ambiente (LEPAS_EMAIL/LEPAS_OTP) invece
     # che da argv → non compaiono in `ps`/`/proc/<pid>/cmdline`. argv resta per l'uso a mano.
-    email = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("OMODA_EMAIL", "")
-    code = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("OMODA_OTP", "")
-    phone = os.environ.get("OMODA_PHONE", "")
-    area = os.environ.get("OMODA_AREA", "39")
+    email = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("LEPAS_EMAIL", "")
+    code = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("LEPAS_OTP", "")
+    phone = os.environ.get("LEPAS_PHONE", "")
+    area = os.environ.get("LEPAS_AREA", "39")
     # login con PASSWORD (ROPC): la password arriva SOLO dall'ambiente (mai in argv → mai in
     # `ps`/`/proc/<pid>/cmdline`), è usata una volta per coniare il token e non viene conservata.
-    password = os.environ.get("OMODA_PASSWORD", "")
+    password = os.environ.get("LEPAS_PASSWORD", "")
     if password:
         is_phone = bool(phone)
         username = phone if is_phone else email
@@ -230,7 +230,7 @@ if __name__ == "__main__":
             # ⚠️ Sentinella e motivo anche qui. Prima questo ramo stampava il solo testo d'uso, e
             # `session._riga_utile` — che cerca l'ultima riga significativa — mostrava all'utente
             # una frase a caso di quel testo come «motivo del rifiuto del codice». È lo stesso
-            # difetto già corretto nel gemello `login_omoda.py`, che qui era rimasto.
+            # difetto già corretto nel gemello `login_lepas.py`, che qui era rimasto.
             print(__doc__)
             print("MOTIVO: manca il codice OTP oppure l'identità (numero o e-mail)")
             print("RESULT: FAIL")

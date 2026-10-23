@@ -1,5 +1,5 @@
 """
-captcha_solver.py — risolve l'AJ-Captcha blockPuzzle del gateway OMODA 'legend'.
+captcha_solver.py — risolve l'AJ-Captcha blockPuzzle del gateway Lepas.
 
 Endpoint (scoperti decompilando l'app con blutter):
   POST /api/code/create  -> puzzle (originalImageBase64, jigsawImageBase64, secretKey, token)
@@ -15,9 +15,9 @@ from PIL import Image
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 try:                        # importato come modulo del pacchetto (runtime HA)
-    from . import lepas as omoda
+    from . import lepas
 except ImportError:         # eseguito come script: `login_lepas.py` gira in sottoprocesso
-    import lepas as omoda
+    import lepas
 
 # NB (2026-06-21): il solver NON usa più OpenCV (cv2). Lo shape-matching è
 # reimplementato con solo numpy + Pillow → installabile su Home Assistant/HAOS
@@ -28,16 +28,16 @@ except ImportError:         # eseguito come script: `login_lepas.py` gira in sot
 
 SECRET = "5c7af05e6fbf562842ef483ee96e06a0"   # secret di firma del gateway (universale)
 NONCE  = "chery_legend_marketing"
-ROOT   = os.environ.get("OMODA_BFF", "https://legend-oj.omodaauto.nl/api")   # regione (default EU)
+ROOT   = os.environ.get("LEPAS_BFF", "https://eu-lepas.cheryinternational.com/api")   # regione (default EU)
 
 def _md5(s): return hashlib.md5(s.encode()).hexdigest()
 
 def _signed_headers(path):
     ts = int(time.time() * 1000)
     return {
-        "Authorization": omoda.APP_BASIC, "tenant": omoda.TENANT_CODE,
-        "channelId": omoda.CHANNEL_ID, "countryId": omoda.COUNTRY_ID,
-        "appversion": omoda.APP_VERSION, "User-Agent": "okhttp/4.9.0",
+        "Authorization": lepas.APP_BASIC, "tenant": lepas.TENANT_CODE,
+        "channelId": lepas.CHANNEL_ID, "countryId": lepas.COUNTRY_ID,
+        "appversion": lepas.APP_VERSION, "User-Agent": "okhttp/4.9.0",
         "nonce": NONCE, "timestamp": str(ts), "url": path,
         "signature": _md5(f"{SECRET}{NONCE}{path}{ts}"), "Content-Type": "application/json",
     }
@@ -115,9 +115,9 @@ def _signed_headers_query(path, keys_csv, vals_csv):
     """Firma per richieste con parametri in QUERY: MD5(secret+nonce+path+ts+'[vals]') + header keys."""
     ts = int(time.time() * 1000)
     return {
-        "Authorization": omoda.APP_BASIC, "tenant": omoda.TENANT_CODE,
-        "channelId": omoda.CHANNEL_ID, "countryId": omoda.COUNTRY_ID,
-        "appversion": omoda.APP_VERSION, "User-Agent": "okhttp/4.9.0",
+        "Authorization": lepas.APP_BASIC, "tenant": lepas.TENANT_CODE,
+        "channelId": lepas.CHANNEL_ID, "countryId": lepas.COUNTRY_ID,
+        "appversion": lepas.APP_VERSION, "User-Agent": "okhttp/4.9.0",
         "nonce": NONCE, "timestamp": str(ts), "url": path, "keys": keys_csv,
         "signature": _md5(f"{SECRET}{NONCE}{path}{ts}[{vals_csv}]"), "Content-Type": "application/json",
     }

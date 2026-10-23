@@ -1,4 +1,4 @@
-"""Coordinator Omoda 9 — sostituisce ha_bridge.py (MQTT auto + sonda) in modo nativo.
+"""Coordinator Lepas — sostituisce ha_bridge.py (MQTT auto + sonda) in modo nativo.
 
 Riceve via MQTT (mutual-TLS, paho in un thread) gli eventi 5A02 dell'auto, ne fa il
 parsing (stesso identico mapping del bridge: vedi SENSORS) e tiene lo stato corrente
@@ -85,12 +85,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _derive_brand(text: str | None) -> str:
-    """Marca dal nome/modello veicolo (es. fullName 'JAECOO 7' → 'Jaecoo')."""
+    """Marca dal nome/modello veicolo (es. 'Lepas L8' → 'Lepas')."""
     t = (text or "").upper()
-    if "JAECOO" in t:
-        return "Jaecoo"
-    if "OMODA" in t:
-        return "Omoda"
+    if "LEPAS" in t:
+        return "Lepas"
     return "Chery"
 
 
@@ -206,7 +204,7 @@ def unisci_esito_e_note(esito: str, note, limite: int = STATO_MAX) -> str:
     Clima acceso…». La correzione della durata funzionava (all'auto sono arrivati 15 minuti):
     l'unica cosa che non funzionava era dirlo, che è però ciò che il changelog prometteva.
     Vale per l'intera famiglia degli avvisi pre-invio, compresi quelli sui permessi delle
-    v1.11/1.12: sull'Omoda 9 se ne vede solo la durata perché gli altri non scattano.
+    v1.11/1.12: su Lepas L8 se ne vede solo la durata perché gli altri non scattano.
 
     ⚠️ **Il limite non è un dettaglio di formattazione.** Lo stato di un'entità in Home
     Assistant non può superare 255 caratteri, e il componente tronca già a `[:255]` in sette
@@ -302,7 +300,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         self.tsp_host = cfg[CONF_TSP_HOST]
         self.pin = cfg.get(CONF_PIN, "")
         self.bff = cfg[CONF_BFF]
-        # tenant/countryId per-marchio (default = Omoda/Jaecoo). `cfg` parte da DEFAULTS, quindi
+        # tenant/countryId per-marchio (default = Lepas/Chery EU). `cfg` parte da DEFAULTS, quindi
         # gli entry esistenti (senza queste chiavi) restano sui valori storici.
         self.tenant_code = str(cfg.get(CONF_TENANT_CODE, DEFAULTS[CONF_TENANT_CODE]))
         self.country_id = str(cfg.get(CONF_COUNTRY_ID, DEFAULTS[CONF_COUNTRY_ID]))
@@ -1099,7 +1097,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             channel_id=self.channel_id,
             tenant_code=self.tenant_code,
             country_id=self.country_id,
-            mint_taskid=os.environ.get("OMODA_MINT_TASKID", "1") not in ("0", "", "false", "no"),
+            mint_taskid=os.environ.get("LEPAS_MINT_TASKID", "1") not in ("0", "", "false", "no"),
             # Capability della vettura con nomi NEUTRI: `core/` è autonomo e non importa nulla
             # dal package padre, quindi non può conoscere le chiavi `DATA_*` di const.py.
             caps=self._caps_correnti(),
@@ -1604,13 +1602,13 @@ class LepasCoordinator(DataUpdateCoordinator):
 
         Deliberatamente falsa quando la capability è sconosciuta: si sopprime qualcosa
         (i sensori benzina) solo se si è CERTI che l'auto non abbia un motore termico.
-        Su Omoda 9 / Jaecoo PHEV, e su ogni entry che non ha mai letto le capability,
+        Su Lepas L8 PHEV, e su ogni entry che non ha mai letto le capability,
         il comportamento resta identico a prima."""
         return self.entry.data.get(DATA_POWER_TYPE) == 0
 
     def climate_limits(self) -> tuple[float, float, float]:
         """(min, max, step) del clima: quelli dichiarati dal backend per QUESTA vettura,
-        altrimenti i default OMODA (16-30 °C, 1°). I valori sono già validati in
+        altrimenti i default Lepas (16-30 °C, 1°). I valori sono già validati in
         `capabilities_from_item`, qui non serve ricontrollarli."""
         d = self.entry.data
         return (float(d.get(DATA_CLIMATE_MIN, CLIMA_MIN_DEFAULT)),
@@ -1622,7 +1620,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         `(None, None)` se il backend non li ha dichiarati.
 
         Sono i valori che spediscono le macro «Raffredda tutto» / «Riscalda tutto»
-        (sull'Omoda 9: 15.0 e 31.0). Fino alla v1.12.1 erano due costanti cablate.
+        (es. 15.0 e 31.0). Fino alla v1.12.1 erano due costanti cablate.
 
         ⚠️ **`None` non va sostituito con i capi del range normale**, per quanto sembri
         ragionevole («senza LO/HI gli estremi sono min e max»). Sarebbe una dichiarazione
@@ -1666,7 +1664,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         `maxTemperature` la coppia LO/HI entra senza controlli di coerenza. Non darlo per
         garantito in un ragionamento che debba reggere su una vettura che non conosciamo.
         Qui si legge `entry.data` direttamente perché `climate_limits()` ricade sui default
-        dell'Omoda 9, e un default non è una dichiarazione: passarlo a `core/` sarebbe
+        di default, e un default non è una dichiarazione: passarlo a `core/` sarebbe
         esattamente l'invenzione che `climate_extremes()` esiste per impedire."""
         caps: dict = {}
         tmin, tmax = self.entry.data.get(DATA_CLIMATE_MIN), self.entry.data.get(DATA_CLIMATE_MAX)
@@ -1693,7 +1691,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         Serve agli entry creati PRIMA che il config flow la salvasse: se manca in entry.data
         (e non c'è override manuale) la legge UNA volta da queryList e la persiste, così ai
         restart successivi è già in cache (niente nuove chiamate). Sola lettura, non blocca il
-        setup: su errore resta il fallback "Omoda 9 / Jaecoo"."""
+        setup: su errore resta il fallback "Lepas L8"."""
         # Le capability (BEV/PHEV, range clima) arrivano dalla STESSA risposta: se mancano si
         # rilegge anche quando il nome è già in cache — una volta sola, poi c'è il marcatore.
         override = bool(str((self.entry.options or {}).get(CONF_VEHICLE_NAME) or "").strip())

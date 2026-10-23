@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-provision.py — Catena di PROVISIONING del comando veicolo Omoda 9 (SESSIONE 16).
+provision.py — Catena di PROVISIONING del comando veicolo Lepas L8 (SESSIONE 16).
 
 SCOPERTA (workflow 5-agenti, S16 — prove file:riga in SESSIONE16_REPORT.md):
   I comandi `/asc/vehicleControl/*` NON vogliono lo `userToken` del BFF (è quello
@@ -52,7 +52,7 @@ from . import wake as W   # riusa _access_token / _bff_login / _signed_post / _c
 from . import codes
 
 VIN        = os.environ.get("VIN", "")   # PER-ACCOUNT: vedi lepas.env.example
-PIN        = os.environ.get("PIN", os.environ.get("LEPAS_PIN", os.environ.get("OMODA_PIN", "")))   # PIN di controllo (PER-ACCOUNT)
+PIN        = os.environ.get("PIN", os.environ.get("LEPAS_PIN", ""))   # PIN di controllo (PER-ACCOUNT)
 
 # P2-6: questo modulo è uno STRUMENTO DI DIAGNOSTICA da riga di comando — il componente
 # non lo importa mai (il provisioning dei certificati in Home Assistant passa da
@@ -69,8 +69,8 @@ def _ctx():
         ctx.pin = PIN
     return ctx
 # PRIVACY: i record contengono VIN/identificativi account → log OPT-IN, spento di default.
-# Si attiva solo valorizzando OMODA_PROV_LOG col path del file da scrivere.
-PROV_LOG   = os.environ.get("OMODA_PROV_LOG", "")
+# Si attiva solo valorizzando LEPAS_PROV_LOG col path del file da scrivere.
+PROV_LOG   = os.environ.get("LEPAS_PROV_LOG", "")
 
 # Endpoint BFF (legend-oj) della catena di provisioning — tutti POST, Bearer access_token + sign app.
 BFF_GETTUSERID    = "/tsp/v1/app/auth/getTuserId"
@@ -375,9 +375,9 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if arg == "command":
-        # FASE B LIVE (ATTIVA) — richiede env OMODA_CONFIRM=1 per evitare lanci accidentali.
-        if os.environ.get("OMODA_CONFIRM") != "1":
-            print("RIFIUTO: FASE B attiva. Rilancia con OMODA_CONFIRM=1 e ad auto sveglia.")
+        # FASE B LIVE (ATTIVA) — richiede env LEPAS_CONFIRM=1 per evitare lanci accidentali.
+        if os.environ.get("LEPAS_CONFIRM") != "1":
+            print("RIFIUTO: FASE B attiva. Rilancia con LEPAS_CONFIRM=1 e ad auto sveglia.")
             sys.exit(2)
         cmd = sys.argv[2] if len(sys.argv) > 2 else "remoteStart"
         pub = lambda t: print("  STATUS:", t)

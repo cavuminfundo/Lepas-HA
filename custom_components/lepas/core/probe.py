@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-probe.py — "Sonda posizione" Omoda 9.
+probe.py — "Sonda posizione" Lepas L8.
 
 Domanda a cui risponde (mai testata pulita finora): quando l'auto è DAVVERO
 sveglia (sta pubblicando 5A02 su MQTT), il canale tspconsole-eu restituisce
@@ -37,8 +37,8 @@ from . import codes
 
 # P2-6: il VIN arriva dal `CoreCtx` del veicolo, non più da un global di modulo.
 # PRIVACY: il record grezzo contiene VIN e coordinate GPS → log OPT-IN, spento di default.
-# Si attiva solo valorizzando OMODA_PROBE_LOG col path del file da scrivere.
-PROBE_LOG  = os.environ.get("OMODA_PROBE_LOG", "")
+# Si attiva solo valorizzando LEPAS_PROBE_LOG col path del file da scrivere.
+PROBE_LOG  = os.environ.get("LEPAS_PROBE_LOG", "")
 COOLDOWN_S = int(os.environ.get("PROBE_COOLDOWN", "120"))   # [2.0] 2 min: il realtime è read-only e l'auto resta online a lungo → letture opportunistiche frequenti (era 1800=30min, troppo restrittivo). I poll usano force=True e lo bypassano comunque.
 
 

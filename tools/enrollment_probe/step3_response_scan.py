@@ -19,8 +19,8 @@ eight-character prefix. Never a whole value, and never a prefix of anything that
 carries an account identifier.
 
 Environment (same names `provision.py` already uses):
-    VIN, OMODA_TOKEN_PATH   required
-    OMODA_BFF, TSP_HOST, CHANNEL_ID, OMODA_COUNTRY_ID, OMODA_TENANT_CODE  optional
+    VIN, LEPAS_TOKEN_PATH   required
+    LEPAS_BFF, TSP_HOST, CHANNEL_ID, LEPAS_COUNTRY_ID, LEPAS_TENANT_CODE  optional
 
 Usage:
     python3 tools/enrollment_probe/step3_response_scan.py [--allow-refresh] [--json]
@@ -170,9 +170,9 @@ def main() -> int:
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
-    real_token = os.environ.get("OMODA_TOKEN_PATH", "")
+    real_token = os.environ.get("LEPAS_TOKEN_PATH", "")
     if not real_token or not os.path.isfile(real_token):
-        print("FAILED: OMODA_TOKEN_PATH is not set or does not point at a file.",
+        print("FAILED: LEPAS_TOKEN_PATH is not set or does not point at a file.",
               file=sys.stderr)
         return 2
     if not os.environ.get("VIN"):

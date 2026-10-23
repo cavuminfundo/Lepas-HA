@@ -1,4 +1,4 @@
-"""Repair flow Omoda 9 — "PIN comandi errato": riconfigura il PIN a 4 cifre dei
+"""Repair flow Lepas — "PIN comandi errato": riconfigura il PIN a 4 cifre dei
 comandi remoti senza smontare l'integrazione.
 
 L'avviso viene creato dal coordinator (`_raise_pin_issue`) quando un comando fallisce

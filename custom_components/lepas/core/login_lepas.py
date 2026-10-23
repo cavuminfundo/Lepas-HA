@@ -1,10 +1,10 @@
 """
-login_omoda.py — login completo OMODA 'legend' via codice EMAIL.
+login_lepas.py — login completo Lepas via codice EMAIL.
 
 Uso in 2 fasi (il codice email scade in pochi minuti):
-  FASE 1:  python3 login_omoda.py invia <email>
+  FASE 1:  python3 login_lepas.py invia <email>
            -> risolve il captcha e fa partire il codice via email. Stampa l'esito.
-  FASE 2:  python3 login_omoda.py token <email> <codice>
+  FASE 2:  python3 login_lepas.py token <email> <codice>
            -> prova le combinazioni note di oauth2/token, salva token.json,
               poi tenta lo Stadio 2 (TSP + lista veicoli).
 """
@@ -13,12 +13,12 @@ import os, sys, time, json, hashlib, requests
 # esiste un pacchetto padre → si tenta l'import relativo e si ripiega su quello nudo.
 try:
     from . import captcha_solver as C
-    from . import lepas as omoda
+    from . import lepas
     from . import mask
     from . import tls_client
 except ImportError:
     import captcha_solver as C
-    import lepas as omoda
+    import lepas
     import mask
     import tls_client
 
@@ -34,12 +34,12 @@ def _motivo(testo):
     """Dichiara la causa del fallimento in modo che `session.py` la ritrovi."""
     print(f"{MOTIVO} {testo}")
 
-BFF = os.environ.get("OMODA_BFF", "https://legend-oj.omodaauto.nl/api")   # regione (default EU)
+BFF = os.environ.get("LEPAS_BFF", "https://eu-lepas.cheryinternational.com/api")   # regione (default EU)
 SECRET = "5c7af05e6fbf562842ef483ee96e06a0"
 NONCE = "chery_legend_marketing"
 # Lingua dell'invio OTP (header Accept-Language) → lingua di e-mail/SMS del codice. Default it-IT
-# (comportamento storico); il coordinator/config_flow passa `OMODA_LANGUAGE` nell'ambiente.
-ACCEPT_LANGUAGE = os.environ.get("OMODA_LANGUAGE", "it-IT")
+# (comportamento storico); il coordinator/config_flow passa `LEPAS_LANGUAGE` nell'ambiente.
+ACCEPT_LANGUAGE = os.environ.get("LEPAS_LANGUAGE", "it-IT")
 def _md5(s): return hashlib.md5(s.encode()).hexdigest()
 
 # L'invio SMS (`sendSmsCode`) è l'UNICO endpoint dietro il WAF Aliyun, che filtra
@@ -53,11 +53,11 @@ def _sms_post(url, data, headers, timeout=20):
 
 def _hdr_form(path):
     ts = int(time.time() * 1000)
-    return {"Authorization": omoda.APP_BASIC,
-            "TENANT-CODE": omoda.TENANT_CODE, "TENANT-ID": omoda.TENANT_CODE,
-            "tenantCode": omoda.TENANT_CODE, "tenantID": omoda.TENANT_CODE, "tenant": omoda.TENANT_CODE,
-            "channelId": omoda.CHANNEL_ID, "countryId": omoda.COUNTRY_ID,
-            "appversion": omoda.APP_VERSION, "User-Agent": "okhttp/4.9.0", "Accept-Language": ACCEPT_LANGUAGE,
+    return {"Authorization": lepas.APP_BASIC,
+            "TENANT-CODE": lepas.TENANT_CODE, "TENANT-ID": lepas.TENANT_CODE,
+            "tenantCode": lepas.TENANT_CODE, "tenantID": lepas.TENANT_CODE, "tenant": lepas.TENANT_CODE,
+            "channelId": lepas.CHANNEL_ID, "countryId": lepas.COUNTRY_ID,
+            "appversion": lepas.APP_VERSION, "User-Agent": "okhttp/4.9.0", "Accept-Language": ACCEPT_LANGUAGE,
             "nonce": NONCE, "timestamp": str(ts), "url": path,
             "signature": _md5(f"{SECRET}{NONCE}{path}{ts}"),
             "Content-Type": "application/x-www-form-urlencoded"}
@@ -80,7 +80,7 @@ def invia(email):
     # già stato ristretto; questo ramo era rimasto indietro.
     print(f"sendMailCode -> HTTP {r.status_code} key={j.get('key')} msg={j.get('msg')}")
     if j.get("ok") or j.get("key") == "operation.successful":
-        print("✅ Codice inviato all'email. Ora: python3 login_omoda.py token <email> <codice>")
+        print("✅ Codice inviato all'email. Ora: python3 login_lepas.py token <email> <codice>")
         return True
     if j.get("key") == "email.not.exists":
         _motivo("indirizzo e-mail non riconosciuto come account: controlla quello registrato "
@@ -156,12 +156,12 @@ def _token_headers(path, params):
     keys = list(params.keys())
     vals_csv = ",".join(str(params[k]) for k in keys)
     ts = int(time.time() * 1000)
-    return {"Authorization": omoda.APP_BASIC, "Content-Type": "application/x-www-form-urlencoded",
+    return {"Authorization": lepas.APP_BASIC, "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": "okhttp/4.9.0",
-            "TENANT-CODE": omoda.TENANT_CODE, "TENANT-ID": omoda.TENANT_CODE,
-            "tenantCode": omoda.TENANT_CODE, "tenantID": omoda.TENANT_CODE, "tenant": omoda.TENANT_CODE,
-            "channelId": omoda.CHANNEL_ID, "countryId": omoda.COUNTRY_ID,
-            "appversion": omoda.APP_VERSION, "Accept-Language": ACCEPT_LANGUAGE,
+            "TENANT-CODE": lepas.TENANT_CODE, "TENANT-ID": lepas.TENANT_CODE,
+            "tenantCode": lepas.TENANT_CODE, "tenantID": lepas.TENANT_CODE, "tenant": lepas.TENANT_CODE,
+            "channelId": lepas.CHANNEL_ID, "countryId": lepas.COUNTRY_ID,
+            "appversion": lepas.APP_VERSION, "Accept-Language": ACCEPT_LANGUAGE,
             "nonce": NONCE, "timestamp": str(ts), "url": path, "keys": ",".join(keys),
             "signature": _md5(f"{SECRET}{NONCE}{path}{ts}[{vals_csv}]")}
 
@@ -188,8 +188,8 @@ def token(email, code, sms=False, area="39"):
     print("\n✅ LOGIN OK — token salvato in token.json.")
     # Stadio 2
     HB = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json", "User-Agent": "okhttp/4.9.0",
-          "tenant": omoda.TENANT_CODE, "channelId": omoda.CHANNEL_ID, "countryId": omoda.COUNTRY_ID,
-          "appversion": omoda.APP_VERSION}
+          "tenant": lepas.TENANT_CODE, "channelId": lepas.CHANNEL_ID, "countryId": lepas.COUNTRY_ID,
+          "appversion": lepas.APP_VERSION}
     for nome, ep in [("TSP login", "tsp/v1/app/auth/login"), ("getTuserId", "tsp/v1/app/auth/getTuserId"),
                      ("veicoli", "tsp/v1/app/vmc/queryList")]:
         try:
@@ -206,11 +206,11 @@ def _emit_result(ok):
 
 if __name__ == "__main__":
     a = sys.argv
-    # P1-4: l'email può arrivare dall'ambiente (OMODA_EMAIL) invece che da argv, così non
+    # P1-4: l'email può arrivare dall'ambiente (LEPAS_EMAIL) invece che da argv, così non
     # finisce nella riga di comando visibile in `ps`. argv resta supportato per l'uso a mano.
-    _env_email = os.environ.get("OMODA_EMAIL", "")
-    _env_phone = os.environ.get("OMODA_PHONE", "")
-    _env_area = os.environ.get("OMODA_AREA", "39")
+    _env_email = os.environ.get("LEPAS_EMAIL", "")
+    _env_phone = os.environ.get("LEPAS_PHONE", "")
+    _env_area = os.environ.get("LEPAS_AREA", "39")
 
     def _email(idx):
         return a[idx] if len(a) > idx else _env_email
@@ -233,13 +233,13 @@ if __name__ == "__main__":
         # confermata dal vivo. Lasciare qui un sottocomando che non può funzionare significa
         # che chi lo usa per diagnosticare conclude «il server rifiuta il mio codice».
         print("Il conio del token per gli account SMS si fa con prova_token.py")
-        print("(OMODA_PHONE / OMODA_AREA / OMODA_OTP nell'ambiente).")
+        print("(LEPAS_PHONE / LEPAS_AREA / LEPAS_OTP nell'ambiente).")
         _motivo("sottocomando non più supportato: usa prova_token.py per gli account SMS")
         _emit_result(False)
     else:
         # ⚠️ Anche qui la sentinella e il codice d'uscita. Prima questo ramo stampava il solo
         # testo d'uso e usciva con 0 — cioè con il codice del SUCCESSO — e ci finiva ogni
-        # invocazione a cui mancasse l'identità (per esempio `invia-sms` senza `OMODA_PHONE`).
+        # invocazione a cui mancasse l'identità (per esempio `invia-sms` senza `LEPAS_PHONE`).
         # `session.py` non ci cascava, perché pretende rc=0 **e** `RESULT: OK`, ma all'utente
         # arrivava come «motivo del fallimento» una riga a caso del testo d'uso.
         print(__doc__)

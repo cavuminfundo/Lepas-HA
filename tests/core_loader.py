@@ -37,10 +37,4 @@ def load_core() -> dict:
             out[nome] = mod
         except ImportError:
             continue
-    if "lepas" in out:
-        out["omoda"] = out["lepas"]
-    if "lepas_auth" in out:
-        out["omoda_auth"] = out["lepas_auth"]
-    if "login_lepas" in out:
-        out["login_omoda"] = out["login_lepas"]
     return out

@@ -1,6 +1,6 @@
 """Sensori realtime: quando un valore va tenuto e quando deve sparire.
 
-I sensori Omoda sopravvivono al riavvio di HA tenendo l'ultimo valore noto — giusto per
+I sensori Lepas sopravvivono al riavvio di HA tenendo l'ultimo valore noto — giusto per
 l'odometro o la batteria, che restano veri anche se una singola lettura non li contiene.
 Ma non per tutto: «Tempo di ricarica residuo» ha senso SOLO mentre l'auto carica. Quando
 la carica finisce il campo sparisce dal payload, ed è proprio quello il segnale che deve

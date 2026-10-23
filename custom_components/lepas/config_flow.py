@@ -41,7 +41,7 @@ from .const import (
     CONF_CAR_MQTT_HOST, CONF_CAR_MQTT_PORT, DEFAULTS,
     CONF_TENANT_CODE, CONF_COUNTRY_ID,
     CONF_PRESET, PRESETS, DEFAULT_PRESET,
-    PRESET_LEPAS_EU, PRESET_OMODA_JAECOO_EU, PRESET_CHERY_EU, PRESET_CUSTOM,
+    PRESET_LEPAS_EU, PRESET_CHERY_EU, PRESET_CUSTOM,
     CONF_POLL_NORMAL, CONF_POLL_CHARGING,
     DEFAULT_POLL_NORMAL_MIN, DEFAULT_POLL_CHARGING_MIN,
     CONF_VEHICLE_NAME,
@@ -49,8 +49,8 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# P2-2: cartella dei moduli core/. Serve ancora come `cwd`/`OMODA_SRC_DIR` per i
-# sottoprocessi di login (login_omoda.py, prova_token.py), NON più come voce di sys.path.
+# P2-2: cartella dei moduli core/. Serve ancora come `cwd`/`LEPAS_SRC_DIR` per i
+# sottoprocessi di login (login_lepas.py, prova_token.py), NON più come voce di sys.path.
 _CORE = os.path.join(os.path.dirname(__file__), "core")
 
 
@@ -273,7 +273,7 @@ def _ctx_del_flow(hass: HomeAssistant, data: dict, token_path: str | None = None
         bff=data.get(CONF_BFF, DEFAULTS[CONF_BFF]),
         channel_id=str(data.get(CONF_CHANNEL_ID, DEFAULTS[CONF_CHANNEL_ID])),
         # tenant/countryId per-marchio: senza questi il login e la queryList partivano
-        # sempre col tenant Omoda (300006), quindi un account Chery non veniva riconosciuto.
+        # col tenant di default e un account Chery non veniva riconosciuto.
         tenant_code=str(data.get(CONF_TENANT_CODE, DEFAULTS[CONF_TENANT_CODE])),
         country_id=str(data.get(CONF_COUNTRY_ID, DEFAULTS[CONF_COUNTRY_ID])),
         # lingua (Accept-Language) scelta al login → e-mail/SMS OTP nella lingua giusta
@@ -397,8 +397,6 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     options=[
                         SelectOptionDict(value=PRESET_LEPAS_EU,
                                          label="Lepas — Europe"),
-                        SelectOptionDict(value=PRESET_OMODA_JAECOO_EU,
-                                         label="Omoda / Jaecoo — Europe"),
                         SelectOptionDict(value=PRESET_CHERY_EU,
                                          label="Chery — Europe"),
                         SelectOptionDict(value=PRESET_CUSTOM,
@@ -727,7 +725,7 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         NB: cambiare canale non tocca il token in corso — la sessione resta valida finché non
         scade. Cambia solo dove arriverà il prossimo codice. E se il numero non risulta
-        associato all'account Omoda, l'invio fallirà con un messaggio esplicito: si torna
+        associato all'account Lepas, l'invio fallirà con un messaggio esplicito: si torna
         all'e-mail da questo stesso menu, senza aver perso niente."""
         entry = self._entry_da_riconfigurare()
         errors: dict[str, str] = {}

@@ -6,7 +6,7 @@ arriva alla macchina sbagliata, o una funzione che sparisce a un utente che ce l
 
 Da qui l'ordine delle asserzioni, che non è casuale:
 
-1. **Prima si difende chi già lo usa** (`test_omoda9_*`): sul profilo dell'Omoda 9, dove tutto ciò
+1. **Prima si difende chi già lo usa** (`test_lepas_l8_*`): sul profilo della Lepas L8, dove tutto ciò
    che spediamo è autorizzato, l'adattamento deve essere un **no-op letterale** — stesso endpoint,
    stesso corpo, per ogni singolo comando del catalogo.
 2. **Poi il fallimento permissivo** (`test_ignoto_*`): lista assente o illeggibile ⇒ come prima.
@@ -28,12 +28,12 @@ import fixtures as FX
 # Profili veicolo (modelli compatti, solo le voci che ci riguardano).
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Omoda 9 PHEV EU — ricalcato sulla lista reale letta il 2026-08-09 (334 voci). Qui stanno le
+# Lepas L8 PHEV EU — ricalcato sulla lista reale letta il 2026-08-09 (334 voci). Qui stanno le
 # sole voci toccate dai comandi del catalogo: le altre sono ignote, e ignoto = consentito.
-OMODA9 = {
+LEPAS_L8 = {
     204: 1, 2041: 1, 2042: 1, 2043: 1, 2044: 1, 2045: 1, 2046: 1,
     # sotto il clima i sedili e gli sbrinatori sono NEGATI: su questa auto si passa dalle
-    # categorie dedicate. Sulla Jaecoo 7 è l'esatto contrario — è il caso "a specchio".
+    # categorie dedicate. Su Chery PHEV è l'esatto contrario — è il caso "a specchio".
     2047: 0, 2048: 0, 2049: 0, 20410: 0, 20411: 0, 20412: 0, 20413: 0,
     20414: 0, 20415: 0, 20416: 0, 20417: 0, 20418: 0,
     208: 1, 2081: 1, 2082: 1,
@@ -54,7 +54,7 @@ OMODA9 = {
     2149: 0, 21410: 0, 21411: 0, 21412: 0, 20419: 0, 20420: 0, 20421: 0, 20422: 0,
 }
 
-# Jaecoo 7 PHEV EU — ⚠️ NON è più un profilo inventato: dal 2026-08-10 è la lista **reale** di
+# Chery PHEV EU — ⚠️ NON è più un profilo inventato: dal 2026-08-10 è la lista **reale** di
 # quel veicolo (182 voci dei rami 2/3/4, vedi `fixtures.py`).
 #
 # Il profilo che stava qui prima era ipotetico e sbagliato **proprio nei due valori che
@@ -62,7 +62,7 @@ OMODA9 = {
 # quadro. Sul veicolo vero `20411 = 0` e il lunotto non ha alcuna via aperta. Tre test erano
 # verdi descrivendo comportamenti che su quell'auto non accadono — di qui la regola: un profilo
 # di prova inventato è peggio di nessun profilo, perché la suite certifica l'invenzione.
-JAECOO = FX.JAECOO7_PHEV_EU
+CHERY_PHEV = FX.CHERY_PHEV_EU
 
 
 @pytest.fixture
@@ -70,9 +70,9 @@ def P(core):
     return core["permessi"]
 
 
-# ───────────────────── 1. l'Omoda 9 non deve cambiare di una virgola ─────────────────────
+# ───────────────────── 1. la Lepas L8 non deve cambiare di una virgola ─────────────────────
 
-def test_omoda9_nessun_comando_viene_toccato(core, P):
+def test_lepas_l8_nessun_comando_viene_toccato(core, P):
     """Su questo profilo l'adattamento è un no-op **letterale**, comando per comando.
 
     È l'invariante che protegge chi il componente ce l'ha già installato: stessi endpoint,
@@ -83,19 +83,19 @@ def test_omoda9_nessun_comando_viene_toccato(core, P):
     for chiave, c in commands.CMD_MAP.items():
         if c.get("path") or not c.get("endpoint"):
             continue        # antifurto & co.: path esplicito, fuori dalla tabella categorie
-        ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), OMODA9)
+        ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), LEPAS_L8)
         if ep != c["endpoint"] or corpo != c["body"] or saltati or nota:
             cambiati.append((chiave, ep, saltati, nota))
-    assert not cambiati, f"comandi alterati sull'Omoda 9 (devono essere zero): {cambiati}"
+    assert not cambiati, f"comandi alterati sulla Lepas L8 (devono essere zero): {cambiati}"
 
 
-def test_omoda9_le_macro_restano_intere(core, P):
+def test_lepas_l8_le_macro_restano_intere(core, P):
     """Le macro comfort sono il bersaglio naturale della potatura: qui NON va potato nulla,
     perché sotto le categorie 209/210 questa auto ha tutto consentito."""
     commands = core["commands"]
     for chiave in ("clima_riscalda_on", "clima_raffredda_on"):
         c = commands.CMD_MAP[chiave]
-        corpo, saltati = P.pota(c["endpoint"], dict(c["body"]), OMODA9)
+        corpo, saltati = P.pota(c["endpoint"], dict(c["body"]), LEPAS_L8)
         assert saltati == [], f"{chiave}: potati campi che l'auto autorizza → {saltati}"
         assert corpo == c["body"]
 
@@ -146,7 +146,7 @@ def test_potatura_toglie_solo_il_campo_negato(core, P):
     spediremmo è uno che il backend ha davvero accettato."""
     commands = core["commands"]
     c = commands.CMD_MAP["clima_riscalda_on"]
-    corpo, saltati = P.pota("heatingControl", dict(c["body"]), JAECOO)
+    corpo, saltati = P.pota("heatingControl", dict(c["body"]), CHERY_PHEV)
     assert sorted(saltati) == ["backDefrosting", "blSeatHeating", "brSeatHeating"]
     # le otto chiavi del corpo che ha ottenuto A00079 (ISSUE1_commento_20260810.md)
     assert set(corpo) == {"airControlType", "airType", "duration", "temperature",
@@ -169,7 +169,7 @@ def test_potatura_non_tocca_i_campi_base(P):
 def test_base_negata_si_riconosce(P):
     """Se è negato il cuore della richiesta, la potatura non può salvare nulla: va detto."""
     assert P.base_negata("heatingControl", {2093: 0}) is True
-    assert P.base_negata("heatingControl", OMODA9) is False
+    assert P.base_negata("heatingControl", LEPAS_L8) is False
 
 
 # ───────────────────── 4. instradamento ─────────────────────
@@ -183,7 +183,7 @@ def test_instradamento_scatta_anche_se_la_voce_figlia_MANCA(core, P):
     qui fino al 2026-08-10 diceva che era il caso dell'auto dell'issue #1, «~200 voci contro le
     nostre 334, i figli 2141-2148 possono non esserci»: il dato grezzo arrivato quel giorno l'ha
     smentita: quella lista ha **280** voci e gli otto figli **ci sono tutti, tutti a 0** (vedi la
-    docstring di `permessi.porta_chiusa`, e `FX.JAECOO7_PHEV_EU`). Il difetto era reale, ma per
+    docstring di `permessi.porta_chiusa`, e `FX.CHERY_PHEV_EU`). Il difetto era reale, ma per
     un'altra strada. Questo test resta perché copre il caso «figlio assente», che sui due
     profili reali non si presenta più e che nessun altro test esercita."""
     commands = core["commands"]
@@ -198,19 +198,19 @@ def test_categoria_negata_si_riconosce(core, P):
     """`porta_chiusa` è ciò che rende visibile all'utente il caso «non c'è nulla da adattare»."""
     commands = core["commands"]
     assert P.porta_chiusa("seatControl", {214: 0}) is True
-    assert P.porta_chiusa("seatControl", OMODA9) is False
-    assert P.porta_chiusa("chargeStartStopControl", OMODA9) is True   # 220 negata da noi
+    assert P.porta_chiusa("seatControl", LEPAS_L8) is False
+    assert P.porta_chiusa("chargeStartStopControl", LEPAS_L8) is True   # 220 negata da noi
     assert P.porta_chiusa("seatControl", {}) is False                 # ignoto = aperta
     # Sul veicolo vero dell'issue #1 la macro freddo è negata in blocco (210 = 0): il comando
     # partirà e verrà rifiutato, e l'utente ha diritto di saperlo prima. Il vecchio profilo
     # inventato diceva il contrario.
-    assert P.porta_chiusa("coolingControl", JAECOO) is True
+    assert P.porta_chiusa("coolingControl", CHERY_PHEV) is True
 
 
 def test_non_si_ripiega_se_anche_il_clima_e_chiuso(core, P):
     """Se pure la categoria 204 è negata, l'alternativa non esiste: non si cambia strada."""
     commands = core["commands"]
-    chiuso = dict(JAECOO); chiuso[204] = 0
+    chiuso = dict(CHERY_PHEV); chiuso[204] = 0
     c = commands.CMD_MAP["sedile_guida_caldo"]
     ep, corpo, _s, nota = P.adatta(c["endpoint"], dict(c["body"]), chiuso)
     assert (ep, corpo, nota) == (c["endpoint"], c["body"], None)
@@ -221,7 +221,7 @@ def test_instradamento_sedile_passa_dal_clima(core, P):
     cambia porta invece di sbattere contro quella chiusa."""
     commands = core["commands"]
     c = commands.CMD_MAP["sedile_guida_caldo"]
-    ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), JAECOO)
+    ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), CHERY_PHEV)
     assert ep == "airControl"
     assert corpo["mSeatHeating"] == "3"
     assert corpo["airControlType"] == "1"      # accendendo, si accende anche il clima
@@ -238,7 +238,7 @@ def test_ripiego_off_spegne_anche_il_clima(core, P):
     all'utente deve dire *spegne*, non *accende*."""
     commands = core["commands"]
     c = commands.CMD_MAP["sedile_guida_caldo_off"]
-    _ep, corpo, _s, nota = P.adatta(c["endpoint"], dict(c["body"]), JAECOO)
+    _ep, corpo, _s, nota = P.adatta(c["endpoint"], dict(c["body"]), CHERY_PHEV)
     assert corpo["airControlType"] == "0"
     assert nota and "spegne" in nota and "accende" not in nota
 
@@ -253,17 +253,17 @@ def test_lunotto_sul_veicolo_vero_non_ha_nessuna_via(core, P):
     climatizzatore di casa d'altri per una funzione che comunque non partirebbe."""
     commands = core["commands"]
     c = commands.CMD_MAP["defrost_lunotto"]
-    ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), JAECOO)
+    ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), CHERY_PHEV)
     assert (ep, corpo, saltati, nota) == (c["endpoint"], c["body"], [], None)
     # ma all'utente si dice perché arriverà un rifiuto, invece di lasciarlo indovinare
-    assert P.verdetto(ep, JAECOO)
+    assert P.verdetto(ep, CHERY_PHEV)
 
 
 def test_porta_dedicata_aperta_si_resta(core, P):
     """Se la via di sempre è autorizzata non si cambia nulla: il ripiego è l'eccezione."""
     commands = core["commands"]
     c = commands.CMD_MAP["defrost_lunotto"]
-    ep, corpo, _s, nota = P.adatta(c["endpoint"], dict(c["body"]), OMODA9)
+    ep, corpo, _s, nota = P.adatta(c["endpoint"], dict(c["body"]), LEPAS_L8)
     assert (ep, corpo, nota) == (c["endpoint"], c["body"], None)
 
 
@@ -272,7 +272,7 @@ def test_entrambe_chiuse_si_spedisce_lo_stesso(core, P):
     sopprime il comando. Si spedisce come sempre e l'utente riceve il rifiuto vero del
     backend, che è un'informazione — inventare un errore nostro non lo sarebbe."""
     commands = core["commands"]
-    chiuso = dict(JAECOO)
+    chiuso = dict(CHERY_PHEV)
     chiuso.update({2047: 0})
     c = commands.CMD_MAP["sedile_guida_caldo"]
     ep, corpo, _s, nota = P.adatta(c["endpoint"], dict(c["body"]), chiuso)
@@ -296,7 +296,7 @@ def test_entrambe_chiuse_si_spedisce_lo_stesso(core, P):
 # estremi LO/HI, perché una scheda vera che dichiara `isHaveLoAndHi` li ha entrambi e li vuole
 # coerenti col range (`const.capabilities_from_item`): senza di essi `adatta_capability` sarebbe
 # un no-op e il test proverebbe il valore giusto per il motivo sbagliato.
-_SCHEDA_JAECOO = {"durate_aria": [5, 10, 15], "clima_min": 16.0, "clima_max": 30.0,
+_SCHEDA_CHERY_PHEV = {"durate_aria": [5, 10, 15], "clima_min": 16.0, "clima_max": 30.0,
                   "clima_lo": 15.0, "clima_hi": 31.0}
 
 
@@ -305,12 +305,12 @@ def test_ricomposizione_riproduce_il_corpo_misurato(core, P):
     commands = core["commands"]
     c = commands.CMD_MAP["clima_raffredda_on"]
     # `adatta_capability` gira prima, sull'endpoint ancora originale: mette la posizione LO
-    # dichiarata dalla vettura al posto del 15.0 cablato per l'Omoda 9.
-    corpo = commands.adatta_capability(c["endpoint"], dict(c["body"]), _SCHEDA_JAECOO)
+    # dichiarata dalla vettura al posto del 15.0 cablato per la Lepas L8.
+    corpo = commands.adatta_capability(c["endpoint"], dict(c["body"]), _SCHEDA_CHERY_PHEV)
     assert corpo["temperature"] == "15.0", "premessa: entra la POSIZIONE LO, non un setpoint"
-    ep, corpo, saltati, nota = P.adatta(c["endpoint"], corpo, JAECOO)
-    commands._setpoint_da_posizione(corpo, _SCHEDA_JAECOO)   # secondo giro: la porta è cambiata
-    commands._limita_temperatura(corpo, _SCHEDA_JAECOO)
+    ep, corpo, saltati, nota = P.adatta(c["endpoint"], corpo, CHERY_PHEV)
+    commands._setpoint_da_posizione(corpo, _SCHEDA_CHERY_PHEV)   # secondo giro: la porta è cambiata
+    commands._limita_temperatura(corpo, _SCHEDA_CHERY_PHEV)
 
     assert ep == "airControl"
     assert corpo == {"airControlType": "1", "airType": "1", "temperature": "16.0",
@@ -325,23 +325,23 @@ def test_ricomposizione_spegne_in_modo_simmetrico(core, P):
     accesa dal clima non si può fermare da un endpoint che questa vettura non autorizza."""
     commands = core["commands"]
     c = commands.CMD_MAP["clima_raffredda_off"]
-    ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), JAECOO)
+    ep, corpo, saltati, nota = P.adatta(c["endpoint"], dict(c["body"]), CHERY_PHEV)
     assert (ep, corpo["airControlType"], nota is not None) == ("airControl", "0", True)
     assert "duration" not in corpo and corpo["times"] == "15"
     assert saltati == ["blSeatAiry", "brSeatAiry"]
 
 
-def test_ricomposizione_muta_sullomoda9(core, P):
+def test_ricomposizione_muta_sullepas_l8(core, P):
     """La macro del costruttore è aperta ⇒ non la si sostituisce con un'imitazione nostra.
 
     Vale come invariante per chi il componente ce l'ha installato: è già coperto dal no-op
     letterale su tutto il catalogo, ma questo lo inchioda al punto esatto — se un domani la
-    guardia «la porta ufficiale è aperta» sparisse, l'Omoda 9 comincerebbe a spedire `airControl`
+    guardia «la porta ufficiale è aperta» sparisse, la Lepas L8 comincerebbe a spedire `airControl`
     al posto di `coolingControl` senza che nessun altro test lo dica a voce alta."""
     commands = core["commands"]
     for chiave in ("clima_raffredda_on", "clima_raffredda_off"):
         c = commands.CMD_MAP[chiave]
-        assert P.ricomponi(c["endpoint"], dict(c["body"]), OMODA9) == (
+        assert P.ricomponi(c["endpoint"], dict(c["body"]), LEPAS_L8) == (
             c["endpoint"], c["body"], None)
 
 
@@ -360,8 +360,8 @@ def test_ricomposizione_non_scavalca_una_seconda_porta_chiusa(core, P):
     verdetto preventivo, perché quello guarda l'endpoint **finale**."""
     commands = core["commands"]
     c = commands.CMD_MAP["clima_raffredda_on"]
-    for chiuso in ({**JAECOO, 204: 0},          # categoria del clima negata
-                   {**JAECOO, 2041: 0}):        # cuore del clima negato, categoria aperta
+    for chiuso in ({**CHERY_PHEV, 204: 0},          # categoria del clima negata
+                   {**CHERY_PHEV, 2041: 0}):        # cuore del clima negato, categoria aperta
         ep, corpo, nota = P.ricomponi(c["endpoint"], dict(c["body"]), chiuso)
         assert (ep, corpo, nota) == (c["endpoint"], c["body"], None)
         assert P.verdetto(ep, chiuso), "senza ricomposizione il verdetto deve restare"
@@ -372,7 +372,7 @@ def test_ricomposizione_scatta_anche_solo_per_il_cuore_negato(core, P):
     abbiamo, quando la voce base è negata lo è anche la categoria."""
     commands = core["commands"]
     c = commands.CMD_MAP["clima_raffredda_on"]
-    solo_cuore = {**JAECOO, 210: 1, 2103: 0}
+    solo_cuore = {**CHERY_PHEV, 210: 1, 2103: 0}
     ep, _corpo, nota = P.ricomponi(c["endpoint"], dict(c["body"]), solo_cuore)
     assert (ep, nota is not None) == ("airControl", True)
 
@@ -388,7 +388,7 @@ def test_un_campo_non_traducibile_annulla_la_ricomposizione(core, P):
     peggioramento."""
     corpo = {"airControlType": "1", "airType": "1", "temperature": "15.0", "duration": "15",
              "mSeatAiry": "3", "campoMaiVisto": "1"}
-    ep, uscito, nota = P.ricomponi("coolingControl", dict(corpo), JAECOO)
+    ep, uscito, nota = P.ricomponi("coolingControl", dict(corpo), CHERY_PHEV)
     assert (ep, uscito, nota) == ("coolingControl", corpo, None)
 
 
@@ -401,7 +401,7 @@ def test_il_caldo_non_si_ricompone(core, P):
     test è il punto in cui dichiararlo."""
     commands = core["commands"]
     c = commands.CMD_MAP["clima_riscalda_on"]
-    caldo_negato = {**JAECOO, 209: 0, 2093: 0}
+    caldo_negato = {**CHERY_PHEV, 209: 0, 2093: 0}
     assert P.ricomponi(c["endpoint"], dict(c["body"]), caldo_negato) == (
         c["endpoint"], c["body"], None)
     assert "heatingControl" not in P.RICOMPONI
@@ -446,7 +446,7 @@ def _permessi_finti(mappa):
 def test_send_instrada_davvero_verso_un_altro_endpoint(core, cloud, ctx):
     """Il test che conta: non la funzione pura, ma l'URL su cui la richiesta atterra."""
     commands = core["commands"]
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     commands.send(ctx, "sedile_guida_caldo")
@@ -477,8 +477,8 @@ def test_send_ricompone_la_macro_freddo(core, cloud, ctx):
     esiste per abbandonare, dove restava leggibile 12 millisecondi — la suite restava tutta verde.
     Un avviso pubblicato solo su `emit` è un avviso che l'utente non legge."""
     commands = core["commands"]
-    ctx.caps = dict(_SCHEDA_JAECOO)
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    ctx.caps = dict(_SCHEDA_CHERY_PHEV)
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
     detti, avvisi = [], []
 
@@ -504,7 +504,7 @@ def test_send_ricompone_la_macro_freddo(core, cloud, ctx):
     ({}, "16.0"),                                                     # nessuna scheda
     ({"clima_lo": 12.0, "clima_hi": 34.0}, "16.0"),                   # solo gli estremi
     ({"clima_min": 18.0, "clima_max": 28.0}, "18.0"),                 # solo il range
-    (dict(_SCHEDA_JAECOO), "16.0"),                                   # scheda completa
+    (dict(_SCHEDA_CHERY_PHEV), "16.0"),                                   # scheda completa
 ], ids=["nessuna-scheda", "solo-estremi", "solo-range", "completa"])
 def test_la_macro_ricomposta_non_spedisce_mai_una_posizione_come_setpoint(core, cloud, ctx,
                                                                          caps, atteso):
@@ -514,14 +514,14 @@ def test_la_macro_ricomposta_non_spedisce_mai_una_posizione_come_setpoint(core, 
     FUORI dall'intervallo impostabile. Passando dal clima diventa un setpoint. `_limita_temperatura`
     da sola non basta: quando la vettura non dichiara il range impostabile ripiega su LO..HI, e
     LO..HI **contiene LO**, quindi il controllo passava sempre. Risultato: senza scheda partiva il
-    `15.0` cablato per l'Omoda 9, e su una vettura che dichiara solo gli estremi partiva il suo LO
+    `15.0` cablato per la Lepas L8, e su una vettura che dichiara solo gli estremi partiva il suo LO
     (qui `12.0`). Il corpo **misurato** che il backend accetta porta `16.0`.
 
     La riga «solo-range» è quella che dimostra che non si è cablato un `16.0`: se la vettura dice
     di partire da 18 °C, si spedisce 18."""
     commands = core["commands"]
     ctx.caps = caps
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     commands.send(ctx, "clima_raffredda_on")
@@ -532,7 +532,7 @@ def test_la_macro_ricomposta_non_spedisce_mai_una_posizione_come_setpoint(core, 
 
 def test_send_pota_davvero_il_corpo(core, cloud, ctx):
     commands = core["commands"]
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     esito = commands.send(ctx, "clima_riscalda_on")
@@ -543,10 +543,10 @@ def test_send_pota_davvero_il_corpo(core, cloud, ctx):
     assert "saltate" in esito and "skipped" in esito
 
 
-def test_send_sull_omoda9_resta_identico(core, cloud, ctx):
+def test_send_sullepas_l8_resta_identico(core, cloud, ctx):
     """La stessa catena, col profilo di casa: endpoint e corpo devono essere quelli di sempre."""
     commands = core["commands"]
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(OMODA9))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(LEPAS_L8))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     commands.send(ctx, "sedile_guida_caldo")
@@ -562,7 +562,7 @@ def test_la_lista_si_legge_una_volta_sola(core, cloud, ctx):
     """Una lettura in più a ogni comando sarebbe traffico verso il cloud del costruttore per
     un dato che non cambia. Si legge al primo comando e si tiene nel contesto del veicolo."""
     commands = core["commands"]
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(OMODA9))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(LEPAS_L8))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     for _ in range(3):
@@ -594,7 +594,7 @@ def test_disappannamento_potato_dove_negato(core):
     """`frontDefrosting` è accessorio: dove la voce 2045 è negata si toglie il campo e il
     clima parte lo stesso, invece di far rifiutare tutta la richiesta per un campo solo."""
     permessi = core["permessi"]
-    senza = {**OMODA9, 2045: 0}
+    senza = {**LEPAS_L8, 2045: 0}
 
     corpo, saltati = permessi.pota("airControl",
                                    {"airControlType": "1", "airType": "1",
@@ -607,13 +607,13 @@ def test_disappannamento_potato_dove_negato(core):
     assert corpo["airControlType"] == "1" and corpo["temperature"] == "21.0"
 
 
-def test_disappannamento_intatto_sullomoda9(core):
+def test_disappannamento_intatto_sullepas_l8(core):
     """Sulla nostra auto (2045 consentita) la potatura non deve toccare nulla."""
     permessi = core["permessi"]
     corpo_in = {"airControlType": "1", "airType": "1", "frontDefrosting": "1",
                 "temperature": "21.0", "times": "15"}
 
-    corpo, saltati = permessi.pota("airControl", dict(corpo_in), OMODA9)
+    corpo, saltati = permessi.pota("airControl", dict(corpo_in), LEPAS_L8)
 
     assert corpo == corpo_in and saltati == []
 
@@ -623,7 +623,7 @@ def test_antifurto_avvisa_prima_del_rifiuto(core, cloud, ctx):
     saltare anche l'AVVISO, e su un veicolo con la sicurezza negata l'utente vedeva un `A00084`
     nudo — l'errore che la v1.10.1 aveva appena finito di correggere per gli altri comandi."""
     commands = core["commands"]
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti({**OMODA9, 401: 0}))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti({**LEPAS_L8, 401: 0}))
     cloud.on("/act/theftAlarm/setSwitch", code="A00084")
     detti = []
 
@@ -641,7 +641,7 @@ def test_antifurto_avvisa_prima_del_rifiuto(core, cloud, ctx):
 def test_antifurto_nessun_avviso_dove_consentito(core, cloud, ctx):
     """Sulla nostra auto (401 consentita) l'avviso non deve comparire: sarebbe un allarme falso."""
     commands = core["commands"]
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(OMODA9))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(LEPAS_L8))
     cloud.on("/act/theftAlarm/setSwitch", code="A00079")
     detti = []
 
@@ -654,7 +654,7 @@ def test_ciclo_settimanale_negato_viene_annunciato(core):
     """Su un veicolo che consente solo il ciclo su giorni scelti (2131) e nega la settimana
     (2132), il nostro `cycleData` fisso a [1..7] verrà rifiutato: va detto PRIMA."""
     permessi = core["permessi"]
-    invertito = {**OMODA9, 2131: 1, 2132: 0}
+    invertito = {**LEPAS_L8, 2131: 1, 2132: 0}
     corpo = {"mainSwitch": 1, "chargeAppointPlans": [
         {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 480,
          "switchStatus": 1, "timeConsuming": 720}]}
@@ -664,21 +664,21 @@ def test_ciclo_settimanale_negato_viene_annunciato(core):
     assert avviso and "tutti i giorni" in avviso
 
 
-def test_ciclo_settimanale_ok_sullomoda9(core):
+def test_ciclo_settimanale_ok_sullepas_l8(core):
     """Sulla nostra auto è consentito proprio il ciclo di 7 giorni: nessun avviso."""
     permessi = core["permessi"]
     corpo = {"mainSwitch": 1, "chargeAppointPlans": [
         {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 0,
          "switchStatus": 1, "timeConsuming": 720}]}
 
-    assert permessi.ciclo_non_autorizzato("chargeAppointControl", corpo, OMODA9) is None
+    assert permessi.ciclo_non_autorizzato("chargeAppointControl", corpo, LEPAS_L8) is None
 
 
 def test_ciclo_non_inventa_giorni(core):
     """⚠️ Il controllo deve solo AVVISARE. Correggere i giorni scelti dall'utente sarebbe peggio
     del rifiuto: un piano che parte in giorni che nessuno ha chiesto è un danno silenzioso."""
     permessi = core["permessi"]
-    invertito = {**OMODA9, 2131: 1, 2132: 0}
+    invertito = {**LEPAS_L8, 2131: 1, 2132: 0}
     corpo = {"chargeAppointPlans": [{"cycleData": [1, 2, 3, 4, 5, 6, 7]}]}
 
     permessi.ciclo_non_autorizzato("chargeAppointControl", corpo, invertito)
@@ -717,7 +717,7 @@ def test_verdetto_e_potatura_convivono(core, P, cloud, ctx):
     alternativi da un `elif`) vive però nel chiamante e non nel profilo."""
     commands = core["commands"]
     c = commands.CMD_MAP["clima_raffredda_on"]
-    senza_scampo = {**JAECOO, 204: 0}          # sintetico: né la macro né il clima
+    senza_scampo = {**CHERY_PHEV, 204: 0}          # sintetico: né la macro né il clima
     cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(senza_scampo))
     cloud.on("/asc/vehicleControl/", code="A00084")
     detti = []
@@ -762,15 +762,15 @@ def test_verdetto_dice_il_cuore_negato(core, P):
     ⚠️ Su nessuno dei due profili reali questo caso si presenta: quando la voce base è negata
     lo è anche la categoria, e vince `porta_chiusa`. Il profilo qui sotto è quindi **sintetico**
     e costruito apposta — prova che il ramo funziona, NON che esista un veicolo che lo produce."""
-    solo_cuore_negato = {**OMODA9, 210: 1, 2103: 0}
+    solo_cuore_negato = {**LEPAS_L8, 210: 1, 2103: 0}
     avviso = P.verdetto("coolingControl", solo_cuore_negato)
     assert avviso == P.MSG_BASE_NEGATA, (
         f"il ramo della voce base non parla: {avviso!r}")
     # e non si confonde col ramo della categoria, che ha la precedenza quando scatta
-    assert P.verdetto("coolingControl", {**OMODA9, 210: 0, 2103: 0}) == P.MSG_CATEGORIA_NEGATA
+    assert P.verdetto("coolingControl", {**LEPAS_L8, 210: 0, 2103: 0}) == P.MSG_CATEGORIA_NEGATA
 
 
-def test_verdetto_muto_sullomoda9(core, P):
+def test_verdetto_muto_sullepas_l8(core, P):
     """Il rumore nuovo per chi il componente ce l'ha già installato dev'essere **zero**.
 
     Sul nostro profilo il verdetto tace su tutto il catalogo tranne la ricarica immediata, dove
@@ -780,11 +780,11 @@ def test_verdetto_muto_sullomoda9(core, P):
     for chiave, c in commands.CMD_MAP.items():
         if c.get("path") or not c.get("endpoint"):
             continue
-        ep, _corpo, _s, _n = P.adatta(c["endpoint"], dict(c["body"]), OMODA9)
-        if P.verdetto(ep, OMODA9):
+        ep, _corpo, _s, _n = P.adatta(c["endpoint"], dict(c["body"]), LEPAS_L8)
+        if P.verdetto(ep, LEPAS_L8):
             parlanti.add(chiave)
     assert parlanti == {"ricarica_start", "ricarica_stop"}, (
-        f"messaggi nuovi non previsti sull'Omoda 9: {parlanti}")
+        f"messaggi nuovi non previsti sulla Lepas L8: {parlanti}")
 
 
 def test_verdetto_senza_lista_tace(P):
@@ -792,8 +792,8 @@ def test_verdetto_senza_lista_tace(P):
     permessi il componente si comporta esattamente come prima, quindi non avvisa di nulla."""
     assert P.verdetto("coolingControl", {}) is None
     assert P.verdetto("coolingControl", None) is None
-    assert P.verdetto("", JAECOO) is None
-    assert P.verdetto("endpointMaiVisto", JAECOO) is None      # ignoto = aperto
+    assert P.verdetto("", CHERY_PHEV) is None
+    assert P.verdetto("endpointMaiVisto", CHERY_PHEV) is None      # ignoto = aperto
 
 
 def test_verdetto_sta_nello_stato_di_home_assistant(core, P):
@@ -806,10 +806,10 @@ def test_verdetto_sta_nello_stato_di_home_assistant(core, P):
     # non misurato da nessun test: si guardava solo `verdetto`. Si misura sul ramo peggiore
     # («accende» è più lungo di «spegne») ricavandola dal codice, non ricopiandola qui.
     c = commands.CMD_MAP["sedile_guida_caldo"]
-    _ep, _corpo, nota = P.instrada(c["endpoint"], dict(c["body"]), JAECOO)
+    _ep, _corpo, nota = P.instrada(c["endpoint"], dict(c["body"]), CHERY_PHEV)
     assert nota, "premessa del test: su questo profilo il ripiego scatta davvero"
     assert prefisso + len(nota) <= 255, f"nota del ripiego: {prefisso + len(nota)} caratteri"
-    for perms in (JAECOO, {**OMODA9, 214: 0, 2103: 0}):
+    for perms in (CHERY_PHEV, {**LEPAS_L8, 214: 0, 2103: 0}):
         for ep in ("coolingControl", "seatControl", "heatingControl", "chargeStartStopControl"):
             avviso = P.verdetto(ep, perms)
             if avviso:
@@ -833,8 +833,8 @@ def test_tabelle_senza_voci_morte(core, P):
 #
 # ⚠️ AVVERTENZA, da leggere prima di fidarsi di questi test.
 # Il percorso di ripiego **non è mai stato eseguito da nessuno contro un backend vero**, e
-# sull'Omoda 9 non è nemmeno raggiungibile (tutte le voci `204xx` di ripiego sono negate: lo
-# dimostra `test_omoda9_nessun_comando_viene_toccato`). Quel che segue prova che il COMPONENTE
+# sulla Lepas L8 non è nemmeno raggiungibile (tutte le voci `204xx` di ripiego sono negate: lo
+# dimostra `test_lepas_l8_nessun_comando_viene_toccato`). Quel che segue prova che il COMPONENTE
 # costruisce il corpo che intendiamo — endpoint, campi, valori, messaggi. Non prova, e non può
 # provare, che il backend Chery accetti quel corpo, né che la vettura esegua: quello sarebbe uno
 # strato 2 che nessuna misura di questo filone ha mai raggiunto. Il primo a esercitarlo davvero
@@ -855,13 +855,13 @@ _SCHEDA_STRETTA = {"durate_aria": [5, 10], "clima_min": 22.0, "clima_max": 30.0}
 def test_ripiego_rispetta_la_scheda_della_vettura(core, cloud, ctx):
     """Il difetto: il corpo di ripiego nasce DOPO gli adattatori alla scheda, quindi non li
     incontrava mai. `permessi.py` non conosce la vettura e mette 21.0 e 15 — i valori
-    dell'Omoda 9 — su un'auto che magari ammette solo 5 e 10 minuti e non scende sotto i 22 °C.
+    della Lepas L8 — su un'auto che magari ammette solo 5 e 10 minuti e non scende sotto i 22 °C.
 
     Si misura sul corpo che atterra davvero sull'URL, non sulla funzione pura: è l'unico punto
     in cui l'ordine delle chiamate dentro `send()` è osservabile."""
     commands = core["commands"]
     ctx.caps = dict(_SCHEDA_STRETTA)
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     commands.send(ctx, "sedile_guida_caldo")
@@ -885,7 +885,7 @@ def test_ripiego_non_annuncia_una_durata_che_l_utente_non_ha_scelto(core, cloud,
     non corrispondono a ciò che ha fatto — che questa versione toglie di mezzo altrove."""
     commands = core["commands"]
     ctx.caps = dict(_SCHEDA_STRETTA)
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
     detti = []
 
@@ -905,7 +905,7 @@ def test_la_durata_scelta_dall_utente_resta_annunciata(core, cloud, ctx):
     a sapere che gliel'abbiamo cambiato — altrimenti vede 30 nell'interfaccia e l'auto ne fa 10."""
     commands = core["commands"]
     ctx.caps = dict(_SCHEDA_STRETTA)
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(OMODA9))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(LEPAS_L8))
     cloud.on("/asc/vehicleControl/", code="A00079")
     detti = []
 
@@ -920,7 +920,7 @@ def test_ripiego_senza_scheda_spedisce_come_prima(core, cloud, ctx):
     inventa nulla. Senza scheda tecnica il corpo di ripiego resta quello di `BASE_AIRCONTROL`."""
     commands = core["commands"]
     ctx.caps = {}
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     commands.send(ctx, "sedile_guida_caldo")
@@ -939,12 +939,12 @@ def test_ripiego_con_scheda_parziale(core, cloud, ctx, caps, times, temperatura)
     il range e gli estremi in modo indipendente. Ciò che è dichiarato si rispetta, il resto resta
     com'era — non si deduce un range da una durata né viceversa.
 
-    La riga «solo-estremi» porta i valori VERI dell'Omoda 9 (LO 15 / HI 31) e per questo non
+    La riga «solo-estremi» porta i valori VERI della Lepas L8 (LO 15 / HI 31) e per questo non
     corregge nulla: è il caso normale, e serve a ricordare che LO/HI da soli quasi mai mordono —
     per questo non possono essere il vincolo principale."""
     commands = core["commands"]
     ctx.caps = dict(caps)
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     commands.send(ctx, "sedile_guida_caldo")
@@ -1059,14 +1059,14 @@ def test_adatta_capability_non_tocca_il_ripiego(core):
                                       {"clima_lo": 18, "clima_hi": 30}) == {"temperature": "21.0"}
 
 
-def test_omoda9_il_ripiego_non_e_nemmeno_raggiungibile(core, cloud, ctx):
+def test_lepas_l8_il_ripiego_non_e_nemmeno_raggiungibile(core, cloud, ctx):
     """L'invariante che protegge chi il componente ce l'ha già installato, misurata attraverso
     `send()` e non sulla funzione pura: sulla nostra auto nessun comando cambia porta, quindi
     tutto il codice della fase C resta materialmente irraggiungibile — comprese le due
     correzioni silenziose, che non possono toccare un corpo che non passa di lì."""
     commands = core["commands"]
     ctx.caps = dict(_SCHEDA_STRETTA)        # scheda stretta apposta: se scattasse, si vedrebbe
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(OMODA9))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(LEPAS_L8))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     attesi = [(c["endpoint"], c["body"].get("temperature")) for c in commands.CMD_MAP.values()
@@ -1082,8 +1082,8 @@ def test_omoda9_il_ripiego_non_e_nemmeno_raggiungibile(core, cloud, ctx):
     # `_limita_temperatura` fuori dal ripiego. Con questa scheda il clima parte da 22 °C, quindi
     # una limitazione che sfuggisse trasformerebbe il 21.0 del catalogo in 22.0 — visibile qui e
     # invisibile a un confronto sui soli endpoint. (`times`, invece, è corretto per davvero anche
-    # sull'Omoda 9: quella è la correzione dichiarata di `_adatta_durata`, e ci deve essere.)
-    assert inviati == attesi, "un comando ha cambiato porta o temperatura sull'Omoda 9"
+    # sulla Lepas L8: quella è la correzione dichiarata di `_adatta_durata`, e ci deve essere.)
+    assert inviati == attesi, "un comando ha cambiato porta o temperatura sulla Lepas L8"
 
 
 # ───────────────────── 8. i sospetti: quello che non sappiamo, detto come tale ─────────────────
@@ -1095,15 +1095,15 @@ def test_sospetti_non_toccano_il_corpo(core, P):
     romperebbe il clima per un'ipotesi."""
     commands = core["commands"]
     c = commands.CMD_MAP["clima_on"]
-    _ep, corpo, saltati, _nota = P.adatta(c["endpoint"], dict(c["body"]), JAECOO)
+    _ep, corpo, saltati, _nota = P.adatta(c["endpoint"], dict(c["body"]), CHERY_PHEV)
 
     # la cifra citata nel commento di `SOSPETTI_NON_MAPPATI`: un numero scritto in un commento e
     # controllato da nessuno diventa falso al primo comando aggiunto.
     assert sum(1 for v in commands.CMD_MAP.values() if "times" in v.get("body", {})) == 14
-    assert JAECOO[2044] == 0, "il profilo reale nega davvero quella voce"
+    assert CHERY_PHEV[2044] == 0, "il profilo reale nega davvero quella voce"
     assert "times" in corpo, "il corpo non si tocca: la corrispondenza non è provata"
     assert "times" not in saltati
-    assert P.sospetti(corpo, JAECOO) == [("times", 2044)], "…ma il dubbio va registrato"
+    assert P.sospetti(corpo, CHERY_PHEV) == [("times", 2044)], "…ma il dubbio va registrato"
 
 
 def test_send_registra_il_sospetto_senza_toccare_il_corpo(core, cloud, ctx, caplog):
@@ -1116,7 +1116,7 @@ def test_send_registra_il_sospetto_senza_toccare_il_corpo(core, cloud, ctx, capl
     import logging
 
     commands = core["commands"]
-    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(JAECOO))
+    cloud.on("/tsp/v1/app/vmc/queryVehicleAuthority", _permessi_finti(CHERY_PHEV))
     cloud.on("/asc/vehicleControl/", code="A00079")
 
     with caplog.at_level(logging.DEBUG):
@@ -1127,20 +1127,20 @@ def test_send_registra_il_sospetto_senza_toccare_il_corpo(core, cloud, ctx, capl
     assert cloud.calls_to("/asc/vehicleControl/")[0]["body"]["times"] == "15"
 
 
-def test_sospetti_muti_sullomoda9(core, P):
+def test_sospetti_muti_sullepas_l8(core, P):
     """Sul nostro profilo la voce 2044 è consentita: nessun sospetto, nessuna riga di log."""
     commands = core["commands"]
     for c in commands.CMD_MAP.values():
         if not c.get("endpoint"):
             continue
-        assert P.sospetti(dict(c["body"]), OMODA9) == []
+        assert P.sospetti(dict(c["body"]), LEPAS_L8) == []
 
 
 def test_sospetti_senza_lista_tacciono(P):
     """Fallimento permissivo, la regola che ogni funzione nuova deve superare."""
     assert P.sospetti({"times": "15"}, {}) == []
     assert P.sospetti({"times": "15"}, None) == []
-    assert P.sospetti({}, JAECOO) == []
+    assert P.sospetti({}, CHERY_PHEV) == []
 
 
 def test_sospetti_restano_fuori_dalle_tabelle_che_decidono(core, P):

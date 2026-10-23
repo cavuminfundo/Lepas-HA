@@ -1,6 +1,6 @@
 """Fixture ANONIMIZZATE del protocollo (P2-8/C3) — golden file versionati.
 
-La conoscenza del protocollo Omoda viveva sparsa in note di sessione: qui diventa
+La conoscenza del protocollo Lepas viveva sparsa in note di sessione: qui diventa
 materiale verificabile e diff-abile quando il backend cambia. Due famiglie:
 
   * **codici `A00xxx`** = risposte del backend tspconsole/BFF, con il significato e
@@ -168,7 +168,7 @@ REALTIME_ASLEEP = {"code": "A07900"}
 
 
 # ───────────────────── profilo permessi di un veicolo NON nostro ─────────────────────
-# Jaecoo 7 PHEV, account EU — mappa `id → state` estratta con uno script dalla lista permessi
+# Chery PHEV, account EU — mappa `id → state` estratta con uno script dalla lista permessi
 # REALE che l'utente dell'issue #1 ha pubblicato il 2026-08-10 (280 voci, 126 negate).
 #
 # Perché sta qui e non come JSON committato: il file grezzo arriva da un terzo e il gate
@@ -180,8 +180,8 @@ REALTIME_ASLEEP = {"code": "A07900"}
 # Sono omesse le 98 voci FIGLIE del ramo 1 (stato veicolo, `parentId` 101): verificate tutte a 1,
 # e nessun comando le tocca. Restano le altre 182 — i comandi dei rami 2/3/4 più le cinque radici,
 # fra cui il 101 stesso — che sono quelle che decidono.
-# Fonte grezza: la lista permessi letta su un Jaecoo 7 PHEV EU (canale privato, mai in questo repo).
-JAECOO7_PHEV_EU = {
+# Fonte grezza: la lista permessi letta su un Chery PHEV EU (canale privato, mai in questo repo).
+CHERY_PHEV_EU = {
     1: 1, 2: 1, 3: 1, 4: 1, 101: 1, 201: 0, 202: 1, 203: 1,
     204: 1, 205: 1, 206: 1, 207: 1, 208: 1, 209: 1, 210: 0, 211: 1,
     212: 1, 213: 1, 214: 0, 215: 1, 216: 0, 220: 0, 222: 0, 230: 0,

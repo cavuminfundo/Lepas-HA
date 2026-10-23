@@ -35,7 +35,7 @@ import fixtures as FX                      # noqa: E402
 # esista — resta fissato in sys.modules e i test lo trovano anche dentro le fixture.
 # Senza questo, `from custom_components.lepas...` funziona a livello di modulo ma
 # fallisce con ModuleNotFoundError se eseguito a runtime.
-from custom_components.lepas import const as OMODA_CONST   # noqa: E402
+from custom_components.lepas import const as LEPAS_CONST   # noqa: E402
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -95,7 +95,7 @@ def cloud(monkeypatch, core, ctx):
     fake.on("/tsp/v1/app/auth/login", data={"userToken": FX.USER_TOKEN,
                                             "tUserId": FX.TUSERID})
     fake.on("/tsp/v1/app/vmc/queryList", data=[{"vin": FX.VIN, "nickname": "Auto di prova",
-                                                "fullName": "OMODA 9"}])
+                                                "fullName": "LEPAS L8"}])
     fake.on("/tsp/v1/app/vmc/setVecDefault", code="000000")
     fake.on("/tsp/v1/app/cpm/checkPassword", data={"taskId": FX.TASKID})
     # `_access_token` legge il token da disco: lo si serve da un file temporaneo.
@@ -108,7 +108,7 @@ def config_entry(hass):
     """Config entry già configurato, con dati sintetici (nessun account reale)."""
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    C = OMODA_CONST
+    C = LEPAS_CONST
     entry = MockConfigEntry(
         domain=C.DOMAIN,
         title=f"Lepas ({FX.VIN})",

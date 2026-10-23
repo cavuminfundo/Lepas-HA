@@ -21,8 +21,8 @@ ripulire il bytecode e ri-fissarli in `sys.modules` a ogni avvio. Tre difetti co
 
 Da qui in avanti sono normali moduli di pacchetto, con import relativi.
 
-**Eccezione voluta:** `login_omoda.py` e `prova_token.py` vengono eseguiti anche come
+**Eccezione voluta:** `login_lepas.py` e `prova_token.py` vengono eseguiti anche come
 SOTTOPROCESSI (`session.request_otp` / `confirm_otp`), dove non esiste un pacchetto
-padre. Quei due — e le loro dipendenze `captcha_solver`/`omoda` — tentano l'import
+padre. Quei due — e le loro dipendenze `captcha_solver`/`lepas` — tentano l'import
 relativo e ripiegano su quello nudo: funzionano in entrambi i modi.
 """

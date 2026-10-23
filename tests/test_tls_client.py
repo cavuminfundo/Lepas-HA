@@ -29,8 +29,8 @@ RISPOSTA_OK = '{"key":"operation.successful","ok":true}'
 def _memoria_isolata(tmp_path, monkeypatch):
     """La memoria del client vincente vive accanto al token: qui la si sposta in una cartella
     temporanea, così i test non si scrivono addosso né toccano una configurazione vera."""
-    monkeypatch.setenv("OMODA_TOKEN_PATH", str(tmp_path / "token.json"))
-    monkeypatch.delenv("OMODA_TLS_CLIENT", raising=False)
+    monkeypatch.setenv("LEPAS_TOKEN_PATH", str(tmp_path / "token.json"))
+    monkeypatch.delenv("LEPAS_TLS_CLIENT", raising=False)
 
 
 def _scala(monkeypatch, **risposte):
@@ -131,22 +131,22 @@ def test_ricorda_il_client_che_ha_funzionato(monkeypatch):
 def test_la_memoria_non_e_mai_bloccante(monkeypatch):
     """Se il file non è scrivibile (permessi, disco pieno) il login deve funzionare lo stesso:
     ricordare il vincente è un'ottimizzazione, non un requisito."""
-    monkeypatch.setenv("OMODA_TOKEN_PATH", "/percorso/che/non/esiste/token.json")
+    monkeypatch.setenv("LEPAS_TOKEN_PATH", "/percorso/che/non/esiste/token.json")
     _scala(monkeypatch, unico=(200, RISPOSTA_OK))
     assert _post().passato
 
 
 def test_si_puo_forzare_un_client_solo(monkeypatch):
-    """`OMODA_TLS_CLIENT` serve a isolare un client in diagnostica senza consumare tentativi
+    """`LEPAS_TLS_CLIENT` serve a isolare un client in diagnostica senza consumare tentativi
     con gli altri — e i tentativi, su questo endpoint, sono contati."""
-    monkeypatch.setenv("OMODA_TLS_CLIENT", "secondo")
+    monkeypatch.setenv("LEPAS_TLS_CLIENT", "secondo")
     chiamati = _scala(monkeypatch, primo=(200, RISPOSTA_OK), secondo=(200, PAGINA_WAF))
     esito = _post()
     assert chiamati == ["secondo"] and not esito.passato
 
 
 def test_un_nome_forzato_inesistente_non_blocca_tutto(monkeypatch):
-    monkeypatch.setenv("OMODA_TLS_CLIENT", "inventato")
+    monkeypatch.setenv("LEPAS_TLS_CLIENT", "inventato")
     chiamati = _scala(monkeypatch, primo=(200, RISPOSTA_OK))
     assert _post().passato and chiamati == ["primo"]
 

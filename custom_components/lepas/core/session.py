@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-session.py — salute del token Omoda + re-login OTP guidato da Home Assistant.
+session.py — salute del token Lepas + re-login OTP guidato da Home Assistant.
 
 Il token che fa funzionare i pulsanti comando vive in token.json (wake.TOKEN_PATH).
 Due modi in cui può "cadere":
@@ -12,15 +12,15 @@ Due modi in cui può "cadere":
 Questo modulo espone le primitive che il ponte cabla a 3 entità HA:
   - check()         -> (ok, dettaglio)   : il token è valido? (prova un login BFF)
   - refresh()       -> bool              : rinnova l'access_token senza OTP (keep-alive)
-  - request_otp()   -> bool              : invia il codice OTP alla mail (login_omoda.py invia)
+  - request_otp()   -> bool              : invia il codice OTP alla mail (login_lepas.py invia)
   - confirm_otp(c)  -> (ok, dettaglio)   : conia il token col codice (prova_token.py)  poi ricontrolla
 
-request_otp/confirm_otp girano login_omoda.py / prova_token.py COME SOTTOPROCESSO nella
-cartella OMODA_SRC_DIR (default = questa stessa cartella `core/`, dove vivono anche
-captcha_solver/omoda) col python corrente (sys.executable). Nel component HA = il python
+request_otp/confirm_otp girano login_lepas.py / prova_token.py COME SOTTOPROCESSO nella
+cartella LEPAS_SRC_DIR (default = questa stessa cartella `core/`, dove vivono anche
+captcha_solver/lepas) col python corrente (sys.executable). Nel component HA = il python
 di HA, che ha le requirements del manifest (requests/pycryptodome/numpy/pillow).
 
-Contratto sottoprocessi (H7): login_omoda.py e prova_token.py stampano su stdout una
+Contratto sottoprocessi (H7): login_lepas.py e prova_token.py stampano su stdout una
 riga-sentinella stabile `RESULT: OK` / `RESULT: FAIL` e usano il returncode (0 ok, !=0
 errore). request_otp/confirm_otp decidono l'esito su returncode + sentinella, NON su
 sottostringhe localizzate (che cambierebbero con la lingua dei messaggi).
@@ -34,15 +34,15 @@ _LOGGER = logging.getLogger(__name__)
 from . import wake  # riusa _bff_login / _refresh_token / TOKEN_PATH
 from . import mask  # mascheratura unica dei dati personali nelle frasi che escono da qui
 
-# Marcatore con cui i sottoprocessi dichiarano la CAUSA di un fallimento (login_omoda.MOTIVO).
-# Duplicato qui di proposito: importare `login_omoda` da questo modulo significherebbe tirarsi
+# Marcatore con cui i sottoprocessi dichiarano la CAUSA di un fallimento (login_lepas.MOTIVO).
+# Duplicato qui di proposito: importare `login_lepas` da questo modulo significherebbe tirarsi
 # dentro `requests` e il risolutore di captcha solo per leggere una costante di sette caratteri.
 _MOTIVO = "MOTIVO:"
 
 # P2-6: email e cartella sorgenti arrivano dal `CoreCtx` del veicolo, non più da global
 # di modulo popolati da os.environ.
 PYEXE     = sys.executable  # il python di Home Assistant (ha le requirements del manifest)
-_TIMEOUT  = int(os.environ.get("OMODA_OTP_TIMEOUT", "120"))
+_TIMEOUT  = int(os.environ.get("LEPAS_OTP_TIMEOUT", "120"))
 
 
 # P1-1 (H7): marcatori STABILI dell'esito di check(). Il chiamante instrada il rimedio su
@@ -130,7 +130,7 @@ def refresh_se_prossimo_a_scadere(ctx, quota: float = QUOTA_RINNOVO) -> tuple[bo
 
 def _timeout() -> int:
     try:
-        return int(os.environ.get("OMODA_OTP_TIMEOUT", str(_TIMEOUT)))
+        return int(os.environ.get("LEPAS_OTP_TIMEOUT", str(_TIMEOUT)))
     except (TypeError, ValueError):
         return _TIMEOUT
 
@@ -143,7 +143,7 @@ def _subenv(ctx, **extra):
     processo no. La copia è locale alla chiamata: `os.environ` del processo Home Assistant
     non viene toccato.
 
-    P2-6: è l'unico punto in cui l'ambiente resta un canale legittimo. `login_omoda.py` e
+    P2-6: è l'unico punto in cui l'ambiente resta un canale legittimo. `login_lepas.py` e
     `prova_token.py` sono PROCESSI SEPARATI: non possono ricevere un oggetto Python, e
     passare le stesse informazioni in argv le renderebbe visibili a tutta la macchina.
     Perciò la configurazione del contesto viene serializzata qui, per quella sola chiamata."""
@@ -159,17 +159,17 @@ def _subenv(ctx, **extra):
         env["PYTHONPATH"] = os.pathsep.join(
             [p for p in (env.get("PYTHONPATH", ""), deps) if p])
     env.update({
-        "OMODA_EMAIL": ctx.email,
+        "LEPAS_EMAIL": ctx.email,
         # login via SMS: se il telefono è valorizzato, i sottoprocessi usano il ramo mobile
-        "OMODA_PHONE": getattr(ctx, "phone", "") or "",
-        "OMODA_AREA": getattr(ctx, "area_code", "39") or "39",
-        "OMODA_TOKEN_PATH": ctx.token_path,
-        "OMODA_BFF": ctx.bff,
+        "LEPAS_PHONE": getattr(ctx, "phone", "") or "",
+        "LEPAS_AREA": getattr(ctx, "area_code", "39") or "39",
+        "LEPAS_TOKEN_PATH": ctx.token_path,
+        "LEPAS_BFF": ctx.bff,
         "TSP_HOST": ctx.tsp_host,
         "CHANNEL_ID": ctx.channel_id,
-        "OMODA_COUNTRY_ID": ctx.country_id,
-        "OMODA_TENANT_CODE": ctx.tenant_code,
-        "OMODA_LANGUAGE": getattr(ctx, "language", "it-IT") or "it-IT",
+        "LEPAS_COUNTRY_ID": ctx.country_id,
+        "LEPAS_TENANT_CODE": ctx.tenant_code,
+        "LEPAS_LANGUAGE": getattr(ctx, "language", "it-IT") or "it-IT",
         "VIN": ctx.vin,
         "TUSERID": ctx.tuserid,
     })
@@ -187,7 +187,7 @@ def _num_mascherato(numero) -> str:
 
     ⚠️ Va applicato ALLA SORGENTE, non solo in fondo: le stringhe passate a `emit` non
     restano nel config flow — finiscono in `session_detail`, che è insieme lo stato di
-    `sensor.omoda9_stato_sessione` (quindi recorder e backup) e un campo esportato
+    `sensor.lepas_stato_sessione` (quindi recorder e backup) e un campo esportato
     VERBATIM nel file «Scarica diagnostica», fuori da ogni deny-list. Mascherare qui
     chiude i tre canali in un colpo solo; aggiungere `phone` a `TO_REDACT` non basterebbe,
     perché lì il numero è testo libero dentro una frase."""
@@ -227,26 +227,26 @@ def request_otp(ctx, emit=lambda m: None):
     # stessa espressione: la frase risultante («Codice inviato alla mail …») diventa
     # `session_detail`, che finisce verbatim nel file «Scarica diagnostica» — quello che il
     # README invita ad allegare alle issue di una repo PUBBLICA — e nello stato di
-    # `sensor.omoda9_stato_sessione`, quindi in PostgreSQL e in ogni backup. L'intestazione di
+    # `sensor.lepas_stato_sessione`, quindi in PostgreSQL e in ogni backup. L'intestazione di
     # `diagnostics.py` prometteva già «email → oscurata»: era falsa a partire da questa riga.
     dove = (f"al numero {mask.numero_con_prefisso(ctx.phone, ctx.area_code)}" if phone
             else f"alla mail {mask.indirizzo_email(ctx.email)}")
     emit(f"invio codice OTP {('via SMS ' if phone else '')}…")
     try:
-        # identità via env (P1-4), non in argv: login_omoda.py rilegge OMODA_EMAIL / OMODA_PHONE.
+        # identità via env (P1-4), non in argv: login_lepas.py rilegge LEPAS_EMAIL / LEPAS_PHONE.
         r = subprocess.run([PYEXE, *cmd],
                            cwd=src_dir, capture_output=True, text=True, timeout=timeout,
                            env=_subenv(ctx))
     except subprocess.TimeoutExpired:
         emit("timeout invio OTP — riprova")
-        _LOGGER.warning("Omoda9 login: timeout invio OTP (%s)", "SMS" if phone else "email")
+        _LOGGER.warning("Lepas login: timeout invio OTP (%s)", "SMS" if phone else "email")
         return False
     out = (r.stdout or "") + (r.stderr or "")
     # LOG per il debug/supporto: l'output del sottoprocesso (stato HTTP, chiave server, captcha).
     # ⚠️ DEBUG, non INFO: a INFO finirebbe in home-assistant.log di serie, e quel file l'utente
-    # lo allega alle issue pubbliche. Il numero è già mascherato alla sorgente (login_omoda._mask)
+    # lo allega alle issue pubbliche. Il numero è già mascherato alla sorgente (login_lepas._mask)
     # ma il livello resta debug per prudenza: chi deve diagnosticare alza il livello e basta.
-    _LOGGER.debug("Omoda9 login: invio OTP (%s) rc=%s\n%s",
+    _LOGGER.debug("Lepas login: invio OTP (%s) rc=%s\n%s",
                   "SMS" if phone else "email", r.returncode, out.strip())
     # H7: esito su returncode + sentinella stabile, non su sottostringhe localizzate
     if r.returncode == 0 and "RESULT: OK" in out:
@@ -268,14 +268,14 @@ def confirm_otp(ctx, code, emit=lambda m: None):
         # ma resterebbe comunque visibile in `ps` per tutta la durata della chiamata.
         r = subprocess.run([PYEXE, "prova_token.py"],
                            cwd=src_dir, capture_output=True, text=True, timeout=timeout,
-                           env=_subenv(ctx, OMODA_OTP=code))
+                           env=_subenv(ctx, LEPAS_OTP=code))
     except subprocess.TimeoutExpired:
         return False, "timeout conio token"
     out = (r.stdout or "") + (r.stderr or "")
     # LOG per il debug/supporto: prova_token stampa la FORMA del tentativo (identità mascherata,
     # lunghezza del codice, stato HTTP, chiave server). Token redatti da prova_token._redact,
     # OTP e numero mai in chiaro. ⚠️ DEBUG e non INFO: vedi la nota in request_otp.
-    _LOGGER.debug("Omoda9 login: conio token (%s) rc=%s\n%s",
+    _LOGGER.debug("Lepas login: conio token (%s) rc=%s\n%s",
                   "SMS" if _is_phone(ctx) else "email", r.returncode, out.strip())
     # H7: esito su returncode + sentinella stabile, non su sottostringhe localizzate
     if r.returncode == 0 and "RESULT: OK" in out:
@@ -306,12 +306,12 @@ def login_with_password(ctx, password, emit=lambda m: None):
     try:
         r = subprocess.run([PYEXE, "prova_token.py"],
                            cwd=src_dir, capture_output=True, text=True, timeout=timeout,
-                           env=_subenv(ctx, OMODA_PASSWORD=password))
+                           env=_subenv(ctx, LEPAS_PASSWORD=password))
     except subprocess.TimeoutExpired:
         return False, "timeout conio token"
     # ⚠️ `out` è lo stdout di prova_token, che NON stampa MAI la password (solo la sua lunghezza).
     out = (r.stdout or "") + (r.stderr or "")
-    _LOGGER.debug("Omoda9 login: conio token via password rc=%s\n%s", r.returncode, out.strip())
+    _LOGGER.debug("Lepas login: conio token via password rc=%s\n%s", r.returncode, out.strip())
     if r.returncode == 0 and "RESULT: OK" in out:
         # Stessa ragione del ramo OTP: la password e' gia' stata accettata, e senza il motivo
         # l'utente non ha modo di sapere che il problema sta dopo di lei.

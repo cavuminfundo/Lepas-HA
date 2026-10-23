@@ -3,9 +3,9 @@
 Continuità entity_id (FASE 3d): per non perdere storico recorder/dashboard al
 cutover dal bridge, ogni entità FORZA il proprio `entity_id` invece di lasciarlo
 derivare implicitamente. L'object_id di default = slugify(nome) — che riproduce
-ESATTAMENTE gli id `omoda9_*` già generati dal bridge (has_entity_name=False →
+gli id `lepas_*` (has_entity_name=False →
 HA slugifica il solo nome). Dove il bridge usa un id non derivabile dal nome
-(es. i pulsanti comando = `omoda9_<key>`) si passa `object_id` esplicito.
+(es. i pulsanti comando = `lepas_<key>`) si passa `object_id` esplicito.
 """
 from __future__ import annotations
 
@@ -135,8 +135,6 @@ class LepasEntity(CoordinatorEntity[LepasCoordinator]):
         oid = object_id or slugify(name)
         if oid.startswith(f"{DOMAIN}_"):
             derivata_oid = oid[len(DOMAIN) + 1:]
-        elif oid.startswith("omoda9_"):
-            derivata_oid = oid[len("omoda9_"):]
         else:
             derivata_oid = oid
         derivata = translation_key or derivata_oid

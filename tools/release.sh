@@ -399,7 +399,7 @@ Upload it by hand onto release v$NEW before telling anybody about it."; }
 echo
 printf '%s%sPublished v%s.%s  https://github.com/%s/releases/tag/v%s\n\n' "$R_GREEN" "$R_BOLD" "$NEW" "$R_NC" "$R_REPO" "$NEW"
 printf '%s================================================================%s\n' "$R_BOLD" "$R_NC"
-printf '%s NOW IT IS THEIR TURN: HACS -> Omoda 9 / Jaecoo -> Update ->%s\n' "$R_BOLD" "$R_NC"
+printf '%s NOW IT IS THEIR TURN: HACS -> Lepas -> Update ->%s\n' "$R_BOLD" "$R_NC"
 printf '%s restart Home Assistant. Say it to them in those words.%s\n' "$R_BOLD" "$R_NC"
 printf '%s================================================================%s\n' "$R_BOLD" "$R_NC"
 echo " After the restart, once HA is RUNNING: the entity count asserted by"

@@ -21,7 +21,7 @@ _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$R_ROOT"
 rules_cmdline "$@"
 
-R_REPO="${OMODA9_REPO:-chery-connect-ha/omoda9-ha}"
+R_REPO="${LEPAS_REPO:-chery-connect-ha/lepas-ha}"
 BASE="master"
 
 BRANCH=""; MSG=""; CONTINUE=0; DRAFT=0

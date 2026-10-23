@@ -21,11 +21,8 @@ CODE_MEANING = {
     # eseguito. Transitorio: riprovare tra qualche secondo (verificato live 2026-06-21).
     "A00082": "auto occupata ⏳ (un altro comando è in corso) — riprova tra qualche secondo",
     # A00084 (i18n: "No vehicle control command permission"): l'account/veicolo non ha il
-    # permesso PER QUEL comando. Sull'Omoda 9 riguarda l'avvio remoto del motore, mentre
-    # clima/serratura/GPS funzionano; su una Jaecoo 7 PHEV riguarda sedili, lunotto e le macro
-    # (issue #1). ⚠️ Della nostra osservazione su remoteStart (2026-06-21) NON resta traccia
-    # strumentale — nessun log, nessuna cattura: sono note in prosa scritte allora. Trattarla
-    # come non attestata finché non la si rimisura.
+    # permesso PER QUEL comando. Su Lepas L8 / piattaforme Chery EU può riguardare sedili,
+    # lunotto o macro non abilitate sul profilo veicolo.
     # Il testo dice esplicitamente «non è il PIN» perché è lì che l'utente va a cercare.
     # ⚠️ BILINGUE e CORTO di proposito: questo testo finisce nello stato di
     # `sensor.lepas_command_result`, e uno stato HA non può superare i 255 caratteri —

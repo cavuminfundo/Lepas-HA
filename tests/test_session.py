@@ -119,7 +119,7 @@ def test_otp_e_email_non_passano_da_argv(core, ctx, monkeypatch):
     riga = " ".join(str(a) for a in visto["argv"])
     assert "123456" not in riga, "OTP esposto in argv (visibile con `ps aux`)"
     assert FX.EMAIL not in riga, "email esposta in argv"
-    assert visto["env"].get("OMODA_OTP") == "123456"
+    assert visto["env"].get("LEPAS_OTP") == "123456"
 
 
 def test_otp_accettato_ma_gateway_ko_dice_perche(core, ctx, monkeypatch):

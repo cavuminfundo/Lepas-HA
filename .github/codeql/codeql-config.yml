@@ -1,6 +1,6 @@
-name: "Omoda / Jaecoo CodeQL config"
+name: "Lepas / Chery CodeQL config"
 
-# This integration speaks a proprietary OMODA / Chery cloud protocol. The excluded queries below
+# This integration speaks a proprietary Lepas / Chery cloud protocol. The excluded queries below
 # only ever produce false positives here; each exclusion is justified. EVERYTHING ELSE
 # (injection, path traversal, SSRF, deserialization, etc.) stays ON.
 #

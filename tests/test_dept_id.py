@@ -15,7 +15,7 @@ import pytest
 
 
 def _auth(core):
-    return core["omoda_auth"]
+    return core["lepas_auth"]
 
 
 def test_senza_contesto_resta_il_default(core):

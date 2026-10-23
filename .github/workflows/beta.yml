@@ -7,7 +7,7 @@ name: Beta
 # review of someone who does not program is the field test on their own car. For that rule
 # to be exigible, the person with the car has to be able to install the code — and until
 # this workflow existed they could not: `hacs.json` declares `zip_release`, so HACS installs
-# only from a release carrying an `omoda9.zip` asset, and that asset was built and uploaded
+# only from a release carrying a `lepas.zip` asset, and that asset was built and uploaded
 # by hand once per release. The only other route was cloning a branch and copying files into
 # `custom_components/` — exactly the barrier that filters out the people whose review is
 # worth most.
@@ -137,7 +137,7 @@ jobs:
           # L'asset delle stabili contiene il CONTENUTO di custom_components/lepas/
           # appiattito alla radice dell'archivio (HACS lo scompatta dentro
           # custom_components/<dominio>/). Verificato voce per voce contro
-          # l'omoda9.zip di v1.13.0: stessa lista, 53 file, nessuna esclusione.
+          # il lepas.zip di v1.15.0: stessa lista, 53 file, nessuna esclusione.
           # Si zippano solo i file TRACCIATI, così nulla di generato può entrarci.
           cd custom_components/lepas
           git ls-files -z | xargs -0 zip -q -X "$GITHUB_WORKSPACE/lepas.zip"

@@ -29,7 +29,7 @@ avrebbero bloccato i comandi dell'altra, e il taskId coniato per una sarebbe sta
 per l'altra. Legarli al contesto risolve la cosa per costruzione.
 
 `os.environ` resta usato in un solo punto legittimo: l'ambiente **effimero** dei
-sottoprocessi di login (`login_omoda.py`, `prova_token.py`), che sono processi separati e
+sottoprocessi di login (`login_lepas.py`, `prova_token.py`), che sono processi separati e
 per i quali l'environment è l'unico canale sensato — vedi `session._subenv`.
 """
 from __future__ import annotations
@@ -199,18 +199,18 @@ def ctx_da_environ() -> CoreCtx:
     return CoreCtx(
         vin=os.environ.get("VIN", ""),
         tuserid=os.environ.get("TUSERID", ""),
-        pin=os.environ.get("OMODA_PIN", ""),
-        email=os.environ.get("OMODA_EMAIL", ""),
-        phone=os.environ.get("OMODA_PHONE", ""),
-        area_code=os.environ.get("OMODA_AREA", "39"),
-        token_path=os.environ.get("OMODA_TOKEN_PATH", ""),
-        taskid_file=os.environ.get("OMODA_TASKID_FILE", ""),
-        src_dir=os.environ.get("OMODA_SRC_DIR", HERE),
+        pin=os.environ.get("LEPAS_PIN", ""),
+        email=os.environ.get("LEPAS_EMAIL", ""),
+        phone=os.environ.get("LEPAS_PHONE", ""),
+        area_code=os.environ.get("LEPAS_AREA", "39"),
+        token_path=os.environ.get("LEPAS_TOKEN_PATH", ""),
+        taskid_file=os.environ.get("LEPAS_TASKID_FILE", ""),
+        src_dir=os.environ.get("LEPAS_SRC_DIR", HERE),
         tsp_host=os.environ.get("TSP_HOST", DEFAULT_TSP_HOST),
-        bff=os.environ.get("OMODA_BFF", DEFAULT_BFF),
+        bff=os.environ.get("LEPAS_BFF", DEFAULT_BFF),
         channel_id=os.environ.get("CHANNEL_ID", DEFAULT_CHANNEL_ID),
-        country_id=os.environ.get("OMODA_COUNTRY_ID", DEFAULT_COUNTRY_ID),
-        tenant_code=os.environ.get("OMODA_TENANT_CODE", DEFAULT_TENANT_CODE),
-        language=os.environ.get("OMODA_LANGUAGE", "it-IT"),
-        mint_taskid=os.environ.get("OMODA_MINT_TASKID", "1") not in ("0", "", "false", "no"),
+        country_id=os.environ.get("LEPAS_COUNTRY_ID", DEFAULT_COUNTRY_ID),
+        tenant_code=os.environ.get("LEPAS_TENANT_CODE", DEFAULT_TENANT_CODE),
+        language=os.environ.get("LEPAS_LANGUAGE", "it-IT"),
+        mint_taskid=os.environ.get("LEPAS_MINT_TASKID", "1") not in ("0", "", "false", "no"),
     )

@@ -47,7 +47,7 @@ def test_una_chiave_in_tabella_porta_con_se_l_entity_id(hass, integrazione_avvia
     assert ENGLISH_KEYS["batteria_scarica"] == "low_battery"
 
     e = LepasEntity(coord, "Batteria scarica", "bs1",
-                    object_id="omoda9_batteria_scarica", entity_id_format="binary_sensor.{}")
+                    object_id="lepas_batteria_scarica", entity_id_format="binary_sensor.{}")
     assert e.translation_key == "low_battery"
     assert e.entity_id == f"binary_sensor.{ID_PREFIX}_low_battery"
 
@@ -87,13 +87,6 @@ def test_nessun_entity_id_e_rimasto_in_italiano(hass, integrazione_avviata):
     from custom_components.lepas.naming import ID_PREFIX
 
     reg = er.async_get(hass)
-    rimasti = [
-        e.entity_id
-        for e in er.async_entries_for_config_entry(reg, integrazione_avviata.entry_id)
-        if e.entity_id.split(".", 1)[1].startswith("omoda9_")
-    ]
-    assert not rimasti, f"entity_id ancora col vecchio prefisso: {rimasti}"
-
     senza_prefisso = [
         e.entity_id
         for e in er.async_entries_for_config_entry(reg, integrazione_avviata.entry_id)

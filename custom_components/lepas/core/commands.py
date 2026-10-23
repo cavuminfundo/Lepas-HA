@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-commands.py — Catalogo + invio dei comandi auto Omoda 9 (tspconsole EU REST).
+commands.py — Catalogo + invio dei comandi auto Lepas L8 (tspconsole EU REST).
 
 Riusa la catena verificata in S24:
   - userToken via  wake._bff_login()      (token OTP in token.json, refresh automatico)
@@ -153,7 +153,7 @@ COMMANDS = [
     # — Clima: macro comfort "tutto" (coolingControl/heatingControl) —
     # Preset unico che accende clima + TUTTI i sedili (+ sbrinatori e volante per il caldo)
     # in un colpo solo. Body ricostruito 1:1 dagli envelope reali dell'app in
-    # 30_capture/omoda9_capture_20260620/command_envelopes.txt. NB: usano `duration` (NON
+    # 30_capture/capture_20260620/command_envelopes.txt. NB: usano `duration` (NON
     # `times`); valori sedile 3=on/0=off; temperatura 15.0 (max freddo) / 31.0 (max caldo).
     # ⚠️ IMPORTANTE (verificato dal vivo 2026-06-21): questi comandi — come TUTTI i comfort —
     # vengono rifiutati dall'auto con timeout se la vettura è ACCESA/occupata (blocco di
@@ -202,7 +202,7 @@ COMMANDS = [
     # Sunroof tilt / vent position: same endpoint, controlType "2" (the official app's
     # controlTiltUp action sends swi="2"). A button of its own, like `finestrini_ventila`:
     # it maps on neither open nor close, and the sunroof cover's close brings it back.
-    # Reported working on a Jaecoo 7 PHEV in the field-test issue.
+    # Reported working on a field-test vehicle.
     ("tetto_ventila", {"endpoint": "skylightControl", "body": {"controlType": "2", "skylightType": "1"},
                    "name": "Ventila tetto", "icon": "mdi:weather-windy", "group": "Finestrini e tetto"}),
 
@@ -261,7 +261,7 @@ CODE_MEANING = codes.CODE_MEANING
 # `SUCCESS_CODES` = comando accettato dal backend (poi l'auto conferma via MQTT 110x);
 # `FAILURE_CODES` = comando NON eseguito (auto occupata/a riposo, permesso negato, taskId
 # o token non validi). Distinguere i due è ciò che permette alle entità ottimistiche di
-# NON mostrare un finto "successo" quando l'auto ha rifiutato (vedi Omoda9OptimisticMixin).
+# NON mostrare un finto "successo" quando l'auto ha rifiutato (vedi LepasOptimisticMixin).
 #
 # P2-5: questi insiemi sono ora DERIVATI dalla tabella unica di routing, non più elenchi
 # scritti a mano qui accanto. Erano liste parallele che potevano divergere in silenzio da
@@ -557,7 +557,7 @@ def _coda_saltati(saltati, lunghezza: int, tetto: int = 255) -> str:
 
 # ── adattamento alla scheda tecnica della vettura (`queryList`) ──────────────────────────
 # Fino alla v1.12.1 le macro «Raffredda tutto»/«Riscalda tutto» spedivano 15.0 e 31.0 e tutte
-# le durate erano 15: sono i valori dell'Omoda 9, cablati come se valessero per tutti. Il
+# le durate erano 15: sono i valori di riferimento, cablati come se valessero per tutti. Il
 # backend li dichiara per-veicolo in `queryList` — risposta che leggiamo già, quindi il costo
 # è zero. Regola invariata in tutto il componente: si cambia qualcosa SOLO quando il backend
 # dichiara; se tace, si spedisce esattamente ciò che si spediva prima.
@@ -612,7 +612,7 @@ def durata_ammessa(minuti, durate) -> int | None:
 # resistenza del parabrezza e su quella del lunotto: sono durate di riscaldatori elettrici,
 # che la scheda non governa con questo campo (ne ha altri, es. `maxEngineDuration`).
 # Correggerle contro l'insieme dell'aria accorcerebbe il sedile riscaldato per una regola
-# che non lo riguarda — invisibile sull'Omoda 9 (tutto 15), sbagliato su un'altra vettura.
+# che non lo riguarda — invisibile sul profilo di riferimento (tutto 15), sbagliato su un'altra vettura.
 _ENDPOINT_ARIA = ("airControl", "coolingControl", "heatingControl")
 
 
@@ -623,7 +623,7 @@ def _adatta_durata(endpoint, body: dict, caps: dict | None, emit=lambda m: None)
     usano `duration` (ricostruito 1:1 dagli envelope dell'app).
 
     La correzione si **dichiara**. Il cursore «Durata clima» arriva a 30 minuti mentre
-    l'Omoda 9 ne ammette 5, 10 o 15: chi imposta 30 vedrebbe 30 nell'interfaccia e l'auto
+    il profilo base ne ammette 5, 10 o 15: chi imposta 30 vedrebbe 30 nell'interfaccia e l'auto
     ne riceverebbe 15. Tutti gli altri adattamenti del componente (`permessi.adatta`) dicono
     all'utente cosa hanno cambiato; tacere qui sarebbe l'unica eccezione, e la meno
     giustificabile — è un numero che l'utente ha scelto con le sue mani.
@@ -710,7 +710,7 @@ def _setpoint_da_posizione(body: dict, caps: dict | None) -> None:
     prova prima l'intervallo impostabile e poi ripiega su LO/HI, e **su questo percorso il ripiego
     è un no-op garantito**: il valore in ingresso *è* LO, quindi appartiene sempre a LO..HI. Due
     forme di scheda molto comuni scivolavano quindi attraverso il controllo intatte:
-      * scheda assente (`caps` vuoto) ⇒ partiva il `15.0` **cablato per l'Omoda 9**;
+      * scheda assente (`caps` vuoto) ⇒ partiva il `15.0` **cablato per il profilo base**;
       * vettura che dichiara solo gli estremi e non il range ⇒ partiva il suo LO (anche `12.0`).
     In entrambi i casi «Raffredda tutto» spediva una temperatura che il componente stesso, dalla
     card del clima, non lascerebbe impostare. Il corpo **misurato** che il backend accetta porta
@@ -721,7 +721,7 @@ def _setpoint_da_posizione(body: dict, caps: dict | None) -> None:
     valore da correggere **non l'ha scelto nessuno**: è una posizione che abbiamo spostato noi in
     un campo che vuole altro. Il ripiego non è inventato: è lo stesso intervallo che la card del
     clima offre all'utente su una vettura che non dichiara il proprio (`const.CLIMA_*_DEFAULT`).
-    Sull'Omoda 9 questa funzione non gira mai: lì la macro non viene ricomposta."""
+    Sui profili completi questa funzione non gira mai: lì la macro non viene ricomposta."""
     if "temperature" not in body:
         return
     # Import pigro: `const` è puro dato (zero import, zero riferimenti a Home Assistant), ma
@@ -787,11 +787,11 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
         taskid, src = get_taskid(ctx, tuid, emit, force_mint=(attempt == 2))
         if not taskid:
             # P1-2 (#30): nessun taskId MA nessuna eccezione = il conio è DISATTIVATO
-            # (OMODA_MINT_TASKID=0) e non c'era un taskId né in env né su file. Il PIN non
+            # (LEPAS_MINT_TASKID=0) e non c'era un taskId né in env né su file. Il PIN non
             # c'entra: dire «PIN errato» mandava l'utente a riconfigurare un PIN sano.
             emit("nessun taskId disponibile (conio disattivato)")
             raise CommandError(
-                "Conio del taskId disattivato (OMODA_MINT_TASKID=0) e nessun taskId "
+                "Conio del taskId disattivato (LEPAS_MINT_TASKID=0) e nessun taskId "
                 "disponibile: i comandi non possono partire. Riattiva il conio automatico "
                 "per usare i pulsanti.",
                 reason="config")
@@ -810,8 +810,8 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
         # Il backend valida il corpo campo per campo contro le voci figlie della categoria
         # dell'endpoint chiamato (misurato: due A/B a variabile singola su due endpoint).
         # Quindi: si sceglie la porta aperta su QUESTA auto e si tolgono i campi che non
-        # ammette, invece di far rifiutare tutto per un solo campo. Sull'Omoda 9, dove è tutto
-        # consentito, non cambia nulla.
+        # ammette, invece di far rifiutare tutto per un solo campo. Su Lepas L8 / profili
+        # completi, dove è tutto consentito, non cambia nulla.
         #
         # I comandi con `path` esplicito (antifurto) non hanno un corpo da potare né una porta
         # alternativa — ma fino alla v1.11.1 saltavano anche l'AVVISO, e su un veicolo con la
@@ -844,7 +844,8 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
             # `permessi.py` non conosce la scheda tecnica. Gli adattatori (`adatta_capability`
             # e `_adatta_durata`, in cima al giro) sono già passati quando l'endpoint era
             # ancora quello dedicato e questi due campi non c'erano: senza questo secondo giro
-            # si spedirebbero 21.0 e 15 — i valori dell'Omoda 9 — a una vettura che magari
+            # si spedirebbero 21.0 e 15 — i valori di riferimento — a una vettura che magari
+            # ammette solo 5 e 10 minuti e non scende sotto i 22 °C.
             # ammette solo 5 e 10 minuti e non scende sotto i 22 °C.
             #
             # ⚠️ `_adatta_durata` è chiamata SENZA `emit`, ed è deliberato: la sua correzione

@@ -274,11 +274,11 @@ def _file_memoria() -> str | None:
     """File accanto al token dove si ricorda il client che ha funzionato.
 
     Contiene un solo nome di client: nessun dato personale, nessuna credenziale."""
-    tp = os.environ.get("LEPAS_TOKEN_PATH") or os.environ.get("OMODA_TOKEN_PATH", "")
+    tp = os.environ.get("LEPAS_TOKEN_PATH", "")
     if not tp:
         return None
     # Se il percorso indica una CARTELLA, `dirname` risalirebbe al suo genitore: con
-    # `OMODA_TOKEN_PATH=/config` si finiva a scrivere in `/`, cioè nella radice del
+    # `LEPAS_TOKEN_PATH=/config` si finiva a scrivere in `/`, cioè nella radice del
     # filesystem del container.
     tp = os.path.abspath(tp)
     d = tp if os.path.isdir(tp) else (os.path.dirname(tp) or ".")
@@ -290,14 +290,7 @@ def _file_memoria() -> str | None:
 def _leggi_memoria() -> str | None:
     f = _file_memoria()
     if not f or not os.path.isfile(f):
-        if f:
-            legacy_f = os.path.join(os.path.dirname(f), "omoda9_tls_client.txt")
-            if os.path.isfile(legacy_f):
-                f = legacy_f
-            else:
-                return None
-        else:
-            return None
+        return None
     try:
         with open(f, encoding="utf-8") as fh:
             nome = fh.read().strip()
@@ -325,9 +318,9 @@ def _scrivi_memoria(nome: str) -> None:
 def _ordine() -> list[str]:
     """Scala dei tentativi, col vincitore ricordato in testa.
 
-    `LEPAS_TLS_CLIENT` o `OMODA_TLS_CLIENT` forza un client solo (diagnostica: isola un client senza toccare
+    `LEPAS_TLS_CLIENT` forza un client solo (diagnostica: isola un client senza toccare
     il codice, e senza consumare tentativi con gli altri)."""
-    forzato = (os.environ.get("LEPAS_TLS_CLIENT") or os.environ.get("OMODA_TLS_CLIENT", "")).strip()
+    forzato = os.environ.get("LEPAS_TLS_CLIENT", "").strip()
     if forzato in CLIENT:
         return [forzato]
     ordine = list(SCALA)

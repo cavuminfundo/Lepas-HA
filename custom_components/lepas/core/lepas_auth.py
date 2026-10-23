@@ -1,5 +1,5 @@
 """
-omoda_auth.py — replica ESATTA della firma e del login email dell'app OMODA/JAECOO
+lepas_auth.py — replica ESATTA della firma e del login email dell'app Lepas
 ('legend', Chery). Ricostruito dal codice decompilato (blutter_out):
   - EncryptUtils.headerSignature  (encrypt_utils.dart ~299)
   - HttpUtils.request             (http_utils.dart ~438, blocco firma ~1200)
@@ -31,13 +31,13 @@ APP_VERSION  = "1.1.9"
 
 # Default di regione, usati solo quando `headers_post` è chiamata senza contesto
 # (diagnostica da riga di comando). In Home Assistant il contesto c'è sempre.
-BFF          = os.environ.get("LEPAS_BFF", os.environ.get("OMODA_BFF", "https://eu-lepas.cheryinternational.com/api"))
-TENANT_CODE  = os.environ.get("LEPAS_TENANT_CODE", os.environ.get("OMODA_TENANT_CODE", "3000011"))
+BFF          = os.environ.get("LEPAS_BFF", "https://eu-lepas.cheryinternational.com/api")
+TENANT_CODE  = os.environ.get("LEPAS_TENANT_CODE", "3000011")
 CHANNEL_ID   = os.environ.get("CHANNEL_ID", "1")
-COUNTRY_ID   = os.environ.get("OMODA_COUNTRY_ID", "1")
+COUNTRY_ID   = os.environ.get("LEPAS_COUNTRY_ID", "1")
 # Lingua delle chiamate (header Accept-Language): decide la lingua di e-mail OTP/SMS/messaggi
 # server. Default it-IT (comportamento storico). Con `ctx` si usa `ctx.language`.
-ACCEPT_LANGUAGE = os.environ.get("OMODA_LANGUAGE", "it-IT")
+ACCEPT_LANGUAGE = os.environ.get("LEPAS_LANGUAGE", "it-IT")
 
 SIGN_NONCE   = "chery_legend_h5"                       # headerSignature nonce
 SIGN_SECRET  = "cX5fR8lJ6pK2xD4uH1eK4pY6wA4xO0sK"     # prod (ENV=0)

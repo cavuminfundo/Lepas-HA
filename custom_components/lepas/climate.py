@@ -34,8 +34,8 @@ from .const import (CAMPO_CLIMA, CLIMA_MAX_DEFAULT, CLIMA_MIN_DEFAULT, CLIMA_STE
                     DOMAIN, OPT_MAX_S)
 from .entity import LepasEntity, field_on
 
-# Ripiego OMODA. Il range VERO della vettura, quando il backend lo dichiara in queryList,
-# arriva da `coordinator.climate_limits()` (una Jaecoo/PHEV può avere estremi diversi).
+# Ripiego di default. Il range VERO della vettura, quando il backend lo dichiara in queryList,
+# arriva da `coordinator.climate_limits()`.
 MIN_TEMP = CLIMA_MIN_DEFAULT
 MAX_TEMP = CLIMA_MAX_DEFAULT
 DEFAULT_TEMP = 21.0
@@ -106,7 +106,7 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
         # messaggio qualsiasi: le conferme di `airControl` osservate non portano alcun campo
         # di stato, e annullando su quelle la card tornava OFF con il clima acceso — dopodiché
         # l'utente ripremeva, che è come nascono i comandi accavallati. Stessa regola del
-        # mixin degli altri attuatori (`entity.Omoda9OptimisticMixin`), riscritta qui perché
+        # mixin degli altri attuatori (`entity.LepasOptimisticMixin`), riscritta qui perché
         # questa entità non lo eredita; il tetto temporale evita che, se il campo non
         # arrivasse mai, la card resti per sempre su un valore mai confermato.
         if self._opt_on is not None and (

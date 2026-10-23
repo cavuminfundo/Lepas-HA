@@ -364,7 +364,7 @@ class LepasCard extends HTMLElement {
 
     // ---- hero (photo, dark-studio fallback or gradient) ----
     const imgAttr = items.map((r) => r.s && r.s.attributes && r.s.attributes.vehicle_image).find(Boolean);
-    const img = cfg.image || imgAttr || "/lepas_card/lepas-hero.png?v=1.15.0";
+    const img = cfg.image || imgAttr || "/lepas_card/lepas-hero.png?v=1.15.1";
     const safeImg = this._imgUrl(img);
     const deviceId = this._deviceId(hass, items);
 

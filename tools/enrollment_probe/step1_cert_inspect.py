@@ -33,7 +33,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-PACKAGE = os.path.join(REPO, "custom_components", "omoda9")
+PACKAGE = os.path.join(REPO, "custom_components", "lepas")
 
 # Extensions we consider "standard furniture" for a TLS client certificate.
 # Anything outside this set is reported verbatim: a vendor-specific OID carrying

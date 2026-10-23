@@ -50,7 +50,7 @@ python3 tools/enrollment_probe/step4_keygen_scan.py --extra ../.coding_agent
 
 ```bash
 export VIN=...                 # your vehicle
-export OMODA_TOKEN_PATH=...    # <config>/omoda9_<VIN>_token.json
+export LEPAS_TOKEN_PATH=...    # <config>/lepas_<VIN>_token.json
 python3 tools/enrollment_probe/step3_response_scan.py
 ```
 

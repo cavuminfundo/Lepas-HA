@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Lepas Connect",
-        "description": "Kies hoe u zich aanmeldt bij uw Omoda/Jaecoo-account. Gebruik de telefoonoptie als uw account is geregistreerd met een telefoonnummer in plaats van een e-mail.",
+        "description": "Kies hoe u zich aanmeldt bij uw Lepas-account. Gebruik de telefoonoptie als uw account is geregistreerd met een telefoonnummer in plaats van een e-mail.",
         "menu_options": {
           "login_email": "Aanmelden met e-mail",
           "login_phone": "Aanmelden met telefoonnummer (SMS)"
@@ -11,7 +11,7 @@
       },
       "login_email": {
         "title": "Aanmelden met e-mail",
-        "description": "Voer het e-mailadres van uw Omoda/Jaecoo-account en de voertuig-PIN in. Er wordt een OTP-code naar uw e-mail gestuurd; VIN en account-ID worden automatisch gedetecteerd.{reason}",
+        "description": "Voer het e-mailadres van uw Lepas-account en de voertuig-PIN in. Er wordt een OTP-code naar uw e-mail gestuurd; VIN en account-ID worden automatisch gedetecteerd.{reason}",
         "data": {
           "email": "Account-e-mail",
           "pin": "Voertuigbedienings-PIN",
@@ -26,7 +26,7 @@
       },
       "login_phone": {
         "title": "Aanmelden met telefoon (SMS)",
-        "description": "Voer het telefoonnummer in dat aan uw Omoda/Jaecoo-account is gekoppeld, de landcode (Nederland = 31, België = 32, zonder +) en de voertuig-PIN. Er wordt een verificatiecode per SMS verzonden; VIN en account-ID worden automatisch gedetecteerd.{reason}",
+        "description": "Voer het telefoonnummer in dat aan uw Lepas-account is gekoppeld, de landcode (Nederland = 31, België = 32, zonder +) en de voertuig-PIN. Er wordt een verificatiecode per SMS verzonden; VIN en account-ID worden automatisch gedetecteerd.{reason}",
         "data": {
           "phone": "Telefoonnummer (zonder landcode)",
           "area_code": "Landcode in cijfers (bijv. 31)",
@@ -140,10 +140,6 @@
           "entry_not_found": "Integratie niet gevonden — herlaad Home Assistant en probeer het opnieuw."
         }
       }
-    },
-    "entity_ids_renamed": {
-      "title": "Lepas: {count} entities were renamed",
-      "description": "The entity ids of this integration moved from Italian to English: `sensor.omoda9_batteria` is now `sensor.lepas_battery`, and {count} entities on this vehicle were renamed.\n\n**Your history came with them.** Graphs, long-term statistics and the energy dashboard followed the rename automatically. There is nothing to reinstall and nothing to log in to again.\n\n**What did not follow: names you typed yourself.** Automations, scripts, template sensors and dashboard cards that refer to an entity by name still point at the old one. Home Assistant shows those as unknown entities.\n\nWhere to look: Settings, Automations and scenes, then any automation flagged with an unknown entity. The full old-to-new list is here: {url}\n\nDismiss this notice once you have been through them."
     }
   },
   "options": {

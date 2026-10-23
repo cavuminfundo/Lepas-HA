@@ -78,7 +78,7 @@ DEFAULT_LANGUAGE = "en-GB"       # default del dropdown per i NUOVI account
 LANGUAGE_FALLBACK = "it-IT"      # entry senza il campo → comportamento storico
 LANGUAGES = {"en-GB": "English", "it-IT": "Italiano"}   # valore-header → etichetta del dropdown
 
-# Identità veicolo per il device HA (nome dinamico: "Omoda 9", "Jaecoo 7"…). `vehicle_name`
+# Identità veicolo per il device HA (nome dinamico: "Lepas L8", "Chery Tiggo"…). `vehicle_name`
 # = nickname/modello dall'app, salvato in entry.data (catturato al config flow o backfillato);
 # è anche un'OPZIONE per l'override manuale. model/brand restano solo in entry.data.
 CONF_VEHICLE_NAME = "vehicle_name"
@@ -86,15 +86,15 @@ DATA_VEHICLE_MODEL = "vehicle_model"
 DATA_VEHICLE_BRAND = "vehicle_brand"
 # fallback quando il modello non è (ancora) noto
 # Ripiego del nome del DISPOSITIVO, cioe' dell'AUTO - non dell'integrazione. Di norma
-# arriva il nome vero dal backend (Omoda 9, Jaecoo 7...) e questo non si vede mai. Resta
+# arriva il nome vero dal backend (Lepas L8, Chery Tiggo...) e questo non si vede mai. Resta
 # il nome di un'auto di proposito: l'integrazione si chiama "Chery Connect" (manifest), il
 # dispositivo e' la macchina. Chiamare "Chery Connect" anche la vettura farebbe comparire
 # un'auto col nome del software.
 DEFAULT_VEHICLE_NAME = "Lepas"
 
 # ── Capability per-veicolo (dalla stessa risposta `queryList` dell'identità) ──────────────
-# Il componente nasce su una Omoda 9 PHEV; il canale telemetria però è lo stesso per tutti i
-# modelli e i BEV (Omoda E5…) mandano un sottoinsieme diverso di campi. Queste chiavi servono
+# Il componente nasce su un veicolo PHEV; il canale telemetria però è lo stesso per tutti i
+# modelli e i BEV (Chery EU…) mandano un sottoinsieme diverso di campi. Queste chiavi servono
 # a NON indovinare: si adatta il comportamento solo quando il backend dichiara esplicitamente
 # la capability. Assente/illeggibile ⇒ ci si comporta come si è sempre fatto.
 #
@@ -104,7 +104,7 @@ DATA_POWER_TYPE = "power_type"        # 0 = solo elettrica (BEV); altro/None = h
 DATA_CLIMATE_MIN = "climate_min_temp"
 DATA_CLIMATE_MAX = "climate_max_temp"
 DATA_CLIMATE_STEP = "climate_temp_step"
-# Estremi LO/HI: le posizioni oltre il range normale (sull'Omoda 9: 15.0 e 31.0, contro un
+# Estremi LO/HI: le posizioni oltre il range normale (es. 15.0 e 31.0, contro un
 # range 16-30). Sono i valori che le macro "Raffredda tutto"/"Riscalda tutto" spediscono per
 # dire «il massimo che questa vettura sa fare», e fino alla v1.12.1 erano cablati a mano.
 # Presenti SOLO se il backend dichiara `isHaveLoAndHi`: senza LO/HI gli estremi coincidono
@@ -126,7 +126,7 @@ DATA_AIR_DURATIONS = "air_durations"
 DATA_CAPS_PROBED = "caps_probed"          # v1.10.0: powerType + range clima
 DATA_CAPS_PROBED_V2 = "caps_probed_v2"    # v1.13.0: estremi LO/HI + durate ammesse
 
-# Range clima di ripiego (OMODA): usati quando il backend non lo dichiara. Erano cablati
+# Range clima di ripiego: usati quando il backend non lo dichiara. Erano cablati
 # in climate.py; stanno qui perché ora li legge anche il coordinator.
 CLIMA_MIN_DEFAULT = 16.0
 CLIMA_MAX_DEFAULT = 30.0
@@ -219,8 +219,8 @@ CONF_TSP_HOST = "tsp_host"
 CONF_CAR_MQTT_HOST = "car_mqtt_host"
 CONF_CAR_MQTT_PORT = "car_mqtt_port"
 CONF_CHANNEL_ID = "channel_id"
-# TENANT-CODE e countryId: fin qui erano cablati ai valori Omoda/Jaecoo dentro `CoreCtx`
-# (300006 / 1) e non arrivavano dal config entry. Sono diversi PER MARCHIO sullo stesso
+# TENANT-CODE e countryId: in passato erano cablati a valori fissi dentro `CoreCtx`
+# e non arrivavano dal config entry. Sono diversi PER MARCHIO sullo stesso
 # gateway "legend": senza esporli non si poteva puntare l'integrazione al tenant Chery
 # (300001 / 2). Ora fanno parte dei parametri di regione, valorizzati dai preset qui sotto.
 CONF_TENANT_CODE = "tenant_code"
@@ -244,14 +244,13 @@ DEFAULTS = {
 }
 
 # ── Preset marchio/regione ───────────────────────────────────────────────────────────────
-# Chery International serve Omoda/Jaecoo, Chery e Lepas dallo STESSO backend "legend": il broker MQTT,
+# Chery International serve Chery e Lepas dallo STESSO backend "legend": il broker MQTT,
 # la TSP console e i certificati mutual-TLS sono comuni per regione; a cambiare per marchio sono
 # solo il gateway BFF, il TENANT-CODE, il channelId e il countryId.
 # Scegliere un preset riempie quei quattro campi; "custom" lascia intatto ciò che l'utente ha
 # digitato (altre regioni/marchi).
 CONF_PRESET = "preset"
 PRESET_LEPAS_EU = "lepas_eu"
-PRESET_OMODA_JAECOO_EU = "omoda_jaecoo_eu"
 PRESET_CHERY_EU = "chery_eu"
 PRESET_CUSTOM = "custom"
 DEFAULT_PRESET = PRESET_LEPAS_EU
@@ -260,12 +259,6 @@ PRESETS = {
     PRESET_LEPAS_EU: {
         CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
         CONF_TENANT_CODE: "3000011",
-        CONF_CHANNEL_ID: "1",
-        CONF_COUNTRY_ID: "1",
-    },
-    PRESET_OMODA_JAECOO_EU: {
-        CONF_BFF: "https://legend-oj.omodaauto.nl/api",
-        CONF_TENANT_CODE: "300006",
         CONF_CHANNEL_ID: "1",
         CONF_COUNTRY_ID: "1",
     },
@@ -356,7 +349,7 @@ MACRO_PRESET_S = 15 * 60 + 60
 # ⚠️ LIMITE NOTO (v1.13.0, non risolto di proposito). Questi 15 minuti sono ancora una
 # costante, mentre la durata spedita alle macro ora la decide la vettura (`maxAirDuration`).
 # Su una vettura che ammetta solo 5′, l'auto chiude il preset dopo 5 minuti e l'interruttore
-# resta acceso altri 11: sfasatura cosmetica, nessun comando sbagliato. Sull'Omoda 9 non si
+# resta acceso altri 11: sfasatura cosmetica, nessun comando sbagliato. Su Lepas L8 non si
 # manifesta (durata dichiarata 15 = costante). Sistemarlo vuol dire derivare il timer dalla
 # durata effettivamente spedita, che oggi `switch.py` non conosce — va fatto, ma non di corsa
 # in una release che tocca già il corpo dei comandi comfort.

@@ -42,23 +42,23 @@ info() { echo "${YEL}i${NC} $1"; }
 # people learn to ignore.)
 
 echo "== 1) Confidential files tracked NOW (HEAD) =="
-TRACKED=$(git ls-files | grep -iE '(^|/)(omoda9\.env|\.mqtt_cred|token\.json|private-patterns\.txt)$|/certs_eu/|\.pem$|\.key$|(^|/)data/|_diag\.jsonl' | grep -v 'example' || true)
+TRACKED=$(git ls-files | grep -iE '(^|/)(lepas\.env|\.mqtt_cred|token\.json|private-patterns\.txt)$|/certs_eu/|\.pem$|\.key$|(^|/)data/|_diag\.jsonl' | grep -v 'example' || true)
 if [ -n "$TRACKED" ]; then hit "confidential files are tracked:"; echo "$TRACKED"; else ok "no confidential file tracked now"; fi
 
 echo "== 2) Confidential files tracked IN THE PAST (whole history) =="
 HIST=$(git log --all --pretty=format: --name-only --diff-filter=A 2>/dev/null | sort -u \
-       | grep -iE '(^|/)(omoda9\.env|\.mqtt_cred|token\.json|private-patterns\.txt)$|/certs_eu/|\.pem$|\.key$|(^|/)data/|_diag\.jsonl' \
+       | grep -iE '(^|/)(lepas\.env|\.mqtt_cred|token\.json|private-patterns\.txt)$|/certs_eu/|\.pem$|\.key$|(^|/)data/|_diag\.jsonl' \
        | grep -v 'example' || true)
 if [ -n "$HIST" ]; then hit "confidential files present in past commits (exposed the moment anyone clones):"; echo "$HIST"; else ok "no confidential file anywhere in the history"; fi
 
 echo "== 3) Real values from your local env file, searched across the WHOLE history =="
-# omoda9.env is gitignored and holds this installation's real values. They are the only
+# lepas.env is gitignored and holds this installation's real values. They are the only
 # ones no generic pattern can recognise. Loaded in a subshell and never printed.
-if [ ! -f omoda9.env ]; then
-  info "omoda9.env absent (normal unless you run the integration from this checkout):
+if [ ! -f lepas.env ]; then
+  info "lepas.env absent (normal unless you run the integration from this checkout):
     the exact-value match on your own PIN, VIN, tUserId and phone number is not running."
 else
-  set -a; . ./omoda9.env 2>/dev/null || true; set +a
+  set -a; . ./lepas.env 2>/dev/null || true; set +a
   ALLREV=$(git rev-list --all 2>/dev/null)
   checkval() { # $1=name $2=value
     local name="$1" val="$2"
@@ -77,7 +77,7 @@ else
     fi
   }
   # Only genuinely secret values. Usernames are not secrets and produce false positives.
-  for k in OMODA_EMAIL OMODA_PHONE OMODA_PIN PIN TUSERID VIN HA_MQTT_PASS; do
+  for k in LEPAS_EMAIL LEPAS_PHONE LEPAS_PIN PIN TUSERID VIN HA_MQTT_PASS; do
     checkval "$k" "$(eval echo "\${$k:-}")"
   done
 fi
@@ -142,12 +142,12 @@ else
 fi
 
 echo "== 5) .gitignore consistency (the rules have to be there) =="
-for pat in 'omoda9.env' 'certs_eu/' 'token.json' '.mqtt_cred' 'data/' '*_diag.jsonl' 'DEROGATIONS.log' 'tools/private-patterns.txt'; do
+for pat in 'lepas.env' 'certs_eu/' 'token.json' '.mqtt_cred' 'data/' '*_diag.jsonl' 'DEROGATIONS.log' 'tools/private-patterns.txt'; do
   grep -qF "$pat" .gitignore 2>/dev/null && ok ".gitignore covers '$pat'" \
     || hit ".gitignore does NOT cover '$pat'"
 done
 # and: if the confidential files exist here, they must actually be ignored
-for f in omoda9.env token.json .mqtt_cred tools/private-patterns.txt $(ls -1 *_diag.jsonl 2>/dev/null); do
+for f in lepas.env token.json .mqtt_cred tools/private-patterns.txt $(ls -1 *_diag.jsonl 2>/dev/null); do
   if [ -e "$f" ]; then
     git check-ignore -q "$f" && ok "$f present and genuinely ignored" \
       || hit "$f present but NOT ignored by git"

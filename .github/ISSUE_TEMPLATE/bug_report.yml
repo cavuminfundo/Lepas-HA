@@ -15,12 +15,9 @@ body:
       label: Car
       description: What this was observed on. It decides who can reproduce it.
       options:
-        - Omoda 9
-        - Omoda 5 / E5
-        - Omoda 7
-        - Jaecoo 7
-        - Jaecoo 5 / J5
-        - Other Chery-platform car (say which below)
+        - Lepas L8
+        - Lepas L6
+        - Other Lepas / Chery-platform car (say which below)
     validations:
       required: true
 

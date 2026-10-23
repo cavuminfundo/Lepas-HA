@@ -13,21 +13,21 @@ import requests
 # ─────────────────────────────────────────────────────────────────────────────
 # Costanti d'ambiente — PRODUZIONE EU
 # ─────────────────────────────────────────────────────────────────────────────
-BFF = os.environ.get("LEPAS_BFF", os.environ.get("OMODA_BFF", "https://eu-lepas.cheryinternational.com/api"))
-H5 = os.environ.get("LEPAS_H5", os.environ.get("OMODA_H5", "https://eu-lepas.cheryinternational.com/h5"))
+BFF = os.environ.get("LEPAS_BFF", "https://eu-lepas.cheryinternational.com/api")
+H5 = os.environ.get("LEPAS_H5", "https://eu-lepas.cheryinternational.com/h5")
 
 # Auth CLIENT dell'app (NON le credenziali utente): base64 di "legendApp:legendApp"
 APP_BASIC = "Basic bGVnZW5kQXBwOmxlZ2VuZEFwcA=="
 
-TENANT_CODE = os.environ.get("LEPAS_TENANT_CODE", os.environ.get("OMODA_TENANT_CODE", "3000011"))
+TENANT_CODE = os.environ.get("LEPAS_TENANT_CODE", "3000011")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "1")
-COUNTRY_ID = os.environ.get("OMODA_COUNTRY_ID", "1")          # 1 = UE
+COUNTRY_ID = os.environ.get("LEPAS_COUNTRY_ID", "1")          # 1 = UE
 APP_VERSION = "1.1.9"
 APP_VERSION_CODE = "26060602"
 
 # Ambienti alternativi (cross-check se la prod fa i capricci) — vedi handoff §3
 BFF_SIT = "https://api-app-stg-eu-oj.lionaitech.com/api"
-BFF_UAT = "https://legend-oj-uat.omodaauto.nl/api"
+BFF_UAT = "https://eu-lepas-uat.cheryinternational.com/api"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoint REST (path relativi a BFF = host + "/api"). Vedi FINDINGS.md.

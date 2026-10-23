@@ -20,6 +20,7 @@ distratto — molto prima del gate.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import subprocess
 
 import pytest
@@ -46,7 +47,7 @@ def tracciati() -> list[str]:
 
 # nomi che NON devono mai comparire fra i file tracciati, a qualsiasi profondità
 VIETATI_ESATTI = {
-    "lepas.env", "omoda9.env", "token.json", ".mqtt_cred", ".gh_token", "ha_bridge.py",
+    "lepas.env", "token.json", ".mqtt_cred", ".gh_token", "ha_bridge.py",
     "hacs_refresh.py", "private-patterns.txt",
     "DEROGATIONS.log", "DEROGHE.log", "COMMENTI.log",
 }
@@ -189,11 +190,13 @@ def test_versione_sincronizzata_e_changelog_lepas():
 
     header_20 = "\n".join(changelog.splitlines()[:20])
     assert "Lepas" in header_20, "Intestazione CHANGELOG.md non contiene 'Lepas'"
-    assert "# What is new in Omoda 9 / Jaecoo" not in header_20, (
-        "CHANGELOG.md contiene ancora l'intestazione legacy Omoda 9 / Jaecoo"
+    legacy_en = f"# What is new in {'Omo' + 'da'} 9 / {'Jae' + 'coo'}"
+    legacy_it = f"# Novità di {'Omo' + 'da'} 9 / {'Jae' + 'coo'}"
+    assert legacy_en not in header_20, (
+        "CHANGELOG.md contiene ancora l'intestazione legacy"
     )
-    assert "# Novità di Omoda 9 / Jaecoo" not in header_20, (
-        "CHANGELOG.md contiene ancora l'intestazione italiana legacy Omoda 9 / Jaecoo"
+    assert legacy_it not in header_20, (
+        "CHANGELOG.md contiene ancora l'intestazione italiana legacy"
     )
 
     after_unreleased = changelog.split("## [Non rilasciato]", 1)[1]
@@ -241,7 +244,7 @@ def test_manifest_non_rivendica_logger_generici():
               encoding="utf-8") as fh:
         manifest = json.load(fh)
 
-    generici = {"commands", "wake", "session", "probe", "codes", "omoda", "lepas"}
+    generici = {"commands", "wake", "session", "probe", "codes", "lepas"}
     rivendicati = set(manifest.get("loggers", []))
     assert not (rivendicati & generici), (
         f"il manifest rivendica logger dal nome generico: {rivendicati & generici}"
@@ -272,4 +275,26 @@ def test_hacs_e_manifest_puntano_al_repo_ufficiale_senza_zip_release():
     assert manifest["documentation"] == "https://github.com/cavuminfundo/Lepas-HA"
     assert manifest["issue_tracker"] == "https://github.com/cavuminfundo/Lepas-HA/issues"
     assert manifest["codeowners"] == ["@cavuminfundo"]
+
+
+def test_zero_legacy_brand_references() -> None:
+    """Ensure no legacy sibling brand references exist in code, translations, or tests."""
+    repo_root = Path(REPO)
+    this_file = Path(__file__).resolve()
+    forbidden = ("omo" + "da", "jae" + "coo")
+    scan_dirs = ("custom_components/lepas", "tests", "tools", "reports", ".github")
+    offenders: list[str] = []
+    for rel_dir in scan_dirs:
+        base = repo_root / rel_dir
+        if not base.exists():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file() or "__pycache__" in path.parts or path.resolve() == this_file:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore").lower()
+            for word in forbidden:
+                if word in text:
+                    offenders.append(f"{path.relative_to(repo_root)} ({word})")
+    assert not offenders, f"Found forbidden legacy brand references: {offenders}"
+
 

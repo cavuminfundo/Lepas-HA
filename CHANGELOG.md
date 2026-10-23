@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.15.1 — 2026-10-23
+
+### 🇬🇧 English
+
+- **Complete Native Lepas / Chery EU Alignment**: Removed all residual sibling brand references from UI translations (`strings.json`, `en.json`, `it.json`, `nl.json`), configuration presets (`config_flow.py`, `const.py`), core subprocess environment variables (`LEPAS_*`), and legacy migration shims (`legacy.py`).
+- **Permanent Hygiene Regression Gate**: Added `test_zero_legacy_brand_references` in `tests/test_repo_hygiene.py` to guarantee zero legacy brand occurrences across code, translations, tools, and tests.
+
+### 🇮🇹 Italiano
+
+- **Allineamento nativo completo Lepas / Chery EU**: Rimossi tutti i riferimenti residuali ad altri marchi dalle traduzioni UI (`strings.json`, `en.json`, `it.json`, `nl.json`), dai preset di configurazione (`config_flow.py`, `const.py`), dalle variabili d'ambiente del motore core (`LEPAS_*`) e dai moduli di migrazione legacy (`legacy.py`).
+- **Gate di regressione permanente**: Aggiunto `test_zero_legacy_brand_references` in `tests/test_repo_hygiene.py` per garantire zero occorrenze legacy in codice, traduzioni, tool e test.
+
 ## v1.15.0 — 2026-10-23
 
 ### 🇬🇧 English
