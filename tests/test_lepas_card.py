@@ -72,11 +72,16 @@ def test_lepas_card_js_webview_compat() -> None:
 
 def test_lepas_card_dark_tech_theme_and_4_metrics() -> None:
     """Verifica il tema Dark Tech Automotive, Container Queries, a11y e le 4 metriche."""
+    import json
+
+    with open(f"{REPO}/custom_components/lepas/manifest.json", encoding="utf-8") as fh:
+        manifest_version = json.load(fh)["version"]
+
     source = _read_card_source()
 
     # 1. Fallback hero con cache busting
-    assert "/lepas_card/lepas-hero.png?v=1.14.0" in source, (
-        "Manca il fallback hero dark-studio `/lepas_card/lepas-hero.png?v=1.14.0`"
+    assert f"/lepas_card/lepas-hero.png?v={manifest_version}" in source, (
+        f"Manca il fallback hero dark-studio `/lepas_card/lepas-hero.png?v={manifest_version}`"
     )
 
     # 2. Palette Dark Tech Automotive (WCAG AA/AAA)

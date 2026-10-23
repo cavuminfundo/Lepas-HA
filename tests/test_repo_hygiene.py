@@ -161,22 +161,58 @@ def test_gitignore_copre_i_segreti():
         assert regola in contenuto, f"regola mancante in .gitignore: {regola}"
 
 
-def test_versione_manifest_e_changelog_allineati():
-    """La versione nel manifest deve comparire nel CHANGELOG.
-
-    È ciò che HACS mostra all'utente al momento dell'aggiornamento: una versione
-    pubblicata senza la sua voce di changelog arriva all'utente muta."""
+def test_versione_sincronizzata_e_changelog_lepas():
+    """La versione del manifest (1.15.0) deve essere sincronizzata con pyproject, lovelace card e changelog."""
     import json
 
-    with open(os.path.join(REPO, "custom_components/lepas/manifest.json"),
-              encoding="utf-8") as fh:
-        versione = json.load(fh)["version"]
-    with open(os.path.join(REPO, "CHANGELOG.md"), encoding="utf-8") as fh:
-        changelog = fh.read()
-    # formato scritto da release.sh: «## v1.5.29 — 2026-07-19»
-    assert f"## v{versione}" in changelog, (
-        f"la versione {versione} del manifest non ha una voce nel CHANGELOG"
+    with open(f"{REPO}/custom_components/lepas/manifest.json", encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    versione = manifest["version"]
+    assert tuple(int(x) for x in versione.split(".")) >= (1, 15, 0), (
+        f"Versione >= 1.15.0 attesa nel manifest, trovata: {versione}"
     )
+
+    with open(f"{REPO}/pyproject.toml", encoding="utf-8") as fh:
+        pyproject = fh.read()
+    assert f'version = "{versione}"' in pyproject, (
+        f"Versione {versione} non sincronizzata in pyproject.toml"
+    )
+
+    with open(f"{REPO}/custom_components/lepas/lovelace/lepas-card.js", encoding="utf-8") as fh:
+        card_js = fh.read()
+    assert f"?v={versione}" in card_js, (
+        f"Versione {versione} non sincronizzata in lepas-card.js"
+    )
+
+    with open(f"{REPO}/CHANGELOG.md", encoding="utf-8") as fh:
+        changelog = fh.read()
+
+    header_20 = "\n".join(changelog.splitlines()[:20])
+    assert "Lepas" in header_20, "Intestazione CHANGELOG.md non contiene 'Lepas'"
+    assert "# What is new in Omoda 9 / Jaecoo" not in header_20, (
+        "CHANGELOG.md contiene ancora l'intestazione legacy Omoda 9 / Jaecoo"
+    )
+    assert "# Novità di Omoda 9 / Jaecoo" not in header_20, (
+        "CHANGELOG.md contiene ancora l'intestazione italiana legacy Omoda 9 / Jaecoo"
+    )
+
+    after_unreleased = changelog.split("## [Non rilasciato]", 1)[1]
+    version_headings = [
+        line.strip()
+        for line in after_unreleased.splitlines()
+        if line.strip().startswith("## v")
+    ]
+    assert version_headings, "Nessuna voce di versione trovata dopo ## [Non rilasciato]"
+    assert version_headings[0].startswith(f"## v{versione} — "), (
+        f"La prima versione dopo [Non rilasciato] deve essere '## v{versione} — ', trovata: '{version_headings[0]}'"
+    )
+
+    with open(f"{REPO}/.agents/AGENTS.md", encoding="utf-8") as fh:
+        agents_md = fh.read()
+    for doc in ("CHANGELOG.md", "manifest.json", "pyproject.toml", "lepas-card.js"):
+        assert doc in agents_md, (
+            f"Regola di release/versionamento in .agents/AGENTS.md non menziona {doc}"
+        )
 
 
 def test_changelog_pronto_per_il_prossimo_rilascio():

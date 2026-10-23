@@ -1,20 +1,34 @@
-# What is new in Omoda 9 / Jaecoo for Home Assistant
+# What is new in Lepas Connect for Home Assistant
 
 What changes with each update, in plain words. The most recent entries are at
 the top. Versions are the "episode" number of the integration: update from
-**HACS → Omoda 9 / Jaecoo → Update**.
+**HACS → Lepas Connect → Update**.
 
 Every release is written in both languages, English first.
 
 ---
 
-# Novità di Omoda 9 / Jaecoo per Home Assistant
+# Novità di Lepas Connect per Home Assistant
 
 Cosa cambia a ogni aggiornamento, spiegato in parole semplici.
 Le voci più recenti sono in alto. Le versioni indicano la "puntata"
-dell'integrazione: aggiorna da **HACS → Omoda 9 / Jaecoo → Aggiorna**.
+dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
+
+## v1.15.0 — 2026-10-23
+
+### 🇬🇧 English
+
+- **Direct HACS Repository Support (`cavuminfundo/Lepas-HA`)**: Native direct download HACS configuration without `zip_release`, featuring official repository endpoints, comprehensive English documentation, and quick-start installation guide in `README.md`.
+- **New Cursive Brand Identity (`custom_components/lepas/brand/`)**: Complete replacement of legacy brand assets with 8 original RGBA PNG icons featuring the *"Lepas"* monogram and wordmark in chrome and electric cyan cursive typography.
+- **Dark Tech Automotive Lovelace Card & Real Lepas L8 Hero (`lepas-card.js` & `lepas-hero.png`)**: Full redesign of the Lovelace card with Dark Tech Automotive palette (`#0F141C` / `#00D2FF`), 4 core metrics (EV Range, Fuel/Total Range, Charging Power, Odometer), responsive CSS Container Queries, WCAG AA/AAA keyboard accessibility, and a 3/4 studio render faithful to the real proportions of the 4.69 m Lepas L8 SUV.
+
+### 🇮🇹 Italiano
+
+- **Supporto repository HACS diretto (`cavuminfundo/Lepas-HA`)**: Configurazione HACS diretta senza `zip_release`, con documentazione completa e guida rapida all'installazione in inglese in `README.md`.
+- **Nuova identità visiva corsiva (`custom_components/lepas/brand/`)**: Sostituzione integrale delle vecchie icone legacy con 8 nuovi asset PNG RGBA originali dotati di monogramma e logotipo *"Lepas"* in calligrafia corsiva cromata/ciano elettrico.
+- **Scheda Lovelace Dark Tech Automotive & Hero Lepas L8 reale (`lepas-card.js` e `lepas-hero.png`)**: Riprogettazione completa della scheda Lovelace con palette Dark Tech Automotive (`#0F141C` / `#00D2FF`), 4 metriche chiave (Autonomia EV, Carburante/Totale, Potenza di ricarica, Contachilometri), CSS Container Queries responsive, accessibilità tastiera WCAG AA/AAA e render studio 3/4 fedele alle proporzioni reali del SUV Lepas L8 da 4,69 m.
 
 ## v1.14.0 — 2026-08-24
 

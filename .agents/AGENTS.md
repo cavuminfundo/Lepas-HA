@@ -44,6 +44,12 @@ Code first. Then at most three short lines: what was skipped, when to add it. No
 - All external API request/response payloads from `com.chery.eu.lepas` must be documented and typed using typed dataclasses or pydantic/msgspec models before writing entity bindings.
 - Validate boundaries gracefully: handle missing keys, firmware variations, and offline vehicle states without crashing the coordinator.
 
+### 5. Release, Versioning & Changelog Policy (Mandatory on Commit & Push)
+Ad ogni `git commit` e `git push` su `main`, l'agente DEVE:
+1. Incrementare la versione SemVer (`patch` per fix/asset/refactoring, `minor` per nuove feature/entità) in modo sincronizzato in `custom_components/lepas/manifest.json`, `pyproject.toml` e `?v=<version>` in `custom_components/lepas/lovelace/lepas-card.js`.
+2. Compilare le note di rilascio in `CHANGELOG.md` subito sotto `## [Non rilasciato]` aggiungendo l'intestazione `## vX.Y.Z — YYYY-MM-DD` (con sezioni in inglese e italiano).
+3. Aggiornare e pushare il tag Git corrispondente (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`) oltre a `origin/main`.
+
 ---
 
 ## 🧪 [ALL AGENTS] Mandatory Quality Gates
