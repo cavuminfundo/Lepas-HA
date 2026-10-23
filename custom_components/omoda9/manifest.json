@@ -1,0 +1,24 @@
+{
+  "domain": "omoda9",
+  "name": "Chery Connect",
+  "after_dependencies": [
+    "recorder"
+  ],
+  "codeowners": [
+    "@Caslinovich"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
+  "documentation": "https://github.com/chery-connect-ha/omoda9-ha",
+  "integration_type": "device",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/chery-connect-ha/omoda9-ha/issues",
+  "requirements": [
+    "paho-mqtt>=2.0",
+    "pycryptodome>=3.17",
+    "numpy>=1.21"
+  ],
+  "version": "1.14.0"
+}

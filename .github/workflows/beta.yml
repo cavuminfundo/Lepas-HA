@@ -1,0 +1,250 @@
+name: Beta
+
+# An INSTALLABLE pre-release cut from `master`, so the assembled thing can be tried on a
+# real car before it is declared stable.
+#
+# Why it exists. The gate of this project is not the merge but the STABLE release, and the
+# review of someone who does not program is the field test on their own car. For that rule
+# to be exigible, the person with the car has to be able to install the code — and until
+# this workflow existed they could not: `hacs.json` declares `zip_release`, so HACS installs
+# only from a release carrying an `omoda9.zip` asset, and that asset was built and uploaded
+# by hand once per release. The only other route was cloning a branch and copying files into
+# `custom_components/` — exactly the barrier that filters out the people whose review is
+# worth most.
+#
+# WHY ONLY FROM `master`, AND NOT FROM A PULL REQUEST. This was tried the other way first,
+# on 24 August 2026: four pre-releases cut from four different branches, numbered beta.1 to
+# beta.4. It does not work, and the reason is in HACS itself
+# (`custom_components/hacs/repositories/base.py`, lines 1103-1114 and 385-388):
+#
+#     releases = await self.get_releases(prerelease=True, returnlimit=30)   # GET /releases
+#     for release in releases:
+#         if release.draft: continue
+#         elif release.prerelease:
+#             if self.data.prerelease is None:
+#                 self.data.prerelease = release.tag_name    # the FIRST one it meets
+#     ...
+#     if self.data.show_beta and self.data.prerelease is not None:
+#         available = self.data.prerelease
+#
+# `GET /releases` returns newest-created first, and HACS never sorts. So HACS offers the
+# most recently PUBLISHED pre-release, not the highest version — the version number does not
+# enter the decision at all. A tester with "show beta versions" on does not choose which
+# build they get: they get the last one published, whatever branch it came from. Cutting
+# betas from branches therefore produces a counter that rises while the content moves
+# sideways: beta.4 contained one pull request and none of the three before it.
+#
+# The consequence, and the rule this file now enforces: every published pre-release must be
+# coherent on its own, and only a build from `master` is. That also happens to be the thing
+# a per-PR beta could never do — test the changes NEXT TO EACH OTHER. The failures of this
+# project live exactly there: the entity count, the three translation lists that must agree,
+# the capabilities. Those are JOINT properties that no single pull request exercises.
+#
+# The cycle this supports: merge a batch, cut a beta from master, try it on a real car, move
+# to the next batch.
+#
+# What was lost with the per-PR build, and is not yet replaced: putting a change written for
+# a car nobody here owns in front of its owner BEFORE it is merged. See the discussion on
+# #43 — it needs a shape that is not a published pre-release of this repository.
+#
+# Who can start it: only people with write access, since only they can run a workflow.
+# Testers start nothing: they receive a link and install.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write        # create the tag and the pre-release
+
+jobs:
+  beta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the target — the head of master
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # No pull request to resolve and no fork to reject: `master` is by definition a
+          # branch of this repository, and the only way into it is through branch protection.
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)
+          {
+            echo "sha=$sha"
+            echo "titolo=tutto quello che è entrato finora"
+          } >> "$GITHUB_OUTPUT"
+          echo "Build d'insieme da master: $sha"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+
+      - name: Calcola la versione della beta
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          base=$(jq -r .version custom_components/omoda9/manifest.json)
+          if [ -z "$base" ] || [ "$base" = "null" ]; then
+            echo "::error::manifest.json senza campo version."
+            exit 1
+          fi
+
+          # La versione del manifest DEVE essere già più avanti dell'ultima stabile.
+          # In semver una pre-release ordina PRIMA della versione omonima: con il
+          # manifest fermo sulla stabile corrente il tag sarebbe `v1.13.0-beta.1`, che
+          # HACS mostra come PIÙ VECCHIO della 1.13.0 installata — non comparirebbe
+          # come aggiornamento, e sceglierlo sarebbe formalmente un downgrade. Una beta
+          # così è peggio di nessuna beta, perché sembra funzionare. Si ferma qui, con
+          # l'istruzione esatta: la versione la decide chi apre la PR, non il workflow —
+          # indovinarla vorrebbe dire pubblicare un numero diverso da quello che poi
+          # uscirà come stabile.
+          stabile=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name' 2>/dev/null | sed 's/^v//' || true)
+          if [ -n "$stabile" ] && [ "$stabile" != "null" ]; then
+            piu_alta=$(printf '%s\n%s\n' "$base" "$stabile" | sort -V | tail -1)
+            if [ "$base" = "$stabile" ] || [ "$piu_alta" = "$stabile" ]; then
+              echo "::error::Il manifest dichiara $base e l'ultima stabile è $stabile, quindi il tag sarebbe v$base-beta.N — che in semver ordina PRIMA di v$stabile e HACS mostrerebbe come più vecchio di quello che l'utente ha già installato. Alza \`version\` in custom_components/omoda9/manifest.json al numero con cui questa modifica uscirà (es. $(echo "$stabile" | awk -F. '{print $1"."$2+1".0"}')), mergia, e rilancia questo workflow."
+              exit 1
+            fi
+          fi
+
+          # The counter is the first free one among the TAGS (not among the releases: a tag
+          # can exist without a release). Since every beta now comes from `master`, the
+          # sequence is cumulative by construction: beta.N+1 contains everything beta.N had.
+          esistenti=$(gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' \
+                      | grep -E "^v${base}-beta\.[0-9]+$" || true)
+          n=1
+          if [ -n "$esistenti" ]; then
+            n=$(( $(echo "$esistenti" | sed -E 's/.*-beta\.//' | sort -n | tail -1) + 1 ))
+          fi
+
+          echo "versione=${base}-beta.${n}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${base}-beta.${n}"     >> "$GITHUB_OUTPUT"
+
+      - name: Costruisci omoda9.zip
+        env:
+          VERSIONE: ${{ steps.ver.outputs.versione }}
+        run: |
+          set -euo pipefail
+          # La versione va scritta nel manifest DENTRO lo zip: è quella che Home
+          # Assistant mostra, ed è come il tester capisce quale build sta girando
+          # senza doverci credere sulla parola.
+          tmp=$(mktemp)
+          jq --arg v "$VERSIONE" '.version = $v' custom_components/omoda9/manifest.json > "$tmp"
+          mv "$tmp" custom_components/omoda9/manifest.json
+
+          # L'asset delle stabili contiene il CONTENUTO di custom_components/omoda9/
+          # appiattito alla radice dell'archivio (HACS lo scompatta dentro
+          # custom_components/<dominio>/). Verificato voce per voce contro
+          # l'omoda9.zip di v1.13.0: stessa lista, 53 file, nessuna esclusione.
+          # Si zippano solo i file TRACCIATI, così nulla di generato può entrarci.
+          cd custom_components/omoda9
+          git ls-files -z | xargs -0 zip -q -X "$GITHUB_WORKSPACE/omoda9.zip"
+          cd "$GITHUB_WORKSPACE"
+
+          echo "File nell'archivio: $(unzip -Z1 omoda9.zip | wc -l)"
+          unzip -p omoda9.zip manifest.json | jq -r '"Versione nel manifest: " + .version'
+
+      - name: Pubblica la pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSIONE: ${{ steps.ver.outputs.versione }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          TITOLO: ${{ steps.pr.outputs.titolo }}
+        run: |
+          set -euo pipefail
+
+          stabile=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)
+          confronto=""
+          if [ -n "$stabile" ] && [ "$stabile" != "null" ]; then
+            confronto="Cosa c'è dentro, rispetto all'ultima stabile:
+          https://github.com/${GITHUB_REPOSITORY}/compare/${stabile}...master"
+          fi
+
+          # Le note si scrivono su un FILE, non dentro `$( )`. Un heredoc annidato in una
+          # sostituzione di comando è il costrutto che qui non serve a niente e che si
+          # rompe in silenzio quando il testo cambia: `--notes-file` prende lo stesso
+          # contenuto senza passare dal parser due volte.
+          cat > note-beta.md <<EOF
+          Build d'insieme da \`master\` — **${TITOLO}**
+
+          Non è una release, e non è una singola modifica: è tutto quello che è entrato
+          finora, provato **insieme**. Si guardano le cose che nascono dalla combinazione:
+          il numero di entità, i nomi che spariscono in una lingua sola, due sensori che si
+          contendono lo stesso campo.
+
+          ${confronto}
+
+          **Come si installa.** In HACS, sulla scheda di questa integrazione: menù ⋮ →
+          *Redownload* → attiva **Show beta versions** → scegli \`${VERSIONE}\` → riavvia
+          Home Assistant. Per tornare indietro, stessa strada scegliendo l'ultima stabile.
+
+          **Se puoi, non provarla sull'istanza da cui dipendi ogni giorno.** È una
+          pre-release e l'auto è vera.
+
+          **Cosa serve sapere dopo.** Non "funziona", ma cosa ha fatto l'auto: il campo di
+          stato che è cambiato, e l'ora. \`HTTP 200\` e \`operation.successful\` dicono che
+          il backend ha accettato — non che la vettura abbia eseguito. Apri una issue col
+          modello, la regione e cosa NON hai potuto provare: anche quello è un risultato.
+
+          Commit: \`${SHA}\`
+          EOF
+
+          gh release create "$TAG" omoda9.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SHA" \
+            --prerelease \
+            --title "${VERSIONE} — insieme, da master" \
+            --notes-file note-beta.md
+
+      - name: Una sola pre-release visibile alla volta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # PERCHE' ESISTE QUESTO PASSO. HACS offre la PRIMA pre-release non-draft che
+          # incontra scorrendo `GET /releases` (hacs/repositories/base.py, 1103-1114), e
+          # quell'ordine non e' quello che si crede. Misurato il 27 settembre 2026 su
+          # questo repository:
+          #
+          #   v1.14.0-beta.9    created 10:48
+          #   v1.14.0-beta.8    created 10:11
+          #   v1.14.0-beta.7    created 09:14
+          #   v1.14.0-beta.10   created 12:25   <- l'ultima, e arriva QUARTA
+          #
+          # Non e' la data di pubblicazione, non e' la data del commit, e non e' un
+          # confronto di versione. Il risultato: appena il contatore passa da 9 a 10, HACS
+          # continua a offrire la 9 e la 10 e' invisibile. Nove build in cui sembrava
+          # funzionare, e il difetto si presenta alla decima.
+          #
+          # La cura non e' capire l'ordinamento di GitHub: e' non dipenderne. Se di
+          # pre-release non-draft ce n'e' UNA, quella viene servita, qualunque sia
+          # l'ordine. Le precedenti diventano draft: restano nel repository, i tag
+          # restano, e si possono ripubblicare in un clic se servono davvero.
+          #
+          # Una beta e' una build di collaudo, non un archivio. Tenerne dieci visibili non
+          # serviva a nessuno e costava esattamente questo.
+          vecchie=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+                    --jq ".[] | select(.draft == false and .prerelease == true) | select(.tag_name != \"$TAG\") | .tag_name")
+          if [ -z "$vecchie" ]; then
+            echo "nessuna pre-release precedente da nascondere."
+            exit 0
+          fi
+          for t in $vecchie; do
+            echo "  $t -> draft"
+            gh release edit "$t" --repo "$GITHUB_REPOSITORY" --draft
+          done
+
+          # Verifica, invece di fidarsi: e' il controllo che avrebbe preso il difetto.
+          visibili=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+                     --jq "[.[] | select(.draft == false and .prerelease == true)] | length")
+          prima=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+                  --jq "[.[] | select(.draft == false and .prerelease == true)][0].tag_name")
+          echo "pre-release visibili: $visibili, la prima e': $prima"
+          if [ "$visibili" != "1" ] || [ "$prima" != "$TAG" ]; then
+            echo "::error::HACS servirebbe $prima invece di $TAG. Il taglio e' andato, ma la beta non e' raggiungibile."
+            exit 1
+          fi

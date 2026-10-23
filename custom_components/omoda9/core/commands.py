@@ -1,0 +1,966 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+commands.py — Catalogo + invio dei comandi auto Omoda 9 (tspconsole EU REST).
+
+Riusa la catena verificata in S24:
+  - userToken via  wake._bff_login()      (token OTP in token.json, refresh automatico)
+  - firma          tsp_sign.sign_body()   (base64(sha256(base)).upper())
+  - taskId         get_taskid()           (env TASKID -> file piggyback -> checkPassword auto-coniato)
+
+POST  https://tspconsole-eu.cheryinternational.com/asc/vehicleControl/<endpoint>
+Header: Authorization=<userToken>, timestamp=<ms>, Content-Type=application/json; charset=utf-8,
+        User-Agent=okhttp/4.9.2
+
+⚠️  Ogni send() col taskId valido ATTUA sull'auto. È pensato per essere invocato SOLO
+    dal tap di Rino su un pulsante in Home Assistant (= suo consenso esplicito).
+    Catalogo body ricostruito 1:1 dagli envelope reali catturati dall'app ufficiale
+    (materiale di cattura: canale privato, mai in questo repo).
+"""
+import os
+import json
+import time
+import logging
+import hashlib
+import threading
+import urllib.request
+import urllib.error
+
+_LOGGER = logging.getLogger(__name__)
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# P2-2: import relativi di pacchetto (prima: nomi nudi + `sys.path.insert(HERE)`).
+from . import wake
+from . import tsp_sign
+from . import omoda_auth as A
+from . import codes
+from . import permessi
+from . import routing
+from .pin_lockout import PinLockout, PinLockedError
+# H8: rimosso `importlib.reload(tsp_sign)` a import-time (side-effect inutile; tsp_sign
+# non viene mutato altrove e ricaricarlo all'import poteva azzerare eventuali monkeypatch).
+
+# P2-6: VIN, PIN, host, file del taskId e conio automatico NON sono più global di modulo
+# riscritti prima di ogni chiamata: arrivano dal `CoreCtx` del veicolo, primo argomento di
+# ogni funzione pubblica. Era la radice comune di sei bug: con due auto configurate il
+# secondo entry sovrascriveva la configurazione del primo e un comando poteva partire
+# verso l'auto sbagliata.
+
+# ───────────────────────── Catalogo comandi ─────────────────────────
+# Ogni voce: key -> {endpoint, body(fissi specifici), name, icon, group}
+# I campi comuni (clientType/seq/taskId/vin/appId/sign) li aggiunge send().
+COMMANDS = [
+    # — Clima —
+    # clima ON/OFF: temperatura e durata sono PARAMETRICHE (le passa la climate entity via
+    # `params`); i valori nel body sono solo i default se invocato senza override.
+    ("clima_on",  {"endpoint": "airControl",
+                   "body": {"airControlType": "1", "airType": "1", "temperature": "21.0", "times": "15"},
+                   "name": "Clima acceso", "icon": "mdi:air-conditioner", "group": "Clima"}),
+    ("clima_off", {"endpoint": "airControl",
+                   "body": {"airControlType": "0", "airType": "1", "temperature": "21.0", "times": "15"},
+                   "name": "Clima spento", "icon": "mdi:air-conditioner", "group": "Clima"}),
+    ("defrost_parabrezza", {"endpoint": "frontWindshieldControl",
+                   "body": {"frontWindshieldHeat": "1", "times": "15"},
+                   "name": "Sbrina parabrezza", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+    ("defrost_parabrezza_off", {"endpoint": "frontWindshieldControl",
+                   "body": {"frontWindshieldHeat": "0"},
+                   "name": "Sbrina parabrezza OFF", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+    # Disappannamento parabrezza: NON è un doppione di `defrost_parabrezza`. Sono due funzioni che
+    # l'auto tiene distinte, con campo di stato proprio ciascuna:
+    #   frontWindshieldControl → `frontWindshieldHeat` (riscaldamento elettrico del vetro)
+    #   airControl frontDefrosting → `fWinHeatingState`  (aria del clima soffiata sul parabrezza)
+    # Catena MISURATA end-to-end nella cattura del 2026-06-20, accensione e spegnimento:
+    #   19:43:58 airControl {frontDefrosting:"1"} → push 1104 result 2 con fWinHeatingState "1"
+    #   19:45:32 airControl {airControlType:"0"}  → fWinHeatingState "0" nel 5A02 delle 19:45:35
+    # ⚠️ Passa dal clima, quindi ACCENDE ANCHE IL CLIMA per `times` minuti: effetto collaterale
+    # dichiarato, non un incidente. Per lo stesso motivo lo spegnimento è quello del clima —
+    # è l'unico misurato, e riporta davvero `fWinHeatingState` a 0.
+    # ⚠️ `temperature` è l'unico campo che si scosta dall'envelope misurato (l'app spediva 15.0):
+    # è una voce figlia consentita a sé (2043) che già variamo dalla climate entity, e 21° è il
+    # nostro default. Deviazione deliberata, non una svista.
+    ("disappanna_parabrezza", {"endpoint": "airControl",
+                   "body": {"airControlType": "1", "airType": "1", "frontDefrosting": "1",
+                            "temperature": "21.0", "times": "15"},
+                   "name": "Disappanna parabrezza", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+    ("disappanna_parabrezza_off", {"endpoint": "airControl",
+                   "body": {"airControlType": "0", "airType": "1", "temperature": "21.0", "times": "15"},
+                   "name": "Disappanna parabrezza OFF", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+    ("defrost_lunotto", {"endpoint": "backDefrostingControl",
+                   "body": {"backDefrosting": "1", "times": "15"},
+                   "name": "Sbrina lunotto", "icon": "mdi:car-defrost-rear", "group": "Clima"}),
+    ("defrost_lunotto_off", {"endpoint": "backDefrostingControl",
+                   "body": {"backDefrosting": "0"},
+                   "name": "Sbrina lunotto OFF", "icon": "mdi:car-defrost-rear", "group": "Clima"}),
+    ("volante_caldo", {"endpoint": "steeringWheelControl",
+                   "body": {"controlType": "1"},
+                   "name": "Volante riscaldato", "icon": "mdi:steering", "group": "Clima"}),
+    ("volante_caldo_off", {"endpoint": "steeringWheelControl",
+                   "body": {"controlType": "0"},
+                   "name": "Volante riscaldato OFF", "icon": "mdi:steering", "group": "Clima"}),
+    ("sedile_guida_caldo", {"endpoint": "seatControl",
+                   "body": {"mSeatHeating": "3", "times": "15"},
+                   "name": "Sedile guida riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_guida_caldo_off", {"endpoint": "seatControl",
+                   "body": {"mSeatHeating": "0"},
+                   "name": "Sedile guida riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_guida_aria", {"endpoint": "seatControl",
+                   "body": {"mSeatAiry": "3", "times": "15"},
+                   "name": "Sedile guida ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+    ("sedile_guida_aria_off", {"endpoint": "seatControl",
+                   "body": {"mSeatAiry": "0"},
+                   "name": "Sedile guida ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+    # Sedili passeggero e posteriori — stesso endpoint singolo `seatControl`, parametri
+    # confermati dal bean CVSeatControlReqBean (p=passeggero, bl=post.SX, br=post.DX).
+    # Posteriore centrale: il bean NON ha un parametro dedicato → nessun comando.
+    ("sedile_passeggero_caldo", {"endpoint": "seatControl",
+                   "body": {"pSeatHeating": "3", "times": "15"},
+                   "name": "Sedile passeggero riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_passeggero_caldo_off", {"endpoint": "seatControl",
+                   "body": {"pSeatHeating": "0"},
+                   "name": "Sedile passeggero riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_passeggero_aria", {"endpoint": "seatControl",
+                   "body": {"pSeatAiry": "3", "times": "15"},
+                   "name": "Sedile passeggero ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+    ("sedile_passeggero_aria_off", {"endpoint": "seatControl",
+                   "body": {"pSeatAiry": "0"},
+                   "name": "Sedile passeggero ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+    ("sedile_post_sx_caldo", {"endpoint": "seatControl",
+                   "body": {"blSeatHeating": "3", "times": "15"},
+                   "name": "Sedile post. SX riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_post_sx_caldo_off", {"endpoint": "seatControl",
+                   "body": {"blSeatHeating": "0"},
+                   "name": "Sedile post. SX riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_post_sx_aria", {"endpoint": "seatControl",
+                   "body": {"blSeatAiry": "3", "times": "15"},
+                   "name": "Sedile post. SX ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+    ("sedile_post_sx_aria_off", {"endpoint": "seatControl",
+                   "body": {"blSeatAiry": "0"},
+                   "name": "Sedile post. SX ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+    ("sedile_post_dx_caldo", {"endpoint": "seatControl",
+                   "body": {"brSeatHeating": "3", "times": "15"},
+                   "name": "Sedile post. DX riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_post_dx_caldo_off", {"endpoint": "seatControl",
+                   "body": {"brSeatHeating": "0"},
+                   "name": "Sedile post. DX riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+    ("sedile_post_dx_aria", {"endpoint": "seatControl",
+                   "body": {"brSeatAiry": "3", "times": "15"},
+                   "name": "Sedile post. DX ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+    ("sedile_post_dx_aria_off", {"endpoint": "seatControl",
+                   "body": {"brSeatAiry": "0"},
+                   "name": "Sedile post. DX ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+
+    # — Clima: macro comfort "tutto" (coolingControl/heatingControl) —
+    # Preset unico che accende clima + TUTTI i sedili (+ sbrinatori e volante per il caldo)
+    # in un colpo solo. Body ricostruito 1:1 dagli envelope reali dell'app in
+    # 30_capture/omoda9_capture_20260620/command_envelopes.txt. NB: usano `duration` (NON
+    # `times`); valori sedile 3=on/0=off; temperatura 15.0 (max freddo) / 31.0 (max caldo).
+    # ⚠️ IMPORTANTE (verificato dal vivo 2026-06-21): questi comandi — come TUTTI i comfort —
+    # vengono rifiutati dall'auto con timeout se la vettura è ACCESA/occupata (blocco di
+    # sicurezza). A motore spento funzionano e accendono tutti i moduli. Non è un problema
+    # del comando: a auto spenta clima+sedili+volante+parabrezza+lunotto rispondono tutti ✅.
+    ("clima_raffredda_on", {"endpoint": "coolingControl",
+                   "body": {"airControlType": "1", "airType": "1", "temperature": "15.0", "duration": "15",
+                            "mSeatAiry": "3", "pSeatAiry": "3", "blSeatAiry": "3", "brSeatAiry": "3"},
+                   "name": "Raffredda tutto", "icon": "mdi:snowflake", "group": "Clima"}),
+    ("clima_raffredda_off", {"endpoint": "coolingControl",
+                   "body": {"airControlType": "0", "airType": "1", "temperature": "15.0", "duration": "15",
+                            "mSeatAiry": "0", "pSeatAiry": "0", "blSeatAiry": "0", "brSeatAiry": "0"},
+                   "name": "Raffredda tutto OFF", "icon": "mdi:snowflake-off", "group": "Clima"}),
+    ("clima_riscalda_on", {"endpoint": "heatingControl",
+                   "body": {"airControlType": "1", "airType": "1", "temperature": "31.0", "duration": "15",
+                            "frontWindshieldHeat": "1", "backDefrosting": "1", "steerWheelHeatSwitch": "1",
+                            "mSeatHeating": "3", "pSeatHeating": "3", "blSeatHeating": "3", "brSeatHeating": "3"},
+                   "name": "Riscalda tutto", "icon": "mdi:heat-wave", "group": "Clima"}),
+    ("clima_riscalda_off", {"endpoint": "heatingControl",
+                   "body": {"airControlType": "0", "airType": "1", "temperature": "31.0", "duration": "15",
+                            "frontWindshieldHeat": "0", "backDefrosting": "0", "steerWheelHeatSwitch": "0",
+                            "mSeatHeating": "0", "pSeatHeating": "0", "blSeatHeating": "0", "brSeatHeating": "0"},
+                   "name": "Riscalda tutto OFF", "icon": "mdi:heat-wave", "group": "Clima"}),
+
+    # — Porte / chiusure —
+    ("sblocca",   {"endpoint": "lockControl", "body": {"lockType": "1"},
+                   "name": "Sblocca porte", "icon": "mdi:lock-open-variant", "group": "Accessi"}),
+    ("blocca",    {"endpoint": "lockControl", "body": {"lockType": "0"},
+                   "name": "Blocca porte", "icon": "mdi:lock", "group": "Accessi"}),
+    ("baule_apri",  {"endpoint": "powerLiftgateControl", "body": {"controlType": "1"},
+                   "name": "Apri baule", "icon": "mdi:car-back", "group": "Accessi"}),
+    ("baule_chiudi", {"endpoint": "powerLiftgateControl", "body": {"controlType": "0"},
+                   "name": "Chiudi baule", "icon": "mdi:car-back", "group": "Accessi"}),
+
+    # — Finestrini / tetto —
+    ("finestrini_apri",   {"endpoint": "windowControl", "body": {"controlType": "1"},
+                   "name": "Apri finestrini", "icon": "mdi:car-door", "group": "Finestrini e tetto"}),
+    ("finestrini_chiudi", {"endpoint": "windowControl", "body": {"controlType": "0"},
+                   "name": "Chiudi finestrini", "icon": "mdi:car-door", "group": "Finestrini e tetto"}),
+    ("finestrini_ventila", {"endpoint": "windowControl", "body": {"controlType": "2"},
+                   "name": "Ventila finestrini", "icon": "mdi:weather-windy", "group": "Finestrini e tetto"}),
+    ("tetto_apri",   {"endpoint": "skylightControl", "body": {"controlType": "1", "skylightType": "1"},
+                   "name": "Apri tetto", "icon": "mdi:car-select", "group": "Finestrini e tetto"}),
+    ("tetto_chiudi", {"endpoint": "skylightControl", "body": {"controlType": "0", "skylightType": "1"},
+                   "name": "Chiudi tetto", "icon": "mdi:car-select", "group": "Finestrini e tetto"}),
+    # Sunroof tilt / vent position: same endpoint, controlType "2" (the official app's
+    # controlTiltUp action sends swi="2"). A button of its own, like `finestrini_ventila`:
+    # it maps on neither open nor close, and the sunroof cover's close brings it back.
+    # Reported working on a Jaecoo 7 PHEV in the field-test issue.
+    ("tetto_ventila", {"endpoint": "skylightControl", "body": {"controlType": "2", "skylightType": "1"},
+                   "name": "Ventila tetto", "icon": "mdi:weather-windy", "group": "Finestrini e tetto"}),
+
+    # — Ricarica EV —
+    # Ricarica IMMEDIATA avvio/stop (endpoint chargeStartStopControl, bean CVChargeStartStopBean
+    # → solo `controlType`; 1=avvia, 0=ferma, stessa convenzione di tutti i *Control).
+    ("ricarica_start", {"endpoint": "chargeStartStopControl", "body": {"controlType": "1"},
+                   "name": "Avvia ricarica", "icon": "mdi:battery-charging", "group": "Ricarica"}),
+    ("ricarica_stop", {"endpoint": "chargeStartStopControl", "body": {"controlType": "0"},
+                   "name": "Ferma ricarica", "icon": "mdi:battery-off", "group": "Ricarica"}),
+    # Ricarica PROGRAMMATA (chargeAppointControl) — body con ARRAY annidato `chargeAppointPlans`
+    # (la firma annidata è risolta in tsp_sign, verificata su 4/4 envelope reali). mainSwitch =
+    # interruttore generale; il piano (orario/durata/giorni) lo passa l'entità via `params`.
+    # cycleData [1..7] = giorni; startTime/timeConsuming in MINUTI; switchStatus = piano attivo.
+    ("ricarica_prog_on", {"endpoint": "chargeAppointControl",
+                   "body": {"mainSwitch": 1, "chargeAppointPlans": [
+                       {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 480,
+                        "switchStatus": 1, "timeConsuming": 360}]},
+                   "name": "Ricarica programmata ON", "icon": "mdi:calendar-clock", "group": "Ricarica"}),
+    ("ricarica_prog_off", {"endpoint": "chargeAppointControl",
+                   "body": {"mainSwitch": 0, "chargeAppointPlans": [
+                       {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 480,
+                        "switchStatus": 0, "timeConsuming": 360}]},
+                   "name": "Ricarica programmata OFF", "icon": "mdi:calendar-remove", "group": "Ricarica"}),
+
+    # — Altro —
+    ("trova_auto", {"endpoint": "findCar", "body": {},
+                   "name": "Trova auto (lampeggio)", "icon": "mdi:car-search", "group": "Altro"}),
+    # NB: remoteStart (avvio motore da remoto) RIMOSSO: provato dal vivo (2026-06-21) →
+    # l'auto risponde A00084 "No vehicle control command permission" (permesso negato per
+    # questo veicolo). Inutile esporre un pulsante che fallisce sempre. Il bean
+    # CVRemoteStartReqBean (senza campi) resta noto se in futuro il permesso cambiasse.
+    # Richiesta posizione GPS: NON attua nulla; l'auto risponde con un push MQTT serviceType 1301
+    # (lat/lon) che il bridge cabla nel device_tracker. È il metodo dell'app per la posizione a riposo.
+    ("localizza", {"endpoint": "vehicleLocation", "body": {},
+                   "name": "Localizza auto (GPS)", "icon": "mdi:crosshairs-gps", "group": "Altro"}),
+
+    # — Sicurezza — Antifurto (theftAlarm). Avvisi+sirena per movimento non autorizzato,
+    # scasso porte, rottura finestrini (descr. ufficiale app). NB: vive su /act (NON
+    # /asc/vehicleControl) → usa la chiave `path` invece di `endpoint`. Body = theftAlarmSwitch
+    # 0/1; send() aggiunge clientType/seq/vin e il taskId coniato (il backend lo pretende:
+    # A00643 senza). Stato leggibile via query_theft_switch() (/act/theftAlarm/querySwitch).
+    ("antifurto_on",  {"path": "/act/theftAlarm/setSwitch", "body": {"theftAlarmSwitch": "1"},
+                   "categoria": 401,
+                   "name": "Antifurto acceso", "icon": "mdi:shield-car", "group": "Sicurezza"}),
+    ("antifurto_off", {"path": "/act/theftAlarm/setSwitch", "body": {"theftAlarmSwitch": "0"},
+                   "categoria": 401,
+                   "name": "Antifurto spento", "icon": "mdi:shield-off-outline", "group": "Sicurezza"}),
+]
+CMD_MAP = {k: v for k, v in COMMANDS}
+
+# Codici risposta tspconsole → testo leggibile: ora dalla mappa UNICA core/codes.py.
+CODE_MEANING = codes.CODE_MEANING
+
+# Esito comando: il backend risponde SEMPRE HTTP 200, l'esito vero è nel `code` del body.
+# `SUCCESS_CODES` = comando accettato dal backend (poi l'auto conferma via MQTT 110x);
+# `FAILURE_CODES` = comando NON eseguito (auto occupata/a riposo, permesso negato, taskId
+# o token non validi). Distinguere i due è ciò che permette alle entità ottimistiche di
+# NON mostrare un finto "successo" quando l'auto ha rifiutato (vedi Omoda9OptimisticMixin).
+#
+# P2-5: questi insiemi sono ora DERIVATI dalla tabella unica di routing, non più elenchi
+# scritti a mano qui accanto. Erano liste parallele che potevano divergere in silenzio da
+# come i codici venivano davvero instradati.
+SUCCESS_CODES = routing.SUCCESS_CODES
+FAILURE_CODES = routing.FAILURE_CODES
+RETRYABLE_CODES = routing.RETRYABLE_CODES
+
+
+class CommandError(Exception):
+    """Comando rifiutato dal backend/auto (NON eseguito). `code` = codice tspconsole,
+    `retryable` = True se ritentare ha senso (es. auto occupata). Il coordinator lo
+    lascia propagare; l'entità ottimistica lo cattura per annullare lo stato ottimistico
+    e mostrare l'errore reale all'utente, invece di restare bloccata su un finto successo.
+
+    `reason` instrada il RIMEDIO nel coordinator (routing per causa, non solo per codice):
+      - "pin"    = PIN comandi errato / anti-lockout / PIN mancante → riconfigurare il PIN
+                   (Repair issue fixabile / Configura → Riconfigura). NON è un problema di
+                   sessione: il token è valido, i sensori funzionano.
+      - "reauth" = sessione/token scaduti (login fallito, code A00000) → riautenticazione
+                   nativa HA (nuovo OTP). L'OTP NON cambia il PIN: i due canali sono distinti.
+      - "config" = rifiuto NON imputabile al PIN né alla sessione (permessi veicolo, richiesta
+                   malformata, conio taskId disattivato): nessun rimedio automatico, solo
+                   avviso. Non apre il Repair PIN e non conta per l'anti-lockout.
+      - None     = altro rifiuto dell'auto (occupata, non consentito, a riposo): solo avviso."""
+
+    def __init__(self, message: str, code: str | None = None, reason: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.reason = reason
+        self.retryable = code in RETRYABLE_CODES
+
+# H6/P0-1/P2-3 anti-lockout: stop dopo N checkPassword falliti consecutivi entro una
+# finestra, per non far scattare il blocco PIN dell'ACCOUNT Chery (ogni PIN sbagliato
+# incrementa gli errori lato loro, e quel blocco non si risolve da Home Assistant).
+#
+# Lo stato e il suo lock vivono ora dentro `PinLockout` (core/pin_lockout.py): l'unico
+# modo di coniare è `attempt()`, che serializza guardia + POST + aggiornamento del
+# contatore. Prima erano un dizionario e un lock separati, e bastava prendere il lock
+# troppo tardi per riaprire la corsa P0-1.
+# P2-6: il contatore vive in `ctx.lockout` — uno per veicolo. Prima era di processo:
+# con due auto configurate gli errori PIN dell'una avrebbero bloccato i comandi dell'altra.
+#
+# Conii SOVRAPPOSTI: contatore d'ingresso tenuto FUORI dal lock dell'anti-lockout,
+# altrimenti vedrebbe sempre 1 (il lock serializza). Se all'ingresso risulta >1, un
+# secondo thread sta aspettando il lock proprio ora: è la corsa P0-1 vista dal vivo.
+_MINT_INFLIGHT = {"n": 0}
+_MINT_INFLIGHT_LOCK = threading.Lock()
+# P1-2/P2-5 — la classificazione di checkPassword PER CODICE vive ora in `routing.py`
+# (tabella unica). Prima era «tutto ciò che non dà un taskId = PIN errato», che è falso e
+# fa due danni: propone il rimedio sbagliato all'utente e conta verso l'anti-lockout un
+# errore che col PIN non c'entra nulla.
+
+
+def reset_pin_lockout(ctx) -> None:
+    """Azzera il contatore anti-lockout dei PIN errati (e il taskId in cache).
+
+    Lo stato vive in memoria, non nel config entry: un semplice reload dell'entry (es.
+    dopo aver corretto il PIN) NON lo azzera, quindi senza questa chiamata i comandi
+    resterebbero bloccati fino allo scadere della finestra o a un riavvio di HA. Va
+    invocata a ogni riconfigurazione del PIN (config flow / Repair)."""
+    ctx.reset_pin_lockout()
+
+
+def _mint_taskid(ctx, tuid):
+    """Conia un taskId. A monitor spento è un passacarte diretto a `_mint_taskid_impl`.
+
+    A monitor acceso osserva DUE cose che dal log non si vedono: i conii concorrenti
+    (`pin_fail_concurrent`, la corsa che avvicina il lockout dell'account) e l'esito reale
+    di checkPassword con il codice GREZZO del backend — l'unico modo per distinguere un
+    PIN davvero errato da un rifiuto per permessi/parametri. Il PIN non viene mai
+    registrato, in nessuna forma."""
+    if ctx.diag_hook is None:
+        return _mint_taskid_impl(ctx, tuid)
+    with _MINT_INFLIGHT_LOCK:
+        _MINT_INFLIGHT["n"] += 1
+        inflight = _MINT_INFLIGHT["n"]
+    if inflight > 1:
+        ctx.diag("pin_fail_concurrent", inflight=inflight)
+    try:
+        tid = _mint_taskid_impl(ctx, tuid)
+        ctx.diag("pin_event", outcome="ok", pin_fail_n=ctx.lockout.tentativi_falliti)
+        return tid
+    except CommandError as err:
+        # "fail" = il backend ha risposto e ha rifiutato; "empty" = PIN non configurato;
+        # "blocked" = anti-lockout scattato. Gli ultimi due NON hanno interrogato il
+        # backend: distinguerli conta, perché solo "fail" avvicina il lockout dell'account.
+        # Si classifica sul marcatore nel messaggio, non sulla presenza del codice: un
+        # rifiuto può arrivare anche senza codice, e finirebbe scambiato per un blocco.
+        code = getattr(err, "code", None)
+        if "checkPassword" in str(err):
+            outcome = "fail"
+        elif not (ctx.pin or "").strip():
+            outcome = "empty"
+        else:
+            outcome = "blocked"
+        ctx.diag("pin_event", outcome=outcome, reason=getattr(err, "reason", None), cp_code=code,
+                 pin_fail_n=ctx.lockout.tentativi_falliti,
+                 pin_fail_max=ctx.lockout.max_fail)
+        raise
+    except Exception as err:  # noqa: BLE001 — il monitor osserva, non altera il flusso
+        ctx.diag("pin_event", outcome="error", err_type=type(err).__name__)
+        raise
+    finally:
+        with _MINT_INFLIGHT_LOCK:
+            _MINT_INFLIGHT["n"] -= 1
+
+
+def _mint_taskid_impl(ctx, tuid):
+    """Conia un taskId con la catena BFF dell'app (queryList→setVecDefault→checkPassword).
+       FIX S26 (2026-06-20): scene=0 (NON 2) → il taskId coniato è benedetto da tspconsole
+       (airControl A00079). scene=2 dava A00089; scene=1 A00089; scene>=3 A00546. Obiettivo #1 RISOLTO.
+
+       H6: rifiuta il conio se il PIN è vuoto (NON chiama checkPassword a vuoto) e si
+       auto-blocca dopo troppi PIN errati consecutivi per evitare il lockout account.
+
+       Su fallimento solleva SEMPRE CommandError con `reason` ("pin" o "reauth") così il
+       coordinator può instradare il rimedio giusto (riconfig PIN vs riautenticazione)."""
+    # PIN mancante: si fallisce PRIMA di entrare nell'anti-lockout. Un PIN non configurato
+    # non è un tentativo errato — non deve consumare la soglia né toccare il backend.
+    if not (ctx.pin or "").strip():
+        raise CommandError(
+            "PIN comandi non configurato — impostalo nelle impostazioni dell'integrazione",
+            reason="pin")
+
+    # P2-3: `attempt()` prende il lock, applica la guardia e lo tiene per tutta la chiamata
+    # di rete. È l'unico modo di coniare: la corsa P0-1 non è più esprimibile.
+    try:
+        with ctx.lockout.attempt() as tentativo:
+            return _checkpassword(ctx, tuid, tentativo)
+    except PinLockedError as bloccato:
+        raise CommandError(
+            f"PIN comandi bloccato temporaneamente ({bloccato.tentativi} tentativi errati) — "
+            "riconfigura il PIN nelle impostazioni dell'integrazione, poi riprova",
+            reason="pin") from None
+
+
+def _checkpassword(ctx, tuid, tentativo):
+    """Catena BFF vera e propria. Gira col lock dell'anti-lockout già preso; dichiara
+    l'esito su `tentativo` SOLO quando è davvero attribuibile al PIN."""
+    import requests
+    access = wake._access_token(ctx)
+    extra = {"Authorization": f"Bearer {access}",
+             "Content-Type": "application/json; charset=UTF-8",
+             "Accept": "application/json, text/plain, */*"}
+
+    def bff(path, body):
+        H = A.headers_post(path, extra=extra, ctx=ctx)
+        r = requests.post(ctx.bff + path, data=json.dumps(body), headers=H, timeout=25)
+        try:
+            j = r.json()
+        except Exception:
+            return {"_raw": r.text[:200]}
+        # MED: il BFF può restituire un top-level non-dict (stringa) → normalizza a {}
+        return j if isinstance(j, dict) else {}
+
+    bff("/tsp/v1/app/vmc/queryList", {})
+    bff("/tsp/v1/app/vmc/setVecDefault", {"vin": ctx.vin})
+    plain = hashlib.md5(ctx.pin.encode()).hexdigest()
+    password = A.sm4_code(plain, "padRight32")
+    j = bff("/tsp/v1/app/cpm/checkPassword",
+            {"vin": ctx.vin, "tUserId": str(tuid), "channelId": ctx.channel_id,
+             "password": password, "needDecode": 0, "scene": 0, "type": 0})
+    data = j.get("data") if isinstance(j.get("data"), dict) else {}
+    tid = data.get("taskId") or j.get("taskId")
+    if tid:
+        tentativo.riuscito()      # il PIN è corretto → la soglia riparte da zero
+        return tid
+
+    # nessun taskId: distinguo la CAUSA per instradare il rimedio giusto.
+    code = j.get("code")
+    # DIAGNOSTICA (2026-07-06): il codice/messaggio GREZZO di checkPassword è l'UNICO modo per
+    # sapere se è davvero un PIN errato o un'altra causa (permessi veicolo, parametri scene/
+    # channelId, backend). Finora NON veniva loggato → dal log l'anti-lockout diceva solo "PIN
+    # errati", che è la nostra INFERENZA. Ora logghiamo code + message reali (campi non sensibili).
+    cp_msg = str(j.get("message") or j.get("msg") or "").strip()
+    detail = f"code={code}" + (f" '{cp_msg[:100]}'" if cp_msg else "")
+    _LOGGER.warning("[taskId] checkPassword NON ha restituito un taskId → %s "
+                    "(risposta backend grezza; se non è un PIN errato la causa è qui)", detail)
+
+    # P2-5: un'unica interrogazione alla tabella decide rimedio E se contare per il blocco.
+    # Prima erano due `if` su insiemi separati più un ramo di default: tre punti da tenere
+    # allineati a mano, ed è lì che la classificazione era andata storta.
+    esito = routing.classifica(code, routing.CONTESTO_CHECKPASSWORD)
+    if esito.conta_lockout:
+        tentativo.fallito()
+    raise CommandError(_messaggio_checkpassword(esito, detail),
+                       code=str(code) if code else None, reason=esito.reason)
+
+
+def _messaggio_checkpassword(esito, detail: str) -> str:
+    """Messaggio per l'utente, coerente col rimedio che verrà proposto.
+
+    Separato dalla decisione di proposito (regola H7): il testo si può riscrivere o
+    tradurre senza toccare l'instradamento, e viceversa."""
+    if esito.reason == routing.REASON_REAUTH:
+        return (f"Sessione scaduta [checkPassword {detail}] — riautentica dall'avviso di "
+                "Home Assistant (nuovo codice OTP)")
+    if esito.reason == routing.REASON_CONFIG:
+        # Bilingue: è un messaggio d'errore mostrato all'utente e l'integrazione è usata
+        # anche fuori dall'Italia. Qui non c'è il limite dei 255 caratteri degli stati.
+        return (f"Comando rifiutato dal backend [checkPassword {detail}] — non è il PIN: "
+                "l'account non ha il permesso su questa auto oppure la richiesta è stata "
+                "respinta. Riprova più tardi; se persiste servono i log. · "
+                "Rejected by the backend — this is not your PIN: the account lacks "
+                "permission for this function on this vehicle, or the request was refused. "
+                "Try again later; if it persists, logs are needed.")
+    return (f"PIN comandi rifiutato dal backend [checkPassword {detail}] — riconfiguralo "
+            "nelle impostazioni dell'integrazione")
+
+
+# Cache in memoria del taskId. Coniarlo significa fare tutto il giro di checkPassword (PIN):
+# è la parte LENTA di ogni comando. Il taskId però resta valido per un po' → lo riusiamo e lo
+# riconiamo solo quando l'auto lo rifiuta (TASKID_INVALID) o scade il TTL. Così la maggior parte
+# dei comandi diventa una sola POST firmata invece di PIN + POST.
+# P2-6: la cache vive in `ctx.stato` — il taskId è legato al PIN e al VIN, quindi non è
+# condivisibile fra veicoli (prima lo era, ed era un comando verso l'auto sbagliata).
+
+# Codici con cui l'auto dice "questo taskId non va bene" → si riconia e si riprova una
+# volta. P2-5: derivato dalla tabella unica, non più un elenco parallelo.
+TASKID_INVALID = routing.TASKID_INVALID
+
+
+def invalidate_taskid(ctx):
+    """Butta il taskId in cache (l'auto lo ha rifiutato come non valido/scaduto)."""
+    ctx.invalidate_taskid()
+
+
+def get_taskid(ctx, tuid, emit=lambda m: None, force_mint=False):
+    """Sorgente taskId, in ordine: file piggyback → cache → checkPassword coniato.
+    `force_mint=True` salta file/cache e ne conia uno nuovo (usato al retry dopo un rifiuto:
+    ripescare la stessa sorgente rifiutata darebbe di nuovo lo stesso errore)."""
+    if not force_mint:
+        try:
+            if os.path.exists(ctx.taskid_file):
+                with open(ctx.taskid_file) as fh:
+                    v = fh.read().strip()
+                if v:
+                    return v, "file"
+        except OSError:
+            pass
+        if ctx.stato.taskid and (time.time() - ctx.stato.taskid_ts) < ctx.taskid_ttl:
+            return ctx.stato.taskid, "cache"
+    if ctx.mint_taskid:
+        emit("conio taskId (checkPassword)…")
+        try:
+            tid = _mint_taskid(ctx, tuid)
+        except CommandError as e:
+            # PIN errato / anti-lockout / sessione: pubblica il dettaglio e PROPAGA (non più
+            # inghiottito) → send() lo lascia salire col suo `reason` per il routing del rimedio.
+            emit(str(e))
+            raise
+        except Exception as e:  # noqa: BLE001 — errore imprevisto del conio → PIN generico
+            emit(f"checkPassword fallito: {e}")
+            raise CommandError(
+                "PIN comandi non verificabile — riconfiguralo nelle impostazioni "
+                f"dell'integrazione ({e})", reason="pin") from e
+        if tid:
+            ctx.stato.taskid = tid
+            ctx.stato.taskid_ts = time.time()
+            return tid, "checkPassword"
+    return None, "none"
+
+
+# Nomi leggibili dei campi che la potatura può togliere: servono a dire all'utente COSA non è
+# stato fatto. Corti di proposito (finiscono in uno stato Home Assistant, tetto 255 caratteri).
+NOMI_CAMPO = {
+    "steerWheelHeatSwitch": "volante", "frontWindshieldHeat": "parabrezza",
+    "backDefrosting": "lunotto", "airPurControlType": "purificatore",
+    "frontDefrosting": "disappannamento",
+    "mSeatHeating": "sedile guida", "pSeatHeating": "sedile passeggero",
+    "blSeatHeating": "sedile post. SX", "brSeatHeating": "sedile post. DX",
+    "mSeatAiry": "aria sedile guida", "pSeatAiry": "aria sedile passeggero",
+    "blSeatAiry": "aria sedile post. SX", "brSeatAiry": "aria sedile post. DX",
+}
+
+
+def nomi_saltati(saltati) -> str:
+    """Elenco leggibile dei campi potati, per la riga di avanzamento."""
+    return ", ".join(NOMI_CAMPO.get(c, c) for c in saltati)
+
+
+def _coda_saltati(saltati, lunghezza: int, tetto: int = 255) -> str:
+    """Coda bilingue da accodare all'esito, **solo se ci sta**.
+
+    Lo stato di `sensor.omoda9_esito_comando` è troncato a 255 (`coordinator.py`): una coda che
+    non entra verrebbe tagliata a metà parola, che è peggio del non dirla. Quindi o entra
+    intera o non si mette (il dettaglio è comunque già passato dalla riga di avanzamento)."""
+    coda = (f" · saltate {len(saltati)} funzioni non autorizzate su questa auto · "
+            f"{len(saltati)} skipped (not authorised)")
+    return coda if lunghezza + len(coda) <= tetto else ""
+
+
+# ── adattamento alla scheda tecnica della vettura (`queryList`) ──────────────────────────
+# Fino alla v1.12.1 le macro «Raffredda tutto»/«Riscalda tutto» spedivano 15.0 e 31.0 e tutte
+# le durate erano 15: sono i valori dell'Omoda 9, cablati come se valessero per tutti. Il
+# backend li dichiara per-veicolo in `queryList` — risposta che leggiamo già, quindi il costo
+# è zero. Regola invariata in tutto il componente: si cambia qualcosa SOLO quando il backend
+# dichiara; se tace, si spedisce esattamente ciò che si spediva prima.
+_ESTREMO_PER_ENDPOINT = {"coolingControl": "clima_lo", "heatingControl": "clima_hi"}
+
+
+def adatta_capability(endpoint, body: dict, caps: dict | None) -> dict:
+    """Sostituisce nel corpo gli estremi del clima con quelli dichiarati dalla vettura.
+
+    Vale solo per `coolingControl`/`heatingControl`, che sono le macro «il massimo che
+    quest'auto sa fare»: lì `temperature` NON è una scelta dell'utente ma la posizione LO/HI.
+    `airControl` (l'interruttore del clima) è escluso di proposito — la sua temperatura è
+    parametrica e la decide l'utente dalla card."""
+    chiave = _ESTREMO_PER_ENDPOINT.get(endpoint)
+    if not chiave or not caps or "temperature" not in body:
+        return body
+    valore = caps.get(chiave)
+    if valore is None:
+        return body
+    try:
+        body["temperature"] = f"{float(valore):.1f}"
+    except (TypeError, ValueError):
+        pass
+    return body
+
+
+def durata_ammessa(minuti, durate) -> int | None:
+    """La durata da spedire davvero, dato l'insieme che la vettura ammette.
+
+    `maxAirDuration` è un **insieme** ("5,10,15"), non un massimo, malgrado il nome: chiedere
+    15 minuti a una vettura che ammette solo 5 e 10 non è chiedere «tanto», è spedire un
+    valore invalido. Si prende il più grande valore ammesso che non supera quello richiesto;
+    se sono tutti più grandi (si è chiesto meno del minimo) si prende il più piccolo, perché
+    non spedire non è un'opzione: l'utente ha premuto un pulsante.
+
+    Ritorna `None` quando non c'è nulla da correggere — nessuna dichiarazione, valore già
+    ammesso, o richiesta illeggibile — così chi chiama distingue «va bene così» da «cambiato»."""
+    if not durate:
+        return None
+    try:
+        voluta = int(float(minuti))
+    except (TypeError, ValueError):
+        return None
+    if voluta in durate:
+        return None
+    minori = [d for d in durate if d <= voluta]
+    return max(minori) if minori else min(durate)
+
+
+# `maxAirDuration` è la durata dell'**aria**: vale per il climatizzatore, non per tutto ciò
+# che ha un timer. Il campo `times` compare anche su `seatControl` (8 comandi), sulla
+# resistenza del parabrezza e su quella del lunotto: sono durate di riscaldatori elettrici,
+# che la scheda non governa con questo campo (ne ha altri, es. `maxEngineDuration`).
+# Correggerle contro l'insieme dell'aria accorcerebbe il sedile riscaldato per una regola
+# che non lo riguarda — invisibile sull'Omoda 9 (tutto 15), sbagliato su un'altra vettura.
+_ENDPOINT_ARIA = ("airControl", "coolingControl", "heatingControl")
+
+
+def _adatta_durata(endpoint, body: dict, caps: dict | None, emit=lambda m: None) -> None:
+    """Riporta la durata del clima dentro l'insieme ammesso. Modifica il corpo sul posto.
+
+    Due nomi per la stessa grandezza: `airControl` usa `times`, le macro cooling/heating
+    usano `duration` (ricostruito 1:1 dagli envelope dell'app).
+
+    La correzione si **dichiara**. Il cursore «Durata clima» arriva a 30 minuti mentre
+    l'Omoda 9 ne ammette 5, 10 o 15: chi imposta 30 vedrebbe 30 nell'interfaccia e l'auto
+    ne riceverebbe 15. Tutti gli altri adattamenti del componente (`permessi.adatta`) dicono
+    all'utente cosa hanno cambiato; tacere qui sarebbe l'unica eccezione, e la meno
+    giustificabile — è un numero che l'utente ha scelto con le sue mani.
+
+    ⚠️ Un solo chiamante NON deve dichiarare, e per la stessa ragione: il corpo costruito dal
+    ripiego su `airControl` (`permessi.BASE_AIRCONTROL`) porta un `times` di comodo che
+    **abbiamo messo noi**, non l'utente. Annunciarne la correzione direbbe «la durata di 15
+    minuti che hai chiesto non è ammessa» a chi ha premuto «Sedile guida riscaldato» e non ha
+    mai visto un cursore della durata — cioè esattamente il tipo di messaggio incongruo che
+    questa versione sta togliendo di mezzo altrove. Lì si chiama senza `emit` (vedi `send`)."""
+    durate = (caps or {}).get("durate_aria")
+    if not durate or endpoint not in _ENDPOINT_ARIA:
+        return
+    for chiave in ("times", "duration"):
+        if chiave in body:
+            voluta = body[chiave]
+            corretta = durata_ammessa(voluta, durate)
+            if corretta is not None:
+                body[chiave] = str(corretta)
+                emit(f"durata {voluta}′ non ammessa da questa vettura "
+                     f"({'/'.join(str(d) for d in durate)}′) → uso {corretta}′")
+
+
+def _limita_temperatura(body: dict, caps: dict | None) -> None:
+    """Riporta la temperatura dentro il range che la vettura dichiara di accettare. Sul posto.
+
+    Serve **solo** al corpo costruito dal ripiego su `airControl`, che porta il 21.0 di comodo
+    di `permessi.BASE_AIRCONTROL` perché quel modulo non conosce la scheda tecnica della
+    vettura. Su un'auto il cui clima parte da 22 °C, quel 21.0 è un valore che la vettura
+    dichiara di non ammettere, e nessuno l'ha scelto.
+
+    `adatta_capability` non può coprire questo caso e non va chiamata al suo posto: lavora sui
+    soli `coolingControl`/`heatingControl`, dove `temperature` È la posizione LO/HI della macro,
+    ed esclude `airControl` di proposito perché lì il valore lo sceglie l'utente dalla card.
+    Qui invece nessun utente ha scelto niente — il valore l'abbiamo messo noi, e per questo lo
+    correggiamo in silenzio.
+
+    ⚠️ L'intervallo giusto è `clima_min`/`clima_max` (la temperatura IMPOSTABILE), **non**
+    `clima_lo`/`clima_hi`. La prima stesura usava questi ultimi e sembrava funzionare, ma non
+    curava il caso che questa docstring stessa porta a esempio: LO/HI sono le posizioni estreme,
+    che stanno FUORI dal range impostabile — quando il range è dichiarato,
+    `const.capabilities_from_item` scarta la coppia se non è così (`lo <= min` e `hi >= max`;
+    senza range dichiarato non c'è alcun controllo di coerenza). Su un'auto che parte da 22 °C
+    con LO a 16, il 21.0 cadeva dentro 16-…, restava intatto e nessun test se ne accorgeva —
+    perché il test dichiarava un LO/HI stretto che nessuna vettura vera produrrebbe.
+    LO/HI resta un ripiego utile quando il range non è dichiarato: è un vincolo più largo, ma
+    sono pur sempre valori che quella vettura dice di accettare. ⚠️ Più largo davvero: su una
+    richiesta `airControl` parametrica potrebbe portare la temperatura a LO o HI, che sono
+    posizioni estreme e non setpoint. Serve `21.0` fuori da LO..HI, quindi oggi non capita su
+    nessuna scheda plausibile; se capitasse, è il caso in cui il ripiego allarga proprio il
+    vincolo che questa funzione esiste per far rispettare.
+
+    Se la vettura non dichiara nulla non si tocca niente: è la regola invariata di tutto il
+    componente."""
+    caps = caps or {}
+    if "temperature" not in body:
+        return
+    for chiave_bassa, chiave_alta in (("clima_min", "clima_max"), ("clima_lo", "clima_hi")):
+        basso, alto = caps.get(chiave_bassa), caps.get(chiave_alta)
+        if basso is None or alto is None:
+            continue
+        try:
+            valore, basso, alto = float(body["temperature"]), float(basso), float(alto)
+        except (TypeError, ValueError):
+            return
+        if basso > alto:             # scheda incoerente: meglio non inventare un intervallo
+            return
+        corretta = min(max(valore, basso), alto)
+        if corretta != valore:
+            body["temperature"] = f"{corretta:.1f}"
+        return
+
+
+def _setpoint_da_posizione(body: dict, caps: dict | None) -> None:
+    """Da posizione estrema (LO/HI) a temperatura IMPOSTABILE. Modifica il corpo sul posto.
+
+    Serve **solo** al corpo che nasce dalla ricomposizione di una macro (`permessi.ricomponi`),
+    dove la stessa chiave cambia significato attraversando la porta: nella macro `temperature` è
+    la posizione LO — «il massimo freddo che quest'auto sa fare», che per costruzione sta FUORI
+    dall'intervallo impostabile — mentre su `airControl` è un setpoint, cioè un valore che deve
+    starci dentro.
+
+    ⚠️ Non basta `_limita_temperatura`, ed è un errore in cui si cade leggendo il suo nome. Quella
+    prova prima l'intervallo impostabile e poi ripiega su LO/HI, e **su questo percorso il ripiego
+    è un no-op garantito**: il valore in ingresso *è* LO, quindi appartiene sempre a LO..HI. Due
+    forme di scheda molto comuni scivolavano quindi attraverso il controllo intatte:
+      * scheda assente (`caps` vuoto) ⇒ partiva il `15.0` **cablato per l'Omoda 9**;
+      * vettura che dichiara solo gli estremi e non il range ⇒ partiva il suo LO (anche `12.0`).
+    In entrambi i casi «Raffredda tutto» spediva una temperatura che il componente stesso, dalla
+    card del clima, non lascerebbe impostare. Il corpo **misurato** che il backend accetta porta
+    `16.0`, non `15.0` (issue #1, 2026-08-11).
+
+    ⚠️ Qui, unico punto del componente, si usa un valore di ripiego quando la vettura non dichiara
+    nulla — altrove la regola è «se il backend tace non si tocca niente». La differenza è che il
+    valore da correggere **non l'ha scelto nessuno**: è una posizione che abbiamo spostato noi in
+    un campo che vuole altro. Il ripiego non è inventato: è lo stesso intervallo che la card del
+    clima offre all'utente su una vettura che non dichiara il proprio (`const.CLIMA_*_DEFAULT`).
+    Sull'Omoda 9 questa funzione non gira mai: lì la macro non viene ricomposta."""
+    if "temperature" not in body:
+        return
+    # Import pigro: `const` è puro dato (zero import, zero riferimenti a Home Assistant), ma
+    # tenerlo qui evita di legare l'import di `core/` all'inizializzazione del pacchetto.
+    from ..const import CLIMA_MAX_DEFAULT, CLIMA_MIN_DEFAULT
+
+    caps = caps or {}
+    try:
+        valore = float(body["temperature"])
+        basso = float(caps.get("clima_min", CLIMA_MIN_DEFAULT))
+        alto = float(caps.get("clima_max", CLIMA_MAX_DEFAULT))
+    except (TypeError, ValueError):
+        return
+    if basso > alto:                 # scheda incoerente: meglio non inventare un intervallo
+        return
+    corretta = min(max(valore, basso), alto)
+    if corretta != valore:
+        body["temperature"] = f"{corretta:.1f}"
+
+
+def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
+    """Invia un comando. emit(str) riceve i passaggi (per pubblicarli su HA).
+       `params` (opzionale) = override/aggiunte al body del catalogo PRIMA dei campi
+       comuni → permette i comandi parametrici (clima: temperature/times; ricarica
+       immediata: controlType; ricarica programmata: mainSwitch + chargeAppointPlans).
+       I campi di sistema (clientType/seq/taskId/vin) restano sempre quelli coniati qui.
+       Ritorna una stringa-esito leggibile.
+
+       `avvisa(str)` è un SECONDO canale, per i soli messaggi che l'utente deve poter
+       **leggere**: una durata corretta, un campo saltato perché non autorizzato, un rifiuto
+       già annunciato. Esiste perché `emit` da solo non bastava a farli arrivare: chi lo
+       ascolta pubblica ogni passaggio sullo stesso stato di Home Assistant, quindi il
+       messaggio successivo — che arriva pochi millisecondi dopo — copre il precedente.
+       Misurato sul campo il 2026-08-10: «durata 25′ non ammessa → uso 15′» è rimasto
+       leggibile **12 millisecondi** prima di sparire sotto «invio Clima acceso…». Gli avvisi
+       passano da entrambi i canali (il chiamante inoltra ad `emit`), ma chi ascolta `avvisa`
+       può conservarli e riattaccarli all'esito finale, che è l'unica riga che resta.
+       Predefinito = `emit`: chi non distingue i due canali si comporta esattamente come prima."""
+    if avvisa is None:
+        avvisa = emit
+    c = CMD_MAP.get(cmd_key)
+    if not c:
+        emit(f"comando sconosciuto: {cmd_key}")
+        raise CommandError(f"Comando sconosciuto: {cmd_key}")
+
+    token, tuid = wake._bff_login(ctx)
+    if not token:
+        emit("login fallito (token scaduto? rifare OTP ad app chiusa)")
+        raise CommandError(
+            "Sessione scaduta — riautentica dall'avviso di Home Assistant (nuovo codice OTP)",
+            reason="reauth")
+
+    # Lista permessi del veicolo: si legge UNA volta sola, qui, perché è l'unico punto in cui
+    # token e tUserId sono già in mano (nessun login in più, nessun OTP). Se non si ottiene si
+    # memorizza `{}` e non si ritenta: non sapere è una condizione normale che non cambia nulla.
+    if ctx.permessi is None:
+        ctx.permessi = permessi.leggi(ctx, token, tuid)
+
+    # Tentativo 1 col taskId riusato (veloce). Se l'auto lo rifiuta come non valido/scaduto,
+    # lo si riconia (checkPassword) e si riprova UNA volta sola.
+    for attempt in (1, 2):
+        # get_taskid propaga CommandError (PIN/anti-lockout/sessione) col suo `reason`.
+        taskid, src = get_taskid(ctx, tuid, emit, force_mint=(attempt == 2))
+        if not taskid:
+            # P1-2 (#30): nessun taskId MA nessuna eccezione = il conio è DISATTIVATO
+            # (OMODA_MINT_TASKID=0) e non c'era un taskId né in env né su file. Il PIN non
+            # c'entra: dire «PIN errato» mandava l'utente a riconfigurare un PIN sano.
+            emit("nessun taskId disponibile (conio disattivato)")
+            raise CommandError(
+                "Conio del taskId disattivato (OMODA_MINT_TASKID=0) e nessun taskId "
+                "disponibile: i comandi non possono partire. Riattiva il conio automatico "
+                "per usare i pulsanti.",
+                reason="config")
+
+        ts = int(time.time() * 1000)
+        # Estremi del clima presi dalla SCHEDA della vettura, non da costanti. Va fatto
+        # PRIMA di `params`, così un valore scelto dall'utente resta l'ultima parola.
+        body = adatta_capability(c.get("endpoint"), dict(c["body"]), ctx.caps)
+        if params:
+            body.update(params)    # override parametrico (temperatura/durata/controlType/piano)
+        # La durata invece si controlla DOPO: `maxAirDuration` è un insieme di valori ammessi,
+        # e un valore fuori insieme è invalido da chiunque arrivi — catalogo o utente.
+        _adatta_durata(c.get("endpoint"), body, ctx.caps, avvisa)
+
+        # ── adattamento al veicolo (permessi.py) ─────────────────────────────────────────
+        # Il backend valida il corpo campo per campo contro le voci figlie della categoria
+        # dell'endpoint chiamato (misurato: due A/B a variabile singola su due endpoint).
+        # Quindi: si sceglie la porta aperta su QUESTA auto e si tolgono i campi che non
+        # ammette, invece di far rifiutare tutto per un solo campo. Sull'Omoda 9, dove è tutto
+        # consentito, non cambia nulla.
+        #
+        # I comandi con `path` esplicito (antifurto) non hanno un corpo da potare né una porta
+        # alternativa — ma fino alla v1.11.1 saltavano anche l'AVVISO, e su un veicolo con la
+        # categoria sicurezza negata l'utente riceveva un `A00084` nudo: esattamente il caso che
+        # la v1.10.1 aveva appena finito di correggere per tutti gli altri comandi. Ora dichiarano
+        # la loro categoria in tabella e ricevono lo stesso avviso preventivo.
+        endpoint, saltati, nota = c.get("endpoint"), [], None
+        if c.get("path"):
+            if permessi.categoria_chiusa(c.get("categoria"), ctx.permessi or {}):
+                avvisa(f"{c['name']}: {permessi.MSG_CATEGORIA_NEGATA}")
+        elif endpoint:
+            endpoint, body, saltati, nota = permessi.adatta(endpoint, body, ctx.permessi or {})
+            if nota:
+                avvisa(f"{c['name']}: {nota}")
+            if saltati:
+                avvisa(f"{c['name']}: non autorizzate su questa auto, salto "
+                       f"{nomi_saltati(saltati)}")
+            # Il comando è condannato comunque: non c'è campo da togliere né porta alternativa, e
+            # il rifiuto che sta per arrivare NON è un difetto dell'integrazione. Dirlo prima
+            # evita che l'utente concluda «l'aggiornamento non ha funzionato».
+            # ⚠️ NON è un `elif` dei campi potati: i due fatti convivono. Sul veicolo dell'issue
+            # #1 la macro freddo pota quattro sedili E ha la categoria negata — dire solo «salto
+            # i sedili» gli fa credere che il clima partirà, e non parte.
+            if (avviso := permessi.verdetto(endpoint, ctx.permessi or {})):
+                avvisa(f"{c['name']}: {avviso}")
+
+            # ── il corpo di ripiego non ha mai visto la scheda della vettura ────────────────
+            # Quando l'instradamento cambia porta, il corpo non è più quello del catalogo: è
+            # `BASE_AIRCONTROL`, che porta una temperatura e una durata scelte da NOI perché
+            # `permessi.py` non conosce la scheda tecnica. Gli adattatori (`adatta_capability`
+            # e `_adatta_durata`, in cima al giro) sono già passati quando l'endpoint era
+            # ancora quello dedicato e questi due campi non c'erano: senza questo secondo giro
+            # si spedirebbero 21.0 e 15 — i valori dell'Omoda 9 — a una vettura che magari
+            # ammette solo 5 e 10 minuti e non scende sotto i 22 °C.
+            #
+            # ⚠️ `_adatta_durata` è chiamata SENZA `emit`, ed è deliberato: la sua correzione
+            # si dichiara quando il numero l'ha scelto l'utente, e qui non l'ha scelto nessuno.
+            # Annunciarla direbbe «la durata di 15′ che hai chiesto non è ammessa» a chi ha
+            # premuto il pulsante di un sedile.
+            # ⚠️ `adatta_capability` NON va aggiunta qui: è esclusa di proposito su
+            # `airControl`, che è l'unica destinazione possibile del ripiego — sarebbe una riga
+            # che non fa mai nulla. La temperatura la sistema `_limita_temperatura`.
+            if endpoint != c.get("endpoint"):
+                # ⚠️ Le due porte da cui si può arrivare qui portano una `temperature` di natura
+                # diversa e vanno curate in modo diverso. Dall'INSTRADAMENTO arriva il 21.0 di
+                # comodo di `BASE_AIRCONTROL`, che è già un setpoint: lo sistema
+                # `_limita_temperatura`. Dalla RICOMPOSIZIONE arriva la posizione LO della macro,
+                # che un setpoint non è — e che `_limita_temperatura` da sola lascia passare
+                # intatta, perché il suo ripiego su LO..HI contiene LO per costruzione.
+                if c.get("endpoint") in permessi.RICOMPONI:
+                    _setpoint_da_posizione(body, ctx.caps)
+                _limita_temperatura(body, ctx.caps)
+                _adatta_durata(endpoint, body, ctx.caps)
+
+            # Quello che NON sappiamo, detto solo al log. `times` somiglia alla voce 2044, ma
+            # somigliare non è mappare: il corpo non si tocca (vedi `permessi.SOSPETTI_NON_MAPPATI`).
+            for chiave, voce in permessi.sospetti(body, ctx.permessi or {}):
+                _LOGGER.debug("[permessi] %s: spedisco `%s` con la voce %s negata su questo "
+                              "veicolo (corrispondenza NON provata, nessuna potatura)",
+                              cmd_key, chiave, voce)
+
+        # Ciclo dei piani programmati: il backend valida anche la FORMA della lista dei giorni,
+        # non solo la presenza dei campi (misurato: `cycleData` [1,3,5] → A00084 sotto la voce
+        # 2131 negata, [1..7] → A00079 sotto la 2132 consentita). Qui non c'è potatura possibile:
+        # inventare giorni che l'utente non ha scelto sarebbe peggio del rifiuto. Si può però
+        # dire prima perché il rifiuto arriverà.
+        avviso_ciclo = permessi.ciclo_non_autorizzato(endpoint, body, ctx.permessi or {})
+        if avviso_ciclo:
+            avvisa(f"{c['name']}: {avviso_ciclo}")
+
+        url = ctx.tsp_host + (c.get("path") or ("/asc/vehicleControl/" + endpoint))
+
+        body.update({"clientType": "1", "seq": f"{ctx.vin}-{ts}",
+                     "taskId": taskid, "vin": ctx.vin})
+        m = tsp_sign.sign_body(body, ts)
+        payload = json.dumps(m, separators=(",", ":"), ensure_ascii=False).encode()
+        headers = {"Authorization": token, "timestamp": str(ts),
+                   "Content-Type": "application/json; charset=utf-8", "User-Agent": "okhttp/4.9.2"}
+        emit(f"invio {c['name']} (taskId:{src})…")
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                raw = resp.read().decode("utf-8", "replace")
+                status = resp.status
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8", "replace")
+            status = e.code
+        except Exception as e:
+            emit(f"errore rete: {e}")
+            raise CommandError(f"Errore di rete durante l'invio del comando: {e}")
+
+        code = None
+        try:
+            code = json.loads(raw).get("code")
+        except Exception:
+            pass
+
+        # P2-5: la tabella dice se il taskId è da rifare. Al primo giro si riconia e si
+        # riprova, così l'utente non vede un falso errore per un taskId semplicemente scaduto.
+        esito = routing.classifica(code, routing.CONTESTO_COMANDO)
+        if attempt == 1 and esito.riconia_taskid and ctx.mint_taskid:
+            invalidate_taskid(ctx)
+            emit("taskId non più valido → lo rinnovo e riprovo…")
+            continue
+        break
+
+    meaning = CODE_MEANING.get(code, raw[:120])
+    out = f"{c['name']}: HTTP {status} {code or ''} — {meaning}"
+    # Una macro che silenziosamente fa sei cose su sette è peggio di un errore: l'utente
+    # crede che il lunotto si stia sbrinando. Se abbiamo potato, si dice cosa manca.
+    # ⚠️ Il testo finisce nello stato di `sensor.omoda9_esito_comando`, e uno stato HA non può
+    # superare i 255 caratteri: oltre il limite l'entità si rompe. Si accodano al massimo due
+    # nomi di campo e poi si conta, e comunque si tronca (vedi `_coda_saltati`).
+    if saltati:
+        out += _coda_saltati(saltati, len(out))
+    emit(out)
+    # Esito reale dal `code` (il backend risponde sempre HTTP 200). Un fallimento noto =
+    # comando NON eseguito → CommandError, così le entità ottimistiche annullano lo stato
+    # invece di mostrare un finto successo. I codici sconosciuti restano non bloccanti per
+    # prudenza: non si inventa un fallimento che il backend non ha dichiarato.
+    if esito.fallimento:
+        raise CommandError(out, code=esito.code, reason=esito.reason)
+    return out
+
+
+def query_theft_switch(ctx):
+    """Legge lo stato dell'antifurto (READ-ONLY, /act/theftAlarm/querySwitch).
+       Ritorna 1/0 (int) oppure None se non disponibile. NON usa taskId né attua nulla:
+       la risposta mette il valore sotto `body.theftAlarmSwitch`."""
+    token, _tuid = wake._bff_login(ctx)
+    if not token:
+        return None
+    try:
+        _status, j = wake._signed_post(ctx, token, "/act/theftAlarm/querySwitch",
+                                       {"vin": ctx.vin})
+    except Exception:
+        return None
+    if isinstance(j, dict):
+        body = j.get("body") if isinstance(j.get("body"), dict) else {}
+        v = body.get("theftAlarmSwitch")
+        if v is not None:
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+if __name__ == "__main__":
+    # Diagnostica: elenca i comandi (NON invia nulla).
+    for k, v in COMMANDS:
+        print(f"{k:22s} {(v.get('path') or v.get('endpoint','')):28s} {v['body']}")
