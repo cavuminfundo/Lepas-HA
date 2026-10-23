@@ -121,6 +121,9 @@ def test_il_package_pubblicabile_e_completo(tracciati):
         "custom_components/lepas/strings.json",
         "custom_components/lepas/translations/it.json",
         "custom_components/lepas/translations/en.json",
+        "custom_components/lepas/lovelace/lepas-card.js",
+        "custom_components/lepas/lovelace/lepas-hero.png",
+        "custom_components/lepas/brand/icon.png",
         "hacs.json", "README.md", "LICENSE", "CHANGELOG.md",
     ]
     mancanti = [r for r in richiesti if r not in tracciati]
