@@ -48,7 +48,7 @@ Code first. Then at most three short lines: what was skipped, when to add it. No
 Ad ogni `git commit` e `git push` su `main`, l'agente DEVE:
 1. Incrementare la versione SemVer (`patch` per fix/asset/refactoring, `minor` per nuove feature/entità) in modo sincronizzato in `custom_components/lepas/manifest.json`, `pyproject.toml` e `?v=<version>` in `custom_components/lepas/lovelace/lepas-card.js`.
 2. Compilare le note di rilascio in `CHANGELOG.md` subito sotto `## [Non rilasciato]` aggiungendo l'intestazione `## vX.Y.Z — YYYY-MM-DD` (con sezioni in inglese e italiano).
-3. Aggiornare e pushare il tag Git corrispondente (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`) oltre a `origin/main`.
+3. Aggiornare e pushare il tag Git corrispondente (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`) oltre a `origin/main`. Il push del tag attiva automaticamente `.github/workflows/release.yml` che estrae la sezione corrispondente da `CHANGELOG.md` e pubblica/aggiorna la GitHub Release con le relative note bilingue (con fallback manuale tramite `gh release create` se necessario).
 
 ---
 

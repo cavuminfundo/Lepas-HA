@@ -298,3 +298,17 @@ def test_zero_legacy_brand_references() -> None:
     assert not offenders, f"Found forbidden legacy brand references: {offenders}"
 
 
+def test_release_workflow_exists_and_extracts_changelog() -> None:
+    """Verify that .github/workflows/release.yml exists and is configured properly."""
+    workflow = Path(REPO) / ".github" / "workflows" / "release.yml"
+    assert workflow.is_file(), f"Workflow file not found: {workflow}"
+
+    content = workflow.read_text(encoding="utf-8")
+    assert "tags:" in content
+    assert "v[0-9]+.[0-9]+.[0-9]+" in content
+    assert "contents: write" in content
+    assert "CHANGELOG.md" in content
+    assert "gh release" in content
+
+
+

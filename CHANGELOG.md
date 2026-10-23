@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.15.2 — 2026-10-23
+
+### 🇬🇧 English
+
+- **Automated GitHub Release Workflow (`.github/workflows/release.yml`)**: Added continuous release automation triggered on SemVer version tags (`vX.Y.Z`). The workflow automatically verifies manifest version alignment, extracts bilingual release notes from `CHANGELOG.md`, and creates or updates GitHub Releases with notes for HACS.
+
+### 🇮🇹 Italiano
+
+- **Workflow di rilascio GitHub automatico (`.github/workflows/release.yml`)**: Aggiunta automazione di rilascio attivata dai tag di versione SemVer (`vX.Y.Z`). Il workflow verifica l'allineamento della versione nel manifest, estrae le note di rilascio bilingui da `CHANGELOG.md` e pubblica o aggiorna la GitHub Release con le note per HACS.
+
 ## v1.15.1 — 2026-10-23
 
 ### 🇬🇧 English
