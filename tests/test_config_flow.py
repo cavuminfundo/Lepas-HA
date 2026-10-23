@@ -11,15 +11,33 @@ import pytest
 from homeassistant import config_entries, data_entry_flow
 
 import fixtures as FX
-from custom_components.omoda9.const import (
-    CONF_EMAIL, CONF_PIN, CONF_VIN, CONF_PHONE, CONF_AREA_CODE, DOMAIN,
+from custom_components.lepas.config_flow import LepasConfigFlow
+from custom_components.lepas.const import (
+    CONF_AREA_CODE,
+    CONF_BFF,
+    CONF_CHANNEL_ID,
+    CONF_COUNTRY_ID,
+    CONF_EMAIL,
+    CONF_PASSWORD,
+    CONF_PHONE,
+    CONF_PIN,
+    CONF_PRESET,
+    CONF_TENANT_CODE,
+    CONF_VIN,
+    DEFAULT_PRESET,
+    DEFAULT_VEHICLE_NAME,
+    DEFAULTS,
+    DOMAIN,
+    PRESET_CUSTOM,
+    PRESET_LEPAS_EU,
+    PRESET_OMODA_JAECOO_EU,
 )
 
 
 @pytest.fixture
 def flusso_ok(monkeypatch):
     """Backend che coopera: OTP inviato, token coniato, un veicolo trovato."""
-    from custom_components.omoda9 import config_flow as cf
+    from custom_components.lepas import config_flow as cf
 
     monkeypatch.setattr(cf, "_send_otp", lambda hass, data: (True, "codice inviato"))
     monkeypatch.setattr(cf, "_mint_token", lambda hass, data, code: (True, "token ok"))
@@ -108,7 +126,7 @@ async def test_configurazione_via_telefono(hass, flusso_ok):
 async def test_invio_otp_fallito_resta_nel_primo_passo(hass, monkeypatch):
     """Se l'OTP non parte non si prosegue: chiedere un codice mai inviato manderebbe
     l'utente a cercare un'email che non arriverà."""
-    from custom_components.omoda9 import config_flow as cf
+    from custom_components.lepas import config_flow as cf
 
     monkeypatch.setattr(cf, "_send_otp", lambda hass, data: (False, "email.not.exists"))
     result = await _init_e_email(hass)
@@ -122,7 +140,7 @@ async def test_invio_otp_fallito_resta_nel_primo_passo(hass, monkeypatch):
 async def test_otp_errato_ripulisce_il_token_a_meta(hass, monkeypatch):
     """Un OTP rifiutato deve lasciare il disco pulito: un `pending_token` orfano
     verrebbe scambiato per una sessione valida al tentativo successivo."""
-    from custom_components.omoda9 import config_flow as cf
+    from custom_components.lepas import config_flow as cf
 
     pulizie = {"n": 0}
     monkeypatch.setattr(cf, "_send_otp", lambda hass, data: (True, ""))
@@ -251,7 +269,7 @@ async def test_pin_vuoto_rifiutato(hass, integrazione_avviata):
 async def test_repair_pin_sblocca_e_applica(hass, integrazione_avviata):
     """Il Repair è il rimedio che l'utente non tecnico incontra davvero: deve
     scrivere il nuovo PIN E azzerare il blocco, altrimenti "si aggiusta" solo in apparenza."""
-    from custom_components.omoda9 import repairs
+    from custom_components.lepas import repairs
 
     coord = hass.data[DOMAIN][integrazione_avviata.entry_id]
     _forza_blocco(coord)
@@ -275,7 +293,7 @@ async def test_repair_pin_sblocca_e_applica(hass, integrazione_avviata):
 
 async def test_repair_senza_entry_si_interrompe(hass):
     """Entry già rimosso mentre l'avviso era aperto: si abortisce senza esplodere."""
-    from custom_components.omoda9 import repairs
+    from custom_components.lepas import repairs
 
     flow = await repairs.async_create_fix_flow(hass, "pin_wrong_x",
                                                {"entry_id": "non_esiste"})
@@ -404,3 +422,101 @@ async def test_si_puo_inserire_un_codice_gia_in_mano(
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "enter_code"
     assert spia_otp["inviati"] == 0
+
+
+def test_domain_and_defaults_lepas():
+    """Verifica il dominio nativo lepas e i parametri predefiniti di connessione."""
+    assert DOMAIN == "lepas"
+    assert DEFAULT_VEHICLE_NAME == "Lepas"
+    assert PRESET_LEPAS_EU == "lepas_eu"
+    assert DEFAULT_PRESET == PRESET_LEPAS_EU
+    assert DEFAULTS[CONF_BFF] == "https://eu-lepas.cheryinternational.com/api"
+    assert DEFAULTS[CONF_TENANT_CODE] == "3000011"
+    assert DEFAULTS[CONF_CHANNEL_ID] == "1"
+    assert DEFAULTS[CONF_COUNTRY_ID] == "1"
+
+
+def test_apply_preset_lepas_eu():
+    """Verifica l'applicazione esplicita del preset Lepas Europe."""
+    flow = LepasConfigFlow()
+    data = {CONF_PRESET: PRESET_LEPAS_EU}
+    res = flow._apply_preset(data)
+    target = res if isinstance(res, dict) else data
+    assert CONF_PRESET not in target
+    assert target[CONF_BFF] == "https://eu-lepas.cheryinternational.com/api"
+    assert target[CONF_TENANT_CODE] == "3000011"
+    assert target[CONF_CHANNEL_ID] == "1"
+    assert target[CONF_COUNTRY_ID] == "1"
+
+
+def test_apply_preset_default_fallback():
+    """Verifica il fallback automatico su Lepas Europe in assenza di preset."""
+    flow = LepasConfigFlow()
+    data = {}
+    res = flow._apply_preset(data)
+    target = res if isinstance(res, dict) else data
+    assert CONF_PRESET not in target
+    assert target[CONF_BFF] == "https://eu-lepas.cheryinternational.com/api"
+    assert target[CONF_TENANT_CODE] == "3000011"
+    assert target[CONF_CHANNEL_ID] == "1"
+    assert target[CONF_COUNTRY_ID] == "1"
+
+
+def test_apply_preset_omoda_jaecoo_eu():
+    """Verifica il preset alternativo Omoda/Jaecoo Europe."""
+    flow = LepasConfigFlow()
+    data = {CONF_PRESET: PRESET_OMODA_JAECOO_EU}
+    res = flow._apply_preset(data)
+    target = res if isinstance(res, dict) else data
+    assert CONF_PRESET not in target
+    assert target[CONF_BFF] == "https://legend-oj.omodaauto.nl/api"
+    assert target[CONF_TENANT_CODE] == "300006"
+    assert target[CONF_CHANNEL_ID] == "1"
+    assert target[CONF_COUNTRY_ID] == "1"
+
+
+def test_apply_preset_custom():
+    """Verifica che i parametri custom non vengano sovrascritti."""
+    flow = LepasConfigFlow()
+    data = {
+        CONF_PRESET: PRESET_CUSTOM,
+        CONF_BFF: "https://custom-gateway.example.com/api",
+        CONF_TENANT_CODE: "999999",
+        CONF_CHANNEL_ID: "42",
+        CONF_COUNTRY_ID: "99",
+    }
+    res = flow._apply_preset(data)
+    target = res if isinstance(res, dict) else data
+    assert CONF_PRESET not in target
+    assert target[CONF_BFF] == "https://custom-gateway.example.com/api"
+    assert target[CONF_TENANT_CODE] == "999999"
+    assert target[CONF_CHANNEL_ID] == "42"
+    assert target[CONF_COUNTRY_ID] == "99"
+
+
+async def test_login_password_applica_preset_lepas(hass, flusso_ok, monkeypatch):
+    """Verifica che il login via password invochi _apply_preset garantendo i default Lepas."""
+    for fn_name in ("_login_password", "_login_with_password", "_login_pwd", "_auth_password"):
+        if hasattr(flusso_ok, fn_name):
+            monkeypatch.setattr(flusso_ok, fn_name, lambda h, d: (True, "token ok"))
+
+    flow = LepasConfigFlow()
+    flow.hass = hass
+    flow._data = {CONF_PRESET: PRESET_LEPAS_EU}
+
+    chiamate_apply = []
+    original_apply = flow._apply_preset
+
+    def spy_apply(data):
+        chiamate_apply.append(dict(data))
+        return original_apply(data)
+
+    monkeypatch.setattr(flow, "_apply_preset", spy_apply)
+
+    await flow.async_step_login_password(
+        {CONF_EMAIL: FX.EMAIL, CONF_PASSWORD: "secret_password"}
+    )
+    assert len(chiamate_apply) >= 1
+    assert flow._data.get(CONF_BFF) == "https://eu-lepas.cheryinternational.com/api"
+    assert flow._data.get(CONF_TENANT_CODE) == "3000011"
+

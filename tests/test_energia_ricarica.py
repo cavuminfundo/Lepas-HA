@@ -17,8 +17,8 @@ import datetime as dt
 
 import pytest
 
-from custom_components.omoda9 import sensor as S
-from custom_components.omoda9.const import CHARGE_ENERGY_MAX_GAP
+from custom_components.lepas import sensor as S
+from custom_components.lepas.const import CHARGE_ENERGY_MAX_GAP
 
 
 class _CoordFinto:
@@ -30,7 +30,7 @@ class _CoordFinto:
 
 def _contatore(home=True):
     """Istanza senza costruttore: qui interessa solo lo stato dell'integratore."""
-    e = object.__new__(S.Omoda9ChargedEnergy)
+    e = object.__new__(S.LepasChargedEnergy)
     e._home = home
     e._energia_wh = 0.0
     e._ultimo_ts = None

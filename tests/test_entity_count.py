@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.omoda9.const import (
+from custom_components.lepas.const import (
     COMMANDS_AS_RICH_ENTITY,
     FIELDS_AS_RICH_ENTITY,
     PLATFORMS,
@@ -25,12 +25,12 @@ from custom_components.omoda9.const import (
 # Ripartizione attesa, verificata dal vivo (v1.5.24, 2026-07-06 → 105 entità, 0 unavailable).
 # Modificare questi numeri è una DECISIONE: va fatto insieme al changelog e alle note.
 #
-# 2026-08-10 → 106: aggiunto `switch.chery_connect_windshield_defog` (disappannamento del
+# 2026-08-10 → 106: aggiunto `switch.lepas_windshield_defog` (disappannamento del
 # parabrezza dal clima, campo `fWinHeatingState`, voce di permesso 2045). È una entità IN PIÙ e
 # non una sostituzione: il campo NON è stato promosso a "ricco", proprio per non far sparire
-# `binary_sensor.chery_connect_windshield_heating` lasciando un orfano `unavailable`.
+# `binary_sensor.lepas_windshield_heating` lasciando un orfano `unavailable`.
 #
-# 2026-08-10 → 107: aggiunto `sensor.chery_connect_scheduled_departure`, lettura del piano di partenza
+# 2026-08-10 → 107: aggiunto `sensor.lepas_scheduled_departure`, lettura del piano di partenza
 # che l'auto ci manda già a ogni sonda (`appointmentTravelSetVOS`) e che finora buttavamo via.
 # Nessuna chiamata nuova verso il cloud: solo un campo che smettevamo di ignorare.
 ATTESO = {
@@ -68,9 +68,9 @@ ATTESO = {
 #    una voce di troppo; se non arrivasse, i due contatori vanno nel ramo BEV. Serve UN frame
 #    di sola lettura da un'auto attaccata alla spina.
 #
-# 110 -> 111 on 2026-10-02: `button.chery_connect_vent_sunroof` ("Vent sunroof", command
+# 110 -> 111 on 2026-10-02: `button.lepas_vent_sunroof` ("Vent sunroof", command
 # `tetto_ventila`, skylightControl controlType 2). A deliberate extra button, the sunroof
-# counterpart of `button.chery_connect_vent_windows`; the sunroof cover is unchanged.
+# counterpart of `button.lepas_vent_windows`; the sunroof cover is unchanged.
 TOTALE_ATTESO = 111
 
 
@@ -89,7 +89,7 @@ def test_ogni_piattaforma_e_coperta():
 # ───────────────────────── livello 1: aritmetica sulle liste sorgenti ─────────────────────────
 def test_sensori_da_campi_auto(core):
     """`SENSORS` filtrata per componente, meno i campi promossi a entità "ricche"."""
-    from custom_components.omoda9.coordinator import SENSORS
+    from custom_components.lepas.coordinator import SENSORS
 
     sensor = [s for s in SENSORS
               if s["comp"] == "sensor" and s["key"] not in FIELDS_AS_RICH_ENTITY]
@@ -104,7 +104,7 @@ def test_nessun_campo_ricco_orfano():
 
     Un refuso qui non darebbe errore: il filtro semplicemente non escluderebbe nulla e
     comparirebbe un sensore doppione accanto all'entità ricca."""
-    from custom_components.omoda9.coordinator import SENSORS
+    from custom_components.lepas.coordinator import SENSORS
 
     chiavi = {s["key"] for s in SENSORS}
     orfane = FIELDS_AS_RICH_ENTITY - chiavi
@@ -134,7 +134,7 @@ def test_campi_unita_non_diventano_sensori():
     """`rangeUnit`/`averageFuelUnit`/`tirePressureUnit` valgono SEMPRE "1": sono flag di
     unità di misura, non valori. Mapparli mostrerebbe un sensore fisso a 1 — errore già
     fatto una volta, quindi vale la pena bloccarlo."""
-    from custom_components.omoda9.coordinator import META
+    from custom_components.lepas.coordinator import META
 
     for flag in ("rangeUnit", "averageFuelUnit", "tirePressureUnit"):
         assert flag not in META, f"{flag} è un flag di unità, non deve diventare un sensore"
@@ -149,7 +149,7 @@ async def test_conteggio_entita_reale(hass, integrazione_avviata):
     conteggio: dict[str, int] = {}
     for entity_id in hass.states.async_entity_ids():
         dominio, _, oggetto = entity_id.partition(".")
-        if oggetto.startswith("chery_connect_"):
+        if oggetto.startswith("lepas_"):
             conteggio[dominio] = conteggio.get(dominio, 0) + 1
 
     differenze = {p: (conteggio.get(p, 0), ATTESO[p])

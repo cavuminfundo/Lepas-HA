@@ -3,7 +3,7 @@
 Dopo P2-2 `core/` è un sotto-pacchetto vero: basta un import normale. Prima serviva
 caricare ogni modulo dal file e fissarlo in `sys.modules` per nome nudo, perché i
 moduli si importavano fra loro con nomi generici (`import wake`) e non erano
-raggiungibili come `custom_components.omoda9.core.wake`.
+raggiungibili come `custom_components.lepas.core.wake`.
 
 L'indirezione resta perché è ciò che ha reso possibile il refactor: i test asseriscono
 sul COMPORTAMENTO e hanno attraversato il cambio di meccanismo di import senza che una
@@ -14,11 +14,11 @@ from __future__ import annotations
 import os
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-CORE_DIR = os.path.join(_HERE, "..", "custom_components", "omoda9", "core")
+CORE_DIR = os.path.join(_HERE, "..", "custom_components", "lepas", "core")
 
 _NOMI = (
-    "codes", "omoda", "omoda_auth", "tsp_sign", "captcha_solver", "prova_token",
-    "login_omoda", "wake", "session", "probe", "provision", "permessi", "commands",
+    "codes", "lepas", "lepas_auth", "tsp_sign", "captcha_solver", "prova_token",
+    "login_lepas", "wake", "session", "probe", "provision", "permessi", "commands",
 )
 
 
@@ -33,7 +33,14 @@ def load_core() -> dict:
     out: dict = {}
     for nome in _NOMI:
         try:
-            out[nome] = importlib.import_module(f"custom_components.omoda9.core.{nome}")
+            mod = importlib.import_module(f"custom_components.lepas.core.{nome}")
+            out[nome] = mod
         except ImportError:
             continue
+    if "lepas" in out:
+        out["omoda"] = out["lepas"]
+    if "lepas_auth" in out:
+        out["omoda_auth"] = out["lepas_auth"]
+    if "login_lepas" in out:
+        out["login_omoda"] = out["login_lepas"]
     return out

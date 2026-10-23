@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.omoda9.const import (
+from custom_components.lepas.const import (
     DATA_AIR_DURATIONS,
     DATA_CLIMATE_HI,
     DATA_CLIMATE_LO,
@@ -202,14 +202,14 @@ def test_durata_non_toccata_fuori_dal_clima(endpoint):
 # inventata e faceva spedire 16.0/30.0 al posto dei 15.0/31.0 di sempre. La suite era verde.
 def _coord_con(data: dict):
     """Il minimo per esercitare i metodi del coordinator senza avviare Home Assistant."""
-    from custom_components.omoda9.coordinator import Omoda9Coordinator
+    from custom_components.lepas.coordinator import LepasCoordinator
 
     c = type("C", (), {})()
     c.entry = type("E", (), {"data": data, "options": {}})()
-    c.climate_limits = lambda: Omoda9Coordinator.climate_limits(c)
-    c.climate_extremes = lambda: Omoda9Coordinator.climate_extremes(c)
-    c.air_durations = lambda: Omoda9Coordinator.air_durations(c)
-    c._caps_correnti = lambda: Omoda9Coordinator._caps_correnti(c)
+    c.climate_limits = lambda: LepasCoordinator.climate_limits(c)
+    c.climate_extremes = lambda: LepasCoordinator.climate_extremes(c)
+    c.air_durations = lambda: LepasCoordinator.air_durations(c)
+    c._caps_correnti = lambda: LepasCoordinator._caps_correnti(c)
     return c
 
 
@@ -313,7 +313,7 @@ def test_il_contesto_non_riceve_capability_inventate(tmp_path):
     revisione avversariale ha dimostrato il buco sostituendo il parametro `caps=` con dei
     valori assurdi: la suite restava **tutta verde**. Questo test esercita il costruttore
     vero, così quella mutazione non passa più."""
-    from custom_components.omoda9.coordinator import Omoda9Coordinator
+    from custom_components.lepas.coordinator import LepasCoordinator
 
     c = type("C", (), {})()
     c.entry = type("E", (), {"data": {}, "options": {}})()
@@ -325,9 +325,9 @@ def test_il_contesto_non_riceve_capability_inventate(tmp_path):
     c.language = "en-GB"   # il selettore lingua aggiunge ctx.language: il finto coordinator lo deve avere
     c.hass = type("H", (), {"config": type("Cf", (), {"path": staticmethod(str)})()})()
     for nome in ("climate_limits", "climate_extremes", "air_durations", "_caps_correnti"):
-        setattr(c, nome, (lambda n: lambda: getattr(Omoda9Coordinator, n)(c))(nome))
+        setattr(c, nome, (lambda n: lambda: getattr(LepasCoordinator, n)(c))(nome))
 
-    ctx = Omoda9Coordinator._build_ctx(c)
+    ctx = LepasCoordinator._build_ctx(c)
     assert ctx.caps == {}, (
         "senza dichiarazioni del backend il contesto non deve trasportare capability: "
         f"trovate {ctx.caps}")
@@ -336,5 +336,5 @@ def test_il_contesto_non_riceve_capability_inventate(tmp_path):
 def test_marcatore_versionato():
     """Se qualcuno aggiunge una capability senza aggiungere un marcatore, gli entry già
     installati non la leggeranno mai: hanno il marcatore vecchio e la lettura esce subito."""
-    from custom_components.omoda9.const import DATA_CAPS_PROBED, DATA_CAPS_PROBED_V2
+    from custom_components.lepas.const import DATA_CAPS_PROBED, DATA_CAPS_PROBED_V2
     assert DATA_CAPS_PROBED != DATA_CAPS_PROBED_V2

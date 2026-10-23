@@ -29,3 +29,10 @@
 ### 4. PII & Sensitive Telemetry Redaction
 - **VIN Handling**: The Vehicle Identification Number (VIN) is sensitive PII and a critical authorization identifier. All VINs must be redacted in diagnostics outputs (displaying only the last 4 characters, e.g., `***1234`) and excluded from debug logs.
 - **Geographic Data**: GPS coordinates (`latitude`, `longitude`) must be treated as sensitive user location data and masked in public diagnostics payloads.
+
+## 2026-10-23 — Entity Prefix Rebranding & Dual-Prefix Migration
+
+### 5. `ID_PREFIX = "lepas"` Alignment and Dual-Prefix Registry Migration
+- **Root Cause & Hazard**: When rebranding the domain from `omoda9` to `lepas`, changing `ID_PREFIX` in `naming.py` ensures all newly instantiated entities use `{platform}.lepas_{english_key}`. However, Home Assistant stores entity mappings in the Entity Registry (`er.EntityRegistry`) keyed by `unique_id`; without an active migration step, existing installations retain legacy `entity_id` values, while new installations receive the rebranded names, causing documentation divergence and breaking user automations.
+- **Dual-Prefix Traversal**: In `_async_migrate_entity_ids` (`custom_components/lepas/__init__.py`), the migration loop explicitly inspects both `f"{DOMAIN}_"` (`lepas_`) and `omoda9_` prefixes (`for prefix in (f"{DOMAIN}_", "omoda9_"):`) when extracting `old_key` to map against `ENGLISH_KEYS`. This guarantees clean migration whether an entity originated with Italian legacy names under `omoda9_` or under the intermediate domain transition.
+- **Collision & History Guard**: Renaming via `reg.async_update_entity(voce.entity_id, new_entity_id=nuovo)` preserves recorder history and long-term statistics. If `nuovo` already exists in `reg.entities`, the migration skips the rename with a warning rather than failing silently, preventing recorder history corruption.

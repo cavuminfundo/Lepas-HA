@@ -22,9 +22,9 @@ import tempfile
 import time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_DIAG_PY = os.path.join(_HERE, "..", "custom_components", "omoda9", "diag.py")
+_DIAG_PY = os.path.join(_HERE, "..", "custom_components", "lepas", "diag.py")
 
-_spec = importlib.util.spec_from_file_location("omoda9_diag", _DIAG_PY)
+_spec = importlib.util.spec_from_file_location("lepas_diag", _DIAG_PY)
 diag = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(diag)
 
@@ -267,7 +267,7 @@ def test_absent_switch_is_dormant():
 
 def _recorder() -> "diag.DiagRecorder":
     tmp = tempfile.mkdtemp()
-    return diag.DiagRecorder(os.path.join(tmp, "omoda9_TEST_diag.jsonl"),
+    return diag.DiagRecorder(os.path.join(tmp, "lepas_TEST_diag.jsonl"),
                              vin=VIN, email=EMAIL, until=time.time() + 3600)
 
 

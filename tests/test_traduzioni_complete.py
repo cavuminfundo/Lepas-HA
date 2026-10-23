@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-PKG = Path(__file__).resolve().parents[1] / "custom_components" / "omoda9"
+PKG = Path(__file__).resolve().parents[1] / "custom_components" / "lepas"
 FILES = {
     "strings.json": PKG / "strings.json",
     "translations/en.json": PKG / "translations" / "en.json",
@@ -78,10 +78,10 @@ STEP_CON_CAMPI_DI_REGIONE = ("login_email", "login_phone", "login_password")
 
 def _campi_di_regione() -> set[str]:
     """Le chiavi che `_region_fields()` mette davvero nel form, chieste al codice."""
-    from custom_components.omoda9.config_flow import Omoda9ConfigFlow
+    from custom_components.lepas.config_flow import LepasConfigFlow
 
     # `_region_fields` non tocca `self`: si puo' chiamare senza costruire il flow.
-    return {str(marcatore) for marcatore in Omoda9ConfigFlow._region_fields(None)}
+    return {str(marcatore) for marcatore in LepasConfigFlow._region_fields(None)}
 
 
 @pytest.mark.parametrize("step", STEP_CON_CAMPI_DI_REGIONE)

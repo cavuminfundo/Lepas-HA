@@ -61,7 +61,7 @@ def test_le_due_funzioni_restano_distinte(core):
 def test_nessun_pulsante_doppione(core):
     """I comandi di uno switch non devono generare anche due pulsanti: è il modo tipico in cui
     il conteggio delle entità cresce senza che nessuno se ne accorga."""
-    from custom_components.omoda9.const import COMMANDS_AS_RICH_ENTITY
+    from custom_components.lepas.const import COMMANDS_AS_RICH_ENTITY
 
     assert "disappanna_parabrezza" in COMMANDS_AS_RICH_ENTITY
     assert "disappanna_parabrezza_off" in COMMANDS_AS_RICH_ENTITY
@@ -70,24 +70,24 @@ def test_nessun_pulsante_doppione(core):
 def test_il_campo_di_stato_non_e_promosso_a_entita_ricca(core):
     """`fWinHeatingState` deve restare anche binary_sensor.
 
-    Promuoverlo farebbe sparire `binary_sensor.chery_connect_windshield_heating`, che esiste
+    Promuoverlo farebbe sparire `binary_sensor.lepas_windshield_heating`, che esiste
     dal giugno 2026: l'entità cambierebbe dominio, lo storico si spezzerebbe e nel registro
     resterebbe un orfano `unavailable` — cioè si romperebbe proprio l'invariante di salute
     («0 unavailable») per far quadrare quello del conteggio. Meglio un'entità in più."""
-    from custom_components.omoda9.const import FIELDS_AS_RICH_ENTITY
+    from custom_components.lepas.const import FIELDS_AS_RICH_ENTITY
 
     assert "fWinHeatingState" not in FIELDS_AS_RICH_ENTITY
 
 
 async def test_lo_switch_esiste_e_segue_lauto(hass, integrazione_avviata):
     """L'entità c'è, e il suo stato viene dal campo dell'auto, non da un'invenzione locale."""
-    stato = hass.states.get("switch.chery_connect_windshield_defog")
+    stato = hass.states.get("switch.lepas_windshield_defog")
     assert stato is not None, "lo switch del disappannamento non è stato creato"
 
 
 async def test_lo_switch_non_ruba_il_binary_sensor(hass, integrazione_avviata):
     """Le due entità devono convivere: quella nuova non sostituisce quella che c'era."""
-    assert hass.states.get("binary_sensor.chery_connect_windshield_heating") is not None
-    assert hass.states.get("switch.chery_connect_windshield_defog") is not None
+    assert hass.states.get("binary_sensor.lepas_windshield_heating") is not None
+    assert hass.states.get("switch.lepas_windshield_defog") is not None
     # e lo sbrinamento elettrico, che è un'altra funzione, resta al suo posto
-    assert hass.states.get("switch.chery_connect_windshield_defrost") is not None
+    assert hass.states.get("switch.lepas_windshield_defrost") is not None

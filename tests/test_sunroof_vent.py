@@ -13,12 +13,12 @@ from __future__ import annotations
 import pytest
 from homeassistant.components.cover import CoverEntityFeature
 
-from custom_components.omoda9 import coordinator as coord_mod
-from custom_components.omoda9.const import COMMANDS_AS_RICH_ENTITY
+from custom_components.lepas import coordinator as coord_mod
+from custom_components.lepas.const import COMMANDS_AS_RICH_ENTITY
 
-VENT_SUNROOF = "button.chery_connect_vent_sunroof"
-VENT_WINDOWS = "button.chery_connect_vent_windows"
-SUNROOF = "cover.chery_connect_sunroof"
+VENT_SUNROOF = "button.lepas_vent_sunroof"
+VENT_WINDOWS = "button.lepas_vent_windows"
+SUNROOF = "cover.lepas_sunroof"
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def sent(monkeypatch):
         keys.append(key)
         return "sent (test)"
 
-    monkeypatch.setattr(coord_mod.Omoda9Coordinator, "async_send_command", _fake)
+    monkeypatch.setattr(coord_mod.LepasCoordinator, "async_send_command", _fake)
     return keys
 
 

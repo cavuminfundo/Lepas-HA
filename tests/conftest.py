@@ -33,9 +33,9 @@ import fixtures as FX                      # noqa: E402
 # Assistant, avviando l'istanza di test, ne rimappa il percorso sulla config dir
 # temporanea. Importandolo qui — a tempo di collezione, prima che la fixture `hass`
 # esista — resta fissato in sys.modules e i test lo trovano anche dentro le fixture.
-# Senza questo, `from custom_components.omoda9...` funziona a livello di modulo ma
+# Senza questo, `from custom_components.lepas...` funziona a livello di modulo ma
 # fallisce con ModuleNotFoundError se eseguito a runtime.
-from custom_components.omoda9 import const as OMODA_CONST   # noqa: E402
+from custom_components.lepas import const as OMODA_CONST   # noqa: E402
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -78,7 +78,7 @@ def ctx(tmp_path):
     Il file del taskId punta di proposito a un percorso inesistente: nei test il taskId
     deve arrivare SOLO dal conio via checkPassword, altrimenti si verificherebbe una
     scorciatoia invece della catena vera."""
-    from custom_components.omoda9.core.context import CoreCtx
+    from custom_components.lepas.core.context import CoreCtx
 
     return CoreCtx(
         vin=FX.VIN, tuserid=FX.TUSERID, pin=FX.PIN, email=FX.EMAIL,
@@ -111,7 +111,7 @@ def config_entry(hass):
     C = OMODA_CONST
     entry = MockConfigEntry(
         domain=C.DOMAIN,
-        title=f"Omoda 9 ({FX.VIN})",
+        title=f"Lepas ({FX.VIN})",
         unique_id=FX.VIN,
         data={C.CONF_VIN: FX.VIN, C.CONF_TUSERID: FX.TUSERID,
               C.CONF_EMAIL: FX.EMAIL, C.CONF_PIN: FX.PIN},
@@ -128,20 +128,20 @@ async def integrazione_avviata(hass, config_entry, cloud, monkeypatch):
     certificati (tocca il filesystem), connessione MQTT all'auto (apre un socket TLS
     verso Chery) e i timer periodici (sveglierebbero l'auto). Restano reali le
     piattaforme e la creazione delle entità, che è ciò che si vuole misurare."""
-    from custom_components.omoda9.coordinator import Omoda9Coordinator
+    from custom_components.lepas.coordinator import LepasCoordinator
 
     # NB (P2-2): qui serviva neutralizzare `_load_core_from_disk`, che a ogni setup
     # ricaricava i moduli core/ creandone una seconda copia e scavalcando i monkeypatch
     # dei test. Con `core/` diventato un sotto-pacchetto vero quel meccanismo non esiste
     # più: è Python a garantire un'unica istanza dei moduli.
 
-    monkeypatch.setattr(Omoda9Coordinator, "_provision_certs",
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs",
                         lambda self: (True, "cert finti (test)"))
-    monkeypatch.setattr(Omoda9Coordinator, "_connect_car", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
     # i timer contattano il cloud e possono SVEGLIARE l'auto: mai nei test.
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_keepalive", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_telemetry_poll", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_drive_watch", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_keepalive", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_telemetry_poll", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_drive_watch", lambda self: None)
 
     # Backfill dell'identita' veicolo: e' un task in BACKGROUND avviato da
     # async_setup_entry che fa una queryList in rete e poi chiama async_update_entry
@@ -152,7 +152,7 @@ async def integrazione_avviata(hass, config_entry, cloud, monkeypatch):
     async def _niente_backfill(self) -> None:
         return None
 
-    monkeypatch.setattr(Omoda9Coordinator, "async_ensure_vehicle_identity",
+    monkeypatch.setattr(LepasCoordinator, "async_ensure_vehicle_identity",
                         _niente_backfill)
 
     await hass.config_entries.async_setup(config_entry.entry_id)

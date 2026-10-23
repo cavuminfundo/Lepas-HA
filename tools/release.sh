@@ -21,11 +21,11 @@ _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$R_ROOT"
 rules_cmdline "$@"
 
-R_REPO="${OMODA9_REPO:-chery-connect-ha/omoda9-ha}"
-SRC_DIR="custom_components/omoda9"
+R_REPO="${LEPAS_REPO:-chery-connect-ha/lepas-ha}"
+SRC_DIR="custom_components/lepas"
 MANIFEST="$SRC_DIR/manifest.json"
 CHANGELOG="CHANGELOG.md"
-ZIP_NAME="omoda9.zip"        # must match "filename" in hacs.json
+ZIP_NAME="lepas.zip"        # must match "filename" in hacs.json
 BASE="master"
 UNRELEASED="## [Non rilasciato]"
 

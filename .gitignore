@@ -19,6 +19,11 @@ htmlcov/
 .env
 .env.*
 !.env.example
+certs_eu/
+token.json
+.mqtt_cred
+*_diag.jsonl
+data/
 
 # Android APK analysis & packet captures
 *.apk

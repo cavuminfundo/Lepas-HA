@@ -2,7 +2,7 @@
 
 Four standalone probes that answer one question: **can each user of this
 integration obtain their own MQTT credentials, instead of sharing the vendor
-certificate bundled in `custom_components/omoda9/certs/store.json`?**
+certificate bundled in `custom_components/lepas/certs/store.json`?**
 
 They exist to be re-run and disagreed with. Every claim in
 [`docs/enrollment-findings.md`](../../docs/enrollment-findings.md) comes from one

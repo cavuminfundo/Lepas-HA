@@ -440,7 +440,7 @@ gate_cadence() { # $1 = (optional) the version being published, NOT to be counte
 }
 
 # ── R06 — a read by somebody else: reported, not blocked (the source says so) ────────
-R_SHARED_RE='^custom_components/omoda9/(core/|coordinator\.py|config_flow\.py|__init__\.py|const\.py|entity\.py)'
+R_SHARED_RE='^custom_components/lepas/(core/|coordinator\.py|config_flow\.py|__init__\.py|const\.py|entity\.py)'
 gate_shared_code() { # $1 = base
   local base="${1:-origin/master}" touched
   touched="$(git -C "$R_ROOT" diff --name-only "$base"...HEAD | grep -E "$R_SHARED_RE" || true)"
@@ -531,16 +531,16 @@ gate_no_trailer_in_commits() { # $1 = base
 
 # ── R11 / R21 — architecture invariants ─────────────────────────────────────────────
 gate_core_without_ha() {
-  local core="$R_ROOT/custom_components/omoda9/core" h
+  local core="$R_ROOT/custom_components/lepas/core" h
   # ⚠️ Without this line the gate went green when core/ no longer existed: grep failed,
   # `|| true` zeroed it, and absence looked like compliance.
-  [ -d "$core" ] || { require R11 "custom_components/omoda9/core/ does not exist: the gate does not know what to look at."; return 0; }
+  [ -d "$core" ] || { require R11 "custom_components/lepas/core/ does not exist: the gate does not know what to look at."; return 0; }
   h="$(grep -rnE '^[[:space:]]*(from|import)[[:space:]]+homeassistant|import_module\(["'"'"']homeassistant|__import__\(["'"'"']homeassistant' "$core" 2>/dev/null || true)"
   [ -n "$h" ] && require R11 "Home Assistant imported inside core/:$(printf '\n%s' "$h")" \
               || ok "R11 · core/ does not import Home Assistant"
 }
 gate_no_model_names() {
-  local cc="$R_ROOT/custom_components/omoda9" h
+  local cc="$R_ROOT/custom_components/lepas" h
   [ -d "$cc" ] || return 0
   h="$(grep -rnEi 'if[^:]*\b(model|modello|marca|brand)\b[^:]*==[[:space:]]*["'"'"'](omoda|jaecoo|j7|e5|c5)' "$cc" 2>/dev/null || true)"
   [ -n "$h" ] && require R21 "a model name used as a code path:$(printf '\n%s' "$h")" \
@@ -650,7 +650,7 @@ gate_stage_clean() {
 # `grep -oP` is GNU-only (and a JSON file deserves a JSON parser).
 manifest_version() {
   python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' \
-    "$R_ROOT/custom_components/omoda9/manifest.json"
+    "$R_ROOT/custom_components/lepas/manifest.json"
 }
 gate_manifest_matches_tag() { # $1 = X.Y.Z
   local v; v="$(manifest_version)"

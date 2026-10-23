@@ -25,11 +25,11 @@ import pytest
 from homeassistant.core import State
 from homeassistant.util import dt as dt_util
 
-from custom_components.omoda9 import coordinator as coord_mod
-from custom_components.omoda9 import switch as switch_mod
-from custom_components.omoda9.const import DOMAIN, MACRO_PRESET_S
+from custom_components.lepas import coordinator as coord_mod
+from custom_components.lepas import switch as switch_mod
+from custom_components.lepas.const import DOMAIN, MACRO_PRESET_S
 
-MACRO = "switch.chery_connect_cool_everything"
+MACRO = "switch.lepas_cool_everything"
 
 
 class _Msg:
@@ -61,19 +61,19 @@ async def _avvia(hass, config_entry, monkeypatch) -> None:
 
     Serve a parte perché il ripristino di stato va preparato PRIMA dell'avvio, e una
     fixture gira sempre prima del corpo del test."""
-    from custom_components.omoda9.coordinator import Omoda9Coordinator
+    from custom_components.lepas.coordinator import LepasCoordinator
 
-    monkeypatch.setattr(Omoda9Coordinator, "_provision_certs",
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs",
                         lambda self: (True, "cert finti (test)"))
-    monkeypatch.setattr(Omoda9Coordinator, "_connect_car", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_keepalive", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_telemetry_poll", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_drive_watch", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_keepalive", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_telemetry_poll", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_drive_watch", lambda self: None)
 
     async def _niente_backfill(self) -> None:
         return None
 
-    monkeypatch.setattr(Omoda9Coordinator, "async_ensure_vehicle_identity", _niente_backfill)
+    monkeypatch.setattr(LepasCoordinator, "async_ensure_vehicle_identity", _niente_backfill)
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -90,7 +90,7 @@ def comandi_inviati(monkeypatch):
         inviati.append(key)
         return "inviato (test)"
 
-    monkeypatch.setattr(coord_mod.Omoda9Coordinator, "async_send_command", _finto)
+    monkeypatch.setattr(coord_mod.LepasCoordinator, "async_send_command", _finto)
     return inviati
 
 
@@ -164,7 +164,7 @@ async def test_attesa_annunciata_mentre_sveglia_lauto(hass, integrazione_avviata
     """Durante la sveglia l'utente deve vedere che sta succedendo qualcosa.
 
     Il silenzio di quei ~35 secondi è l'innesco del difetto qui sopra: l'utente ripreme
-    perché nulla si muove. Il testo finisce nello stato di `sensor.chery_connect_command_result`,
+    perché nulla si muove. Il testo finisce nello stato di `sensor.lepas_command_result`,
     che Home Assistant tronca a 255 caratteri → deve starci con margine."""
     monkeypatch.setattr(switch_mod, "MACRO_WAKE_WAIT", 0.05)
     coord = _coordinator(hass, integrazione_avviata)
@@ -198,7 +198,7 @@ async def test_spegnimento_fallito_lascia_acceso(hass, integrazione_avviata, mon
             raise RuntimeError("backend irraggiungibile (test)")
         return "inviato (test)"
 
-    monkeypatch.setattr(coord_mod.Omoda9Coordinator, "async_send_command", _finto)
+    monkeypatch.setattr(coord_mod.LepasCoordinator, "async_send_command", _finto)
 
     await hass.services.async_call("switch", "turn_on", {"entity_id": MACRO}, blocking=True)
     assert hass.states.get(MACRO).state == "on"
@@ -227,7 +227,7 @@ async def test_ripristino_riarma_la_scadenza(hass, config_entry, cloud, monkeypa
     finito = dt_util.utcnow() - timedelta(seconds=MACRO_PRESET_S + 60)       # già scaduto
     mock_restore_cache(hass, (
         State(MACRO, "on", last_changed=acceso_da, last_updated=acceso_da),
-        State("switch.chery_connect_heat_everything", "on", last_changed=finito, last_updated=finito),
+        State("switch.lepas_heat_everything", "on", last_changed=finito, last_updated=finito),
     ))
 
     await _avvia(hass, config_entry, monkeypatch)
@@ -236,7 +236,7 @@ async def test_ripristino_riarma_la_scadenza(hass, config_entry, cloud, monkeypa
     resto = _entita(hass, MACRO)._resto_scadenza()
     assert resto is not None and 60 < resto <= 120, (
         f"la scadenza va riarmata sul tempo RESIDUO, non da capo (resto={resto})")
-    assert hass.states.get("switch.chery_connect_heat_everything").state == "off", (
+    assert hass.states.get("switch.lepas_heat_everything").state == "off", (
         "preset finito mentre HA era spento: non si riprende acceso")
 
     await hass.config_entries.async_unload(config_entry.entry_id)
@@ -431,7 +431,7 @@ async def test_una_sola_sveglia_condivisa(hass, integrazione_avviata, monkeypatc
         await asyncio.sleep(0.2)          # l'invio dura: le due richieste si sovrappongono
         return "inviato (test)"
 
-    monkeypatch.setattr(coord_mod.Omoda9Coordinator, "async_send_command", _finto)
+    monkeypatch.setattr(coord_mod.LepasCoordinator, "async_send_command", _finto)
 
     await asyncio.gather(coord.async_assicura_sveglia(), coord.async_assicura_sveglia())
     assert inviati == ["localizza"], "due richieste contemporanee = una sola sveglia"
@@ -454,7 +454,7 @@ async def test_la_sveglia_condivisa_non_propaga_lerrore(hass, integrazione_avvia
     async def _finto(self, key, params=None):
         raise RuntimeError("A00082 veicolo occupato (test)")
 
-    monkeypatch.setattr(coord_mod.Omoda9Coordinator, "async_send_command", _finto)
+    monkeypatch.setattr(coord_mod.LepasCoordinator, "async_send_command", _finto)
     await coord.async_assicura_sveglia()     # non deve sollevare
 
 

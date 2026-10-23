@@ -2,7 +2,7 @@
 """Step 3 — is there per-device credential material in the provisioning responses?
 
 Runs the read-only half of the provisioning chain implemented in
-`custom_components/omoda9/core/provision.py` and scans the full JSON responses for
+`custom_components/lepas/core/provision.py` and scans the full JSON responses for
 anything that could be a per-device enrollment: a certificate, a CSR, a keystore,
 or the product/device/secret triple that Aliyun IoT Platform hands out through its
 dynamic registration.
@@ -62,23 +62,23 @@ SENSITIVE_KEYS = (
 
 
 def load_core():
-    """Import `omoda9.core.*` without executing the integration's `__init__.py`.
+    """Import `lepas.core.*` without executing the integration's `__init__.py`.
 
-    `custom_components/omoda9/__init__.py` imports Home Assistant, which is not
+    `custom_components/lepas/__init__.py` imports Home Assistant, which is not
     installed here. Registering a bare package object under the right name lets the
     submodules import each other with their normal relative imports.
     """
     if COMPONENTS not in sys.path:
         sys.path.insert(0, COMPONENTS)
-    pkg = types.ModuleType("omoda9")
-    pkg.__path__ = [os.path.join(COMPONENTS, "omoda9")]
-    sys.modules.setdefault("omoda9", pkg)
-    core = importlib.import_module("omoda9.core")
+    pkg = types.ModuleType("lepas")
+    pkg.__path__ = [os.path.join(COMPONENTS, "lepas")]
+    sys.modules.setdefault("lepas", pkg)
+    core = importlib.import_module("lepas.core")
     return (core,
-            importlib.import_module("omoda9.core.wake"),
-            importlib.import_module("omoda9.core.provision"),
-            importlib.import_module("omoda9.core.omoda_auth"),
-            importlib.import_module("omoda9.core.context"))
+            importlib.import_module("lepas.core.wake"),
+            importlib.import_module("lepas.core.provision"),
+            importlib.import_module("lepas.core.lepas_auth"),
+            importlib.import_module("lepas.core.context"))
 
 
 def collect_secrets(ctx, access_token: str | None) -> set[str]:

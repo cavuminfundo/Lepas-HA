@@ -1,151 +1,185 @@
-# Architectural Design Specification: Lepas L8 Chery Connect Integration (Option A)
+# Architectural Design Specification: Lepas Connect Home Assistant Integration
 
 > **Document ID**: `SPEC-2026-10-23-LEPAS-CHERY-CONNECT`  
-> **Status**: Approved (Option A — Multi-Tenant Native Integration)  
-> **Target Package**: `custom_components/omoda9` (`omoda9-ha` / Chery Connect)  
-> **Target Vehicle Platform**: Lepas L8 (Chery Europe, `com.chery.eu.lepas`)
+> **Status**: Approved (Final Rebranded Native Architecture)  
+> **Target Integration Directory**: `custom_components/lepas`  
+> **Integration Domain**: `lepas` (`Lepas Connect`)  
+> **Target Vehicle Platform**: Lepas L8 / Chery Europe (`com.chery.eu.lepas`)
 
 ---
 
-## 1. Architectural Vision & Upstream Compatibility
+## 1. Architectural Vision & Systemic Rebranding
 
-### 1.1 Multi-Tenant Core Architecture (Option A)
-Chery International operates a single, centralized backend platform (code-named `"legend"`) across Europe. Rather than deploying disparate backends for each corporate subsidiary, the European infrastructure serves **Omoda**, **Jaecoo**, **Chery**, and **Lepas** from common cloud gateways.
+### 1.1 From Upstream Fork to Dedicated Lepas Integration
+The integration is derived from the battle-tested `omoda9-ha` codebase (Chery Connect), but is systematically rebranded into a first-class, standalone Home Assistant custom component for **Lepas**:
+- **Package Path**: `custom_components/lepas/`
+- **Domain Identifier**: `DOMAIN = "lepas"`
+- **Component Display Name**: `"Lepas Connect"`
+- **Integration Manifest (`custom_components/lepas/manifest.json`)**:
+  - `domain`: `"lepas"`
+  - `name`: `"Lepas Connect"`
+  - `documentation`: `"https://github.com/chery-connect-ha/lepas-ha"`
+  - `issue_tracker`: `"https://github.com/chery-connect-ha/lepas-ha/issues"`
+  - `codeowners`: `["@Caslinovich"]`
+  - `requirements`: `["paho-mqtt>=2.0", "pycryptodome>=3.17", "numpy>=1.21"]`
+  - `dependencies`: `["http"]`
+  - `after_dependencies`: `["recorder"]`
+  - `version`: `"1.15.0"`
+- **HACS Manifest (`hacs.json`)**: Updated to `"Lepas Connect"`, pointing to `custom_components/lepas`.
 
-Under **Option A**, the Lepas L8 is supported natively inside `custom_components/omoda9` (branded in Home Assistant as *"Chery Connect"*). This design choice avoids fork divergence, eliminates duplicated protocol maintenance, and guarantees that any telemetry or command enhancements immediately benefit all Chery International brands.
+### 1.2 Class, Module, and Frontend Rebranding Matrix
+All identifiers, module paths, and class names are harmonized under the `Lepas` namespace:
 
-### 1.2 Shared Infrastructure vs. Tenant Isolation
-The architectural division between shared infrastructure and tenant-specific configuration is strictly partitioned:
-
-| Component / Layer | Shared Across Brands (Europe) | Tenant-Specific (Brand / Region) |
+| Upstream Omoda 9 Construct | Rebranded Lepas Construct | Purpose / Responsibilities |
 |---|---|---|
-| **Mutual-TLS MQTT Broker** | `tspemqx-app-eu.cheryinternational.com:8083` | No (Shared across all EU brands) |
-| **mTLS Client Certificates** | `ca.pem`, `client.pem`, `client.key`, `eu_prd_cheryinternational.cer` | No (Same root CA and issued device certs) |
-| **TSP Console Host** | `https://tspconsole-eu.cheryinternational.com` | No (Shared TSP control plane) |
-| **MQTT App Password Seed** | `CAR_SEED = "fa89db3abe8045919d70c6ed3cc65bc5"` | No (Common algorithmic hash derivation) |
-| **BFF API Gateway URL** | No | **Brand Dependent** (`CONF_BFF`) |
-| **Tenant Code** | No | **Brand Dependent** (`CONF_TENANT_CODE`) |
-| **Channel ID** | No | **Brand Dependent** (`CONF_CHANNEL_ID`) |
-| **Country ID** | No | **Brand Dependent** (`CONF_COUNTRY_ID`) |
-
-### 1.3 Zero Fork Divergence
-Because `custom_components/omoda9` was already designed with regional preset selectors (`CONF_PRESET`), integrating Lepas requires **zero modifications to the core engine** (`core/session.py`, `core/commands.py`, `core/routing.py`, `coordinator.py`, or entity platforms). It only requires registering the verified tenant parameters in the preset registry and exposing the brand in UI selection schemas.
+| `custom_components/omoda9/` | `custom_components/lepas/` | Root component directory |
+| `Omoda9ConfigFlow` | `LepasConfigFlow` | Authentication and setup flow |
+| `Omoda9OptionsFlow` | `LepasOptionsFlow` | Options and telematics poll reconfiguration |
+| `Omoda9Coordinator` | `LepasCoordinator` | Vehicle polling and telemetry update coordinator |
+| `Omoda9Entity` | `LepasEntity` | Base entity class with device linkage |
+| `Omoda9OptimisticMixin` | `LepasOptimisticMixin` | Actuator optimistic state coordinator |
+| `core/login_omoda.py` | `core/login_lepas.py` | Cloud login endpoints and OTP validation |
+| `core/omoda.py` | `core/lepas.py` | Core MQTT client and frame orchestrator |
+| `core/omoda_auth.py` | `core/lepas_auth.py` | Token management and crypto signature handler |
+| `lovelace/chery-card.js` | `lovelace/lepas-card.js` | Dedicated Lovelace UI card |
+| `services.yaml` | `services.yaml` | Domain-scoped services under `lepas.*` |
 
 ---
 
-## 2. Verified Parameters for `PRESET_LEPAS_EU`
+## 2. Dynamic Vehicle Auto-Discovery (Zero Static Presets)
 
-Static analysis and reverse-engineering of the official Lepas Europe companion application (`com.chery.eu.lepas`) confirmed the following regional gateway parameters:
+### 2.1 YAGNI & Ponytail Ladder Enforcement
+In accordance with the **Ponytail Ladder**, we explicitly reject maintaining a static hardcoded table or dictionary of vehicle models/trims. Static model registries create maintenance debt, require constant component updates for new factory releases, and risk drifting from actual vehicle specifications.
 
-- **BFF Gateway URL (`CONF_BFF`)**: `https://eu-lepas.cheryinternational.com/api`
-- **Tenant Code (`CONF_TENANT_CODE`)**: `3000011`
-- **Channel ID (`CONF_CHANNEL_ID`)**: `1`
-- **Country ID (`CONF_COUNTRY_ID`)**: `1`
+### 2.2 100% Dynamic Discovery Pipeline
+All vehicle identification and capability parameters are discovered dynamically at runtime:
+1. **Cloud Identity Discovery (`_discover` / `queryList`)**:
+   - `seriesName`: Vehicle series returned by Chery Cloud (e.g. `"Lepas"`).
+   - `modelName`: Precise vehicle model (e.g. `"L8"`).
+   - `vehicleName`: User-assigned nickname from the companion app profile.
+   - `powerType`: Fuel/propulsion type (`0` = BEV, other = PHEV/ICE).
+   - `minTemperature`, `maxTemperature`, `temperatureStepLength`, `isHaveLoAndHi`, `loValue`, `hiValue`: Exact HVAC capabilities declared by the vehicle firmware.
+   - `maxAirDuration`: Permitted remote climate durations declared by the TCU.
+2. **Realtime Telemetry Ingestion (T-Box `5A02` Protocol)**:
+   - High-voltage battery SoC, electric range, fuel level, odometer, tire pressure, and lock/window/door states are parsed directly from live CAN-bus frames relayed through MQTT.
+3. **Single Generic Fallback**:
+   - In `naming.py` and `coordinator.py`, `DEFAULT_VEHICLE_NAME` is set strictly to:
+     ```python
+     DEFAULT_VEHICLE_NAME = "Lepas"
+     ```
+   - When a vehicle is first added or if the cloud is offline before the first `queryList` returns, the device is named `"Lepas ({last_4_vin})"`. It is dynamically enriched to the specific model (e.g., `"Lepas L8"`) immediately upon receiving cloud metadata.
 
-### Preset Comparison Matrix
+---
 
+## 3. Default Configuration & Preset Alignment
+
+### 3.1 Default Constants (`custom_components/lepas/const.py`)
+Because this repository is dedicated to Lepas, the default target region and gateway parameters point directly to **Lepas Europe**:
+
+```python
+CONF_BFF = "bff"
+CONF_TSP_HOST = "tsp_host"
+CONF_CAR_MQTT_HOST = "car_mqtt_host"
+CONF_CAR_MQTT_PORT = "car_mqtt_port"
+CONF_CHANNEL_ID = "channel_id"
+CONF_TENANT_CODE = "tenant_code"
+CONF_COUNTRY_ID = "country_id"
+
+CONF_PRESET = "preset"
+PRESET_LEPAS_EU = "lepas_eu"
+PRESET_OMODA_JAECOO_EU = "omoda_jaecoo_eu"
+PRESET_CHERY_EU = "chery_eu"
+PRESET_CUSTOM = "custom"
+DEFAULT_PRESET = PRESET_LEPAS_EU
+
+DEFAULTS = {
+    CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
+    CONF_TSP_HOST: "https://tspconsole-eu.cheryinternational.com",
+    CONF_CAR_MQTT_HOST: "tspemqx-app-eu.cheryinternational.com",
+    CONF_CAR_MQTT_PORT: 8083,
+    CONF_CHANNEL_ID: "1",
+    CONF_TENANT_CODE: "3000011",
+    CONF_COUNTRY_ID: "1",
+}
+
+PRESETS = {
+    PRESET_LEPAS_EU: {
+        CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
+        CONF_TENANT_CODE: "3000011",
+        CONF_CHANNEL_ID: "1",
+        CONF_COUNTRY_ID: "1",
+    },
+    PRESET_OMODA_JAECOO_EU: {
+        CONF_BFF: "https://legend-oj.omodaauto.nl/api",
+        CONF_TENANT_CODE: "300006",
+        CONF_CHANNEL_ID: "1",
+        CONF_COUNTRY_ID: "1",
+    },
+    PRESET_CHERY_EU: {
+        CONF_BFF: "https://eu-chery.cheryinternational.com/api",
+        CONF_TENANT_CODE: "300001",
+        CONF_CHANNEL_ID: "2",
+        CONF_COUNTRY_ID: "2",
+    },
+}
 ```
-┌────────────────────────┬──────────────────────────────────────────────┬─────────────┬────────────┬────────────┐
-│ Preset Constant        │ BFF Gateway Endpoint                         │ Tenant Code │ Channel ID │ Country ID │
-├────────────────────────┼──────────────────────────────────────────────┼─────────────┼────────────┼────────────┤
-│ PRESET_OMODA_JAECOO_EU │ https://legend-oj.omodaauto.nl/api           │ 300006      │ 1          │ 1          │
-│ PRESET_CHERY_EU        │ https://eu-chery.cheryinternational.com/api  │ 300001      │ 2          │ 2          │
-│ PRESET_LEPAS_EU        │ https://eu-lepas.cheryinternational.com/api  │ 3000011     │ 1          │ 1          │
-│ PRESET_CUSTOM          │ (User Defined)                               │ (User)      │ (User)     │ (User)     │
-└────────────────────────┴──────────────────────────────────────────────┴─────────────┴────────────┴────────────┘
+
+### 3.2 Config Flow Fix in `async_step_login_password`
+In the upstream codebase, `_apply_preset` was executed in `async_step_login_email` and `async_step_login_phone`, but was missing in `async_step_login_password`. 
+
+In `custom_components/lepas/config_flow.py`, `self._apply_preset(self._data)` is strictly invoked in `async_step_login_password` before authenticating via ROPC:
+```python
+async def async_step_login_password(self, user_input=None):
+    if user_input is not None:
+        self._data = dict(user_input)
+        self._apply_preset(self._data)
+        # Authentication proceeds with resolved Lepas BFF and tenant code...
+```
+This guarantees that:
+1. `CONF_BFF`, `CONF_TENANT_CODE`, `CONF_CHANNEL_ID`, and `CONF_COUNTRY_ID` are properly injected when logging in with password.
+2. `CONF_PRESET` is cleanly popped from `self._data` and never leaks into `entry.data`.
+
+---
+
+## 4. Localization & User Experience
+
+### 4.1 Form Dropdown Options
+In `_region_fields()` of `config_flow.py`, the dropdown prioritizes Lepas:
+```python
+SelectOptionDict(value=PRESET_LEPAS_EU, label="Lepas — Europe (default)"),
+SelectOptionDict(value=PRESET_OMODA_JAECOO_EU, label="Omoda / Jaecoo — Europe"),
+SelectOptionDict(value=PRESET_CHERY_EU, label="Chery — Europe"),
+SelectOptionDict(value=PRESET_CUSTOM, label="Custom / other region (use fields below)"),
 ```
 
----
-
-## 3. Planned Code Modifications
-
-### 3.1 Constants Definition (`custom_components/omoda9/const.py`)
-1. Declare preset identifier:
-   ```python
-   PRESET_LEPAS_EU = "lepas_eu"
-   ```
-2. Extend `PRESETS` dictionary:
-   ```python
-   PRESETS = {
-       PRESET_OMODA_JAECOO_EU: {
-           CONF_BFF: "https://legend-oj.omodaauto.nl/api",
-           CONF_TENANT_CODE: "300006",
-           CONF_CHANNEL_ID: "1",
-           CONF_COUNTRY_ID: "1",
-       },
-       PRESET_CHERY_EU: {
-           CONF_BFF: "https://eu-chery.cheryinternational.com/api",
-           CONF_TENANT_CODE: "300001",
-           CONF_CHANNEL_ID: "2",
-           CONF_COUNTRY_ID: "2",
-       },
-       PRESET_LEPAS_EU: {
-           CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
-           CONF_TENANT_CODE: "3000011",
-           CONF_CHANNEL_ID: "1",
-           CONF_COUNTRY_ID: "1",
-       },
-   }
-   ```
-
-### 3.2 Configuration Flow (`custom_components/omoda9/config_flow.py`)
-1. Import `PRESET_LEPAS_EU` from `.const`.
-2. Update the `SelectSelectorConfig` dropdown in `_region_fields()`:
-   ```python
-   SelectOptionDict(value=PRESET_OMODA_JAECOO_EU, label="Omoda / Jaecoo — Europe"),
-   SelectOptionDict(value=PRESET_CHERY_EU, label="Chery — Europe"),
-   SelectOptionDict(value=PRESET_LEPAS_EU, label="Lepas — Europe"),
-   SelectOptionDict(value=PRESET_CUSTOM, label="Custom / other region (use the fields below)"),
-   ```
-3. Verify that `_apply_preset()` cleanly resolves `PRESET_LEPAS_EU` into `data` and removes `CONF_PRESET` prior to storing the entry.
-
-### 3.3 Localization & String Resources
-Update `custom_components/omoda9/strings.json` and its localized counterparts (`translations/en.json`, `translations/it.json`, `translations/nl.json`):
-1. **Preset Descriptions**:
-   - English (`en.json` & `strings.json`):
-     `"Omoda/Jaecoo (Europe), Chery (Europe) and Lepas (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."`
-   - Italian (`it.json`):
-     `"Omoda/Jaecoo (Europa), Chery (Europa) e Lepas (Europa) compilano tutto in automatico. Scegli Personalizzato per impostare a mano l'endpoint BFF, codice tenant, ID paese/canale, host MQTT e certificati per qualunque altra regione o marchio."`
-   - Dutch (`nl.json`):
-     `"Omoda/Jaecoo (Europa), Chery (Europa) en Lepas (Europa) vullen alles automatisch in. Kies Aangepast om het BFF-eindpunt, tenantcode, land-/kanaal-ID's, MQTT-host en certificaten handmatig in te stellen voor elke andere regio of merk."`
-2. **Account Sign-in Descriptions**: Update mentions of *"Omoda/Jaecoo account"* to include Lepas where appropriate.
+### 4.2 Language Consistency
+- `strings.json` and `translations/{en,it,nl}.json` are fully updated:
+  - Integration name: `"Lepas Connect"`.
+  - Step descriptions and guides refer to `"Lepas account"` as the primary platform, while retaining guidance for multi-tenant accounts.
+  - Zero missing keys between `strings.json` and any translation file (`test_traduzioni_complete.py` compliance).
 
 ---
 
-## 4. TDD Test Strategy
+## 5. TDD Verification & Quality Gates
 
-The changes will be guarded by automated regression and contract tests:
-
-### 4.1 Config Flow Tests (`tests/test_config_flow.py`)
-- **`test_preset_lepas_eu_resolution`**:
-  - Instantiate the config flow step (`login_email` or `login_password`) with `preset="lepas_eu"`.
-  - Assert that `_apply_preset` populates:
-    * `CONF_BFF == "https://eu-lepas.cheryinternational.com/api"`
-    * `CONF_TENANT_CODE == "3000011"`
-    * `CONF_CHANNEL_ID == "1"`
-    * `CONF_COUNTRY_ID == "1"`
-  - Assert that `CONF_PRESET` is cleanly excised from the resulting `entry.data`.
-
-### 4.2 Routing & Command Integrity (`tests/test_routing.py` & `tests/test_command_routing.py`)
-- Verify that `routing.classifica()` and `commands` correctly handle responses under the Lepas tenant context.
-- Ensure that tenant code headers (`TENANT-CODE: 3000011`) are appropriately forwarded to `CoreCtx` during session initialization.
-
-### 4.3 Translation Completeness (`tests/test_traduzioni_complete.py`)
-- Execute key coverage validation across `strings.json`, `translations/en.json`, `translations/it.json`, and `translations/nl.json`.
-- Confirm that every field rendered by `_region_fields()` has a 100% matched translation entry in all supported languages.
+The test suite in `tests/` is fully ported to target `custom_components.lepas`:
+1. **`tests/test_config_flow.py`**:
+   - `test_default_preset_is_lepas_eu`: Confirms `DEFAULT_PRESET == "lepas_eu"` and matches `DEFAULTS`.
+   - `test_config_flow_password_applies_preset`: Confirms `login_password` step applies `PRESET_LEPAS_EU` parameters and strips `CONF_PRESET`.
+   - `test_config_flow_email_applies_preset`: Confirms email login configures Lepas endpoints out of the box.
+2. **`tests/test_routing.py` & `tests/test_command_routing.py`**:
+   - Validates that command dispatching and response code classification operate under `DOMAIN = "lepas"`.
+3. **`tests/test_traduzioni_complete.py`**:
+   - Asserts 100% key parity across `strings.json`, `en.json`, `it.json`, `nl.json`.
+   - Asserts every field rendered by `_region_fields` has an explicit label in all three languages.
+4. **`tests/test_architecture.py` & `test_repo_hygiene.py`**:
+   - Validates that no stale `omoda9` module imports linger inside `custom_components/lepas`.
 
 ---
 
-## 5. Credential Security & Secrets Isolation
+## 6. Security, Anti-Lockout, and Secrets Management
 
-1. **Transient Password Policy (ROPC)**:
-   - When users authenticate using username/password, the password is used strictly in-memory during `login_with_password` to mint the initial OAuth token pair.
-   - The password is NEVER written to Home Assistant storage (`entry.data` or `entry.options`).
-2. **Token Rotation & Concurrency Locking**:
-   - Access tokens are short-lived JWTs renewed via refresh tokens.
-   - All token refresh operations are serialized via `asyncio.Lock` in `core/session.py` to prevent token invalidation races.
-3. **Anti-Lockout Protection (`core/pin_lockout.py`)**:
-   - Consecutive incorrect PIN inputs trigger exponential backoff and a hard local lockout before Chery's server-side lockout threshold is breached.
-4. **Diagnostics Redaction (`diagnostics.py` & `diag.py`)**:
-   - Vehicle VIN is masked to display only the last 4 characters (`***XXXX`).
-   - All tokens, coordinates, passwords, and PII are stripped prior to diagnostic export.
+1. **Transient Password Handling**: Passwords supplied in `login_password` exist solely in memory during the initial token minting call; they are NEVER written to disk or stored in `entry.data`.
+2. **Serialized Token Renewal**: Token refreshes are synchronized behind an `asyncio.Lock` in `core/session.py`.
+3. **Anti-Lockout Protection (`core/pin_lockout.py`)**: Local counter tracking prevents exceeding the 5-attempt PIN threshold on Chery servers.
+4. **Diagnostics Sanitization**: `diagnostics.py` masks VINs to `***XXXX` and scrubs tokens, passwords, and GPS coordinates.

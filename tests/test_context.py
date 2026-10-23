@@ -16,7 +16,7 @@ import os
 import pytest
 
 import fixtures as FX
-from custom_components.omoda9.core.context import CoreCtx
+from custom_components.lepas.core.context import CoreCtx
 
 
 # ───────────────────────── indipendenza fra veicoli ─────────────────────────
@@ -50,10 +50,10 @@ def test_due_coordinator_due_contesti(hass, cloud, monkeypatch):
     """Verifica end-to-end della stessa proprietà, sui coordinator veri."""
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    from custom_components.omoda9.const import (
+    from custom_components.lepas.const import (
         CONF_EMAIL, CONF_PIN, CONF_TUSERID, CONF_VIN, DOMAIN,
     )
-    from custom_components.omoda9.coordinator import Omoda9Coordinator
+    from custom_components.lepas.coordinator import LepasCoordinator
 
     def _coord(vin, pin):
         entry = MockConfigEntry(
@@ -61,7 +61,7 @@ def test_due_coordinator_due_contesti(hass, cloud, monkeypatch):
             data={CONF_VIN: vin, CONF_TUSERID: FX.TUSERID,
                   CONF_EMAIL: FX.EMAIL, CONF_PIN: pin})
         entry.add_to_hass(hass)
-        return Omoda9Coordinator(hass, entry)
+        return LepasCoordinator(hass, entry)
 
     primo = _coord("LZZAAAAAA1B2C3D4E", "1111")     # VIN_PLACEHOLDER: sintetici
     secondo = _coord("LZZBBBBBB9Z8Y7X6W", "2222")

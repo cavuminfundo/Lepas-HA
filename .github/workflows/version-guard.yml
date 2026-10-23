@@ -21,7 +21,7 @@ name: Version guard
 on:
   pull_request:
     paths:
-      - "custom_components/omoda9/manifest.json"
+      - "custom_components/lepas/manifest.json"
 
 permissions:
   contents: read
@@ -40,7 +40,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          MANIFEST=custom_components/omoda9/manifest.json
+          MANIFEST=custom_components/lepas/manifest.json
 
           new=$(jq -r .version "$MANIFEST")
           base=$(git show "$BASE:$MANIFEST" | jq -r .version)

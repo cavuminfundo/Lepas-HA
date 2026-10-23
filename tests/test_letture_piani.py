@@ -37,13 +37,13 @@ PIANO_REALE = {
 @pytest.fixture
 def sensore(core):
     """Il sensore del piano di partenza, con un coordinator finto minimale."""
-    from custom_components.omoda9.sensor import Omoda9DeparturePlan
+    from custom_components.lepas.sensor import LepasDeparturePlan
 
     class CoordFinto:
         data: dict = {}
         config_entry = None
 
-    s = Omoda9DeparturePlan.__new__(Omoda9DeparturePlan)
+    s = LepasDeparturePlan.__new__(LepasDeparturePlan)
     s.coordinator = CoordFinto()
     return s
 
@@ -110,13 +110,13 @@ def test_orari_impossibili_non_vengono_mostrati(sensore, minuti):
 
 @pytest.fixture
 def switch_ricarica(core):
-    from custom_components.omoda9.switch import Omoda9ScheduledChargeSwitch
+    from custom_components.lepas.switch import LepasScheduledChargeSwitch
 
     class CoordFinto:
         data: dict = {"fields": {}}
         config_entry = None
 
-    s = Omoda9ScheduledChargeSwitch.__new__(Omoda9ScheduledChargeSwitch)
+    s = LepasScheduledChargeSwitch.__new__(LepasScheduledChargeSwitch)
     s.coordinator = CoordFinto()
     return s
 

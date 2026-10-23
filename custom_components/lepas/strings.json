@@ -1,0 +1,572 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Lepas Connect",
+        "description": "Choose how to sign in to your Omoda/Jaecoo account. Use the phone option if your account is registered with a phone number instead of an email.",
+        "menu_options": {
+          "login_email": "Sign in with email",
+          "login_phone": "Sign in with phone number (SMS)",
+          "login_password": "Sign in with password (no code)"
+        }
+      },
+      "login_email": {
+        "title": "Sign in with email",
+        "description": "Enter your Omoda/Jaecoo account email and vehicle PIN. An OTP code will be sent to your email; VIN and account ID are detected automatically.{reason}",
+        "data": {
+          "preset": "Brand / region preset",
+          "email": "Account email",
+          "pin": "Vehicle control PIN",
+          "language": "Language (OTP emails / SMS)",
+          "bff": "BFF endpoint (region)",
+          "tenant_code": "Tenant code (advanced)",
+          "country_id": "Country ID (advanced)",
+          "tsp_host": "TSP console host (region)",
+          "car_mqtt_host": "Vehicle MQTT broker host (region)",
+          "car_mqtt_port": "Vehicle MQTT broker port (region)",
+          "channel_id": "Channel ID (region)",
+          "certs_src": "Folder with mutual-TLS certs to import (optional)"
+        },
+        "data_description": {
+          "preset": "Lepas (Europe), Omoda/Jaecoo (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
+        }
+      },
+      "login_phone": {
+        "title": "Sign in with phone (SMS)",
+        "description": "Enter the phone number registered on your Omoda/Jaecoo account, its country code (Italy = 39, without +) and the vehicle PIN. A verification code will be sent by SMS; VIN and account ID are detected automatically.{reason}",
+        "data": {
+          "preset": "Brand / region preset",
+          "phone": "Phone number (without country code)",
+          "area_code": "Country code in digits (e.g. 39)",
+          "pin": "Vehicle control PIN",
+          "language": "Language (OTP emails / SMS)",
+          "bff": "BFF endpoint (region)",
+          "tenant_code": "Tenant code (advanced)",
+          "country_id": "Country ID (advanced)",
+          "tsp_host": "TSP console host (region)",
+          "car_mqtt_host": "Vehicle MQTT broker host (region)",
+          "car_mqtt_port": "Vehicle MQTT broker port (region)",
+          "channel_id": "Channel ID (region)",
+          "certs_src": "Folder with mutual-TLS certs to import (optional)"
+        },
+        "data_description": {
+          "preset": "Lepas (Europe), Omoda/Jaecoo (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
+        }
+      },
+      "otp": {
+        "title": "Verification code",
+        "description": "Enter the OTP code you received (by email or SMS).{reason}",
+        "data": {
+          "code": "OTP code"
+        }
+      },
+      "select_vehicle": {
+        "title": "Select vehicle",
+        "description": "Your account has more than one vehicle. Choose the VIN to add.",
+        "data": {
+          "vin": "Vehicle (VIN)"
+        }
+      },
+      "reconfigure": {
+        "title": "Change settings",
+        "description": "What do you want to correct? Each option only asks for what it changes: changing how you receive the code will not ask for your PIN.",
+        "menu_options": {
+          "reconfigure_pin": "Vehicle control PIN",
+          "reconfigure_email": "Receive the code by email",
+          "reconfigure_phone": "Receive the code by SMS"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Lepas Connect",
+        "description": "The session has expired: until you re-authenticate, the integration cannot talk to the car and commands and sensors stay frozen.\n\n**No code has been sent automatically.** Choose “Send me a new code” to have a fresh one sent to {email}.{reason}",
+        "menu_options": {
+          "send_code": "Send me a new code",
+          "enter_code": "I already have a valid code",
+          "install_fallback": "Install the fallback TLS client (download, ~12 MB)"
+        }
+      },
+      "enter_code": {
+        "title": "Enter the verification code",
+        "description": "Enter the code just sent to {email}. Codes expire after a few minutes: if it is rejected you can go back and request a new one.{reason}",
+        "data": {
+          "code": "OTP code"
+        }
+      },
+      "reconfigure_pin": {
+        "title": "Vehicle control PIN",
+        "description": "Enter the 4-digit PIN used for remote commands. The PIN is not used to sign in, so no verification code is needed here. Fix it if commands come back as \"successful\" but the car does nothing.",
+        "data": {
+          "pin": "Vehicle control PIN"
+        }
+      },
+      "reconfigure_email": {
+        "title": "Receive the code by email",
+        "description": "The verification code will be sent to this address from now on. Use this if your account is registered with an email address, or to correct a typo.\n\nYour current session stays valid: only the next code changes route.",
+        "data": {
+          "email": "Account email"
+        }
+      },
+      "reconfigure_phone": {
+        "title": "Receive the code by SMS",
+        "description": "The verification code will be sent to this number from now on. Write the number without the country code, and the country code as digits only (Italy = 39, no +).\n\nYour current session stays valid: only the next code changes route. If the number is not the one registered with your Omoda/Jaecoo account the SMS will not arrive — you can switch back to email from this same menu.",
+        "data": {
+          "phone": "Phone number (without country code)",
+          "area_code": "Country code, digits only (Italy = 39)"
+        }
+      },
+      "login_password": {
+        "title": "Sign in with password",
+        "description": "Enter your account email, password and vehicle PIN — no OTP code needed. VIN and account ID are detected automatically. The password is used once to sign in and is never stored.{reason}",
+        "data": {
+          "preset": "Brand / region preset",
+          "email": "Account email",
+          "pin": "Vehicle control PIN",
+          "password": "Account password",
+          "language": "Language (OTP emails / SMS)",
+          "bff": "BFF endpoint (region)",
+          "tenant_code": "Tenant code (advanced)",
+          "country_id": "Country ID (advanced)",
+          "tsp_host": "TSP console host (region)",
+          "car_mqtt_host": "Vehicle MQTT broker host (region)",
+          "car_mqtt_port": "Vehicle MQTT broker port (region)",
+          "channel_id": "Channel ID (region)",
+          "certs_src": "Folder with mutual-TLS certs to import (optional)"
+        },
+        "data_description": {
+          "preset": "Lepas (Europe), Omoda/Jaecoo (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to set the BFF endpoint, tenant code, country/channel IDs, MQTT host and certs by hand for any other region or brand."
+        }
+      },
+      "reauth_password": {
+        "title": "Re-enter your password",
+        "description": "The session expired. Enter the account password for {email} to sign back in — no code needed.{reason}",
+        "data": {
+          "password": "Account password"
+        }
+      }
+    },
+    "error": {
+      "otp_send_failed": "Could not send the code. Check the email/phone and PIN and try again.",
+      "otp_invalid": "Invalid or expired OTP code.",
+      "no_vehicle": "Signed in, but this account has no vehicles. If your car is registered under a different login (e.g. your email address), sign in with that one instead.",
+      "pin_required": "Enter the vehicle control PIN.",
+      "otp_required": "Enter the code you received.",
+      "phone_invalid": "That phone number does not look right. Enter the digits of the number only, without the country code and without spaces; in the other field put only the digits of the country code (Italy = 39).",
+      "email_invalid": "That email address does not look right.",
+      "password_invalid": "Wrong username or password.",
+      "password_required": "Enter your account password."
+    },
+    "abort": {
+      "already_configured": "This vehicle (VIN) is already configured.",
+      "token_move_failed": "Could not store the authentication token. Check Home Assistant's config folder permissions and try again.",
+      "reconfigure_no_entry": "Integration not found — reload Home Assistant and try again.",
+      "reconfigure_successful": "PIN updated. The integration was reloaded.",
+      "reauth_no_entry": "Integration not found — reload Home Assistant and try again.",
+      "reauth_successful": "Re-authentication successful. The integration was reloaded."
+    }
+  },
+  "issues": {
+    "pin_wrong": {
+      "title": "Lepas: wrong command PIN",
+      "fix_flow": {
+        "step": {
+          "pin": {
+            "title": "Fix the vehicle control PIN",
+            "description": "Remote commands are being rejected because the 4-digit control PIN is wrong (the sensors keep working — this is not a login problem). Enter the correct PIN. Do not keep retrying with a wrong PIN, to avoid locking the Chery account.",
+            "data": {
+              "pin": "Vehicle control PIN"
+            }
+          }
+        },
+        "error": {
+          "pin_required": "Enter the vehicle control PIN."
+        },
+        "abort": {
+          "entry_not_found": "Integration not found — reload Home Assistant and try again."
+        }
+      }
+    },
+    "entity_ids_renamed": {
+      "title": "Lepas: {count} entities were renamed",
+      "description": "The entity ids of this integration moved from Italian to English: `sensor.omoda9_batteria` is now `sensor.lepas_battery`, and {count} entities on this vehicle were renamed.\n\n**Your history came with them.** Graphs, long-term statistics and the energy dashboard followed the rename automatically. There is nothing to reinstall and nothing to log in to again.\n\n**What did not follow: names you typed yourself.** Automations, scripts, template sensors and dashboard cards that refer to an entity by name still point at the old one. Home Assistant shows those as unknown entities.\n\nWhere to look: Settings, Automations and scenes, then any automation flagged with an unknown entity. The full old-to-new list is here: {url}\n\nDismiss this notice once you have been through them."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lepas — automatic updates",
+        "description": "How often to wake the car and refresh telemetry + GPS position. 0 = disabled. The charging interval is used while the car is plugged in (telemetry refreshes more often to follow the charge).",
+        "data": {
+          "poll_normal_min": "Update interval when parked (minutes, 0 = off)",
+          "poll_charging_min": "Update interval while plugged in (minutes, 0 = off)",
+          "vehicle_name": "Vehicle name (leave empty to use the name detected from the car)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "at_home": {
+        "name": "A casa"
+      },
+      "high_voltage_active": {
+        "name": "High voltage active"
+      },
+      "car_awake": {
+        "name": "Car awake"
+      },
+      "low_fuel_warning": {
+        "name": "Low fuel warning"
+      },
+      "tire_warning_front_right": {
+        "name": "Tire warning front right"
+      },
+      "tire_warning_front_left": {
+        "name": "Tire warning front left"
+      },
+      "tire_warning_rear_right": {
+        "name": "Tire warning rear right"
+      },
+      "tire_warning_rear_left": {
+        "name": "Tire warning rear left"
+      },
+      "charge_needed_warning": {
+        "name": "Charge needed warning"
+      },
+      "low_battery": {
+        "name": "Low battery"
+      },
+      "hood": {
+        "name": "Hood"
+      },
+      "connection": {
+        "name": "Connection"
+      },
+      "front_right_window": {
+        "name": "Front right window"
+      },
+      "front_left_window": {
+        "name": "Front left window"
+      },
+      "rear_right_window": {
+        "name": "Rear right window"
+      },
+      "rear_left_window": {
+        "name": "Rear left window"
+      },
+      "engine": {
+        "name": "Engine"
+      },
+      "front_right_door": {
+        "name": "Front right door"
+      },
+      "front_left_door": {
+        "name": "Front left door"
+      },
+      "rear_right_door": {
+        "name": "Rear right door"
+      },
+      "rear_left_door": {
+        "name": "Rear left door"
+      },
+      "tailgate_moving": {
+        "name": "Tailgate moving"
+      },
+      "air_purification": {
+        "name": "Air purification"
+      },
+      "windshield_heating": {
+        "name": "Windshield heating"
+      },
+      "session": {
+        "name": "Session"
+      },
+      "charging_cable": {
+        "name": "Charging cable"
+      },
+      "sunroof_blind": {
+        "name": "Sunroof blind"
+      }
+    },
+    "button": {
+      "refresh_location": {
+        "name": "Refresh location"
+      },
+      "refresh_full_status": {
+        "name": "Refresh full status"
+      },
+      "alarm_off": {
+        "name": "Alarm off"
+      },
+      "alarm_on": {
+        "name": "Alarm on"
+      },
+      "cool_everything_off": {
+        "name": "Cool everything off"
+      },
+      "cool_everything": {
+        "name": "Cool everything"
+      },
+      "heat_everything_off": {
+        "name": "Heat everything off"
+      },
+      "heat_everything": {
+        "name": "Heat everything"
+      },
+      "confirm_otp": {
+        "name": "Confirm OTP"
+      },
+      "vent_windows": {
+        "name": "Vent windows"
+      },
+      "vent_sunroof": {
+        "name": "Vent sunroof"
+      },
+      "locate_car_gps": {
+        "name": "Locate car (GPS)"
+      },
+      "request_otp_code": {
+        "name": "Request OTP code"
+      },
+      "wake_car": {
+        "name": "Wake car"
+      },
+      "find_car_flash_lights": {
+        "name": "Find car (flash lights)"
+      }
+    },
+    "climate": {
+      "climate": {
+        "name": "Climate"
+      }
+    },
+    "cover": {
+      "trunk": {
+        "name": "Trunk"
+      },
+      "windows": {
+        "name": "Windows"
+      },
+      "sunroof": {
+        "name": "Sunroof"
+      }
+    },
+    "device_tracker": {
+      "location": {
+        "name": "Location"
+      }
+    },
+    "lock": {
+      "lock": {
+        "name": "Lock"
+      }
+    },
+    "number": {
+      "climate_duration": {
+        "name": "Climate duration"
+      },
+      "charge_duration": {
+        "name": "Charge duration"
+      }
+    },
+    "sensor": {
+      "fuel_range": {
+        "name": "Fuel range"
+      },
+      "petrol_range_miles": {
+        "name": "Petrol range (miles)"
+      },
+      "electric_range": {
+        "name": "Electric range"
+      },
+      "total_range": {
+        "name": "Total range"
+      },
+      "battery": {
+        "name": "Battery"
+      },
+      "fuel_remaining": {
+        "name": "Fuel remaining"
+      },
+      "hybrid_mileage": {
+        "name": "Hybrid mileage"
+      },
+      "average_fuel_consumption": {
+        "name": "Average fuel consumption"
+      },
+      "average_energy_consumption": {
+        "name": "Average energy consumption"
+      },
+      "hv_battery_current": {
+        "name": "HV battery current"
+      },
+      "car_data_updated": {
+        "name": "Car data updated"
+      },
+      "home_charging_energy": {
+        "name": "Energia ricarica a casa"
+      },
+      "away_charging_energy": {
+        "name": "Energia ricarica fuori casa"
+      },
+      "command_result": {
+        "name": "Command result"
+      },
+      "location_probe_result": {
+        "name": "Location probe result"
+      },
+      "wake_up_result": {
+        "name": "Wake-up result"
+      },
+      "odometer": {
+        "name": "Odometer"
+      },
+      "scheduled_departure": {
+        "name": "Scheduled departure"
+      },
+      "fast_charging_port": {
+        "name": "Fast charging port"
+      },
+      "tire_pressure_front_right": {
+        "name": "Tire pressure front right"
+      },
+      "tire_pressure_front_left": {
+        "name": "Tire pressure front left"
+      },
+      "tire_pressure_rear_right": {
+        "name": "Tire pressure rear right"
+      },
+      "tire_pressure_rear_left": {
+        "name": "Tire pressure rear left"
+      },
+      "scheduled_charging_status": {
+        "name": "Scheduled charging status"
+      },
+      "rear_center_seat_heating": {
+        "name": "Rear center seat heating"
+      },
+      "charging_status": {
+        "name": "Charging status"
+      },
+      "session_status": {
+        "name": "Session status"
+      },
+      "tire_temperature_front_right": {
+        "name": "Tire temperature front right"
+      },
+      "tire_temperature_front_left": {
+        "name": "Tire temperature front left"
+      },
+      "tire_temperature_rear_right": {
+        "name": "Tire temperature rear right"
+      },
+      "tire_temperature_rear_left": {
+        "name": "Tire temperature rear left"
+      },
+      "set_temperature_right": {
+        "name": "Set temperature right"
+      },
+      "set_temperature_left": {
+        "name": "Set temperature left"
+      },
+      "remaining_charge_time": {
+        "name": "Remaining charge time"
+      },
+      "hv_battery_voltage": {
+        "name": "HV battery voltage"
+      },
+      "sunroof_movement_state": {
+        "name": "Sunroof movement state"
+      },
+      "last_position": {
+        "name": "Last position"
+      },
+      "last_wake_up": {
+        "name": "Last wake-up"
+      },
+      "last_seen": {
+        "name": "Last seen"
+      },
+      "speed": {
+        "name": "Speed"
+      },
+      "rear_center_seat_ventilation": {
+        "name": "Rear center seat ventilation"
+      },
+      "charging_power": {
+        "name": "Charging power"
+      },
+      "wltp_range": {
+        "name": "WLTP range"
+      },
+      "electric_efficiency_mi_kwh": {
+        "name": "Electric efficiency (mi/kWh)"
+      }
+    },
+    "switch": {
+      "automatic_updates": {
+        "name": "Automatic updates"
+      },
+      "alarm": {
+        "name": "Alarm"
+      },
+      "windshield_defog": {
+        "name": "Windshield defog"
+      },
+      "cool_everything": {
+        "name": "Cool everything"
+      },
+      "charging": {
+        "name": "Charging"
+      },
+      "scheduled_charging": {
+        "name": "Scheduled charging"
+      },
+      "heat_everything": {
+        "name": "Heat everything"
+      },
+      "rear_window_heating": {
+        "name": "Rear window heating"
+      },
+      "driver_seat_heating": {
+        "name": "Driver seat heating"
+      },
+      "passenger_seat_heating": {
+        "name": "Passenger seat heating"
+      },
+      "rear_right_seat_heating": {
+        "name": "Rear right seat heating"
+      },
+      "rear_left_seat_heating": {
+        "name": "Rear left seat heating"
+      },
+      "steering_wheel_heating": {
+        "name": "Steering wheel heating"
+      },
+      "windshield_defrost": {
+        "name": "Windshield defrost"
+      },
+      "driver_seat_ventilation": {
+        "name": "Driver seat ventilation"
+      },
+      "passenger_seat_ventilation": {
+        "name": "Passenger seat ventilation"
+      },
+      "rear_right_seat_ventilation": {
+        "name": "Rear right seat ventilation"
+      },
+      "rear_left_seat_ventilation": {
+        "name": "Rear left seat ventilation"
+      }
+    },
+    "text": {
+      "otp_code": {
+        "name": "OTP code"
+      }
+    },
+    "time": {
+      "charge_start_time": {
+        "name": "Charge start time"
+      }
+    }
+  }
+}

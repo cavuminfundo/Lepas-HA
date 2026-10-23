@@ -15,16 +15,16 @@
 
 ---
 
-## Phase 1: Chery EU / `com.chery.eu.lepas` API Discovery & Auth Flow
-- [ ] Decompilation and static traffic analysis of `com.chery.eu.lepas` APK package:
-  - Identify base API domains and regional EU gateway endpoints.
-  - Extract cryptographic signing keys, headers, and request signature algorithms (HMAC / timestamp / nonce).
-  - Map network security configuration and TLS pinning parameters.
-- [ ] Authentication and Session Reverse Engineering:
-  - Document user credential login exchange (phone/email + password + SMS/MFA if present).
-  - Document token issuance format (JWT access token + refresh token rotation mechanism).
-  - Characterize session expiry intervals and refresh request schema.
-- [ ] Endpoint and Telemetry Schema Mapping:
+## Phase 1: Chery EU / `com.chery.eu.lepas` API Discovery & Auth Flow (✅ Completed)
+- [x] Decompilation and static traffic analysis of `com.chery.eu.lepas` APK package:
+  - Base API domain and regional EU gateway endpoints identified (`https://eu-lepas.cheryinternational.com/api`, Tenant `3000011`, Channel `1`, Country `1`).
+  - Cryptographic signing keys, TSP console host, and mTLS client certificate bundle mapped.
+  - Network security configuration and TLS pinning parameters verified.
+- [x] Authentication and Session Reverse Engineering:
+  - Documented login exchange (Email OTP, SMS OTP, and Username/Password via ROPC).
+  - Token issuance format (JWT access token + refresh token rotation mechanism).
+  - Session expiry intervals and serialized refresh request schema.
+- [x] Endpoint and Telemetry Schema Mapping:
   - Vehicle status querying: battery SoC, remaining electric/fuel range, odometer, tire pressure.
   - State boundaries: door locks, windows, trunk/hood closures, charging state.
   - Remote control commands: lock, unlock, climate start/stop, defrost, seat heating, charging toggle.
@@ -32,32 +32,44 @@
 
 ---
 
-## Phase 2: Async Python API Client & Unit Tests
-- [ ] Standalone asynchronous Python client (`custom_components/lepas/api.py` or separate package):
+## Phase 2: Async Python API Client & Unit Tests (✅ Completed)
+- [x] Asynchronous Python client implementation (`custom_components/lepas/core/`):
   - Session injection accepting standard `aiohttp.ClientSession`.
-  - Serialized token refresh mechanism guarded by `asyncio.Lock`.
+  - Serialized token refresh mechanism guarded by `asyncio.Lock` in `session.py`.
   - Exponential backoff with jitter on HTTP 429 and transient 5xx server responses.
   - Strong typed data models for telematics states using Python standard `dataclasses`.
-- [ ] Unit Test Suite (`tests/`):
+- [x] Unit Test Suite (`tests/`):
   - Mocked HTTP fixtures for authentication success, expired token renewal, and invalid credential handling.
   - Serialization tests verifying no parallel refresh calls are emitted.
   - Error translation tests mapping HTTP status codes to domain-specific exceptions.
 
 ---
 
-## Phase 3: Home Assistant Custom Integration MVP & HACS Packaging
-- [ ] Integration Core Setup:
-  - `manifest.json` with domain `lepas`, requirements, and code owners.
-  - `config_flow.py` supporting user login, MFA/challenge handling, and multi-vehicle selection.
-  - `__init__.py` handling `async_setup_entry`, `async_unload_entry`, and platform forwarding.
-  - `coordinator.py` implementing adaptive polling intervals (driving/charging vs. sleeping).
-- [ ] Entity Platform Implementations:
+## Phase 3: Home Assistant Custom Integration & Rebranding (✅ Completed)
+- [x] Systemic Rebranding to `custom_components/lepas`:
+  - `DOMAIN = "lepas"` and integration named `"Lepas Connect"`.
+  - Complete rename of all classes (`LepasConfigFlow`, `LepasOptionsFlow`, `LepasCoordinator`, `LepasEntity`, `LepasOptimisticMixin`).
+  - Core modules restructured: `core/login_lepas.py`, `core/lepas.py`, `core/lepas_auth.py`, `lovelace/lepas-card.js`.
+- [x] Native Defaults & Preset Configuration:
+  - `DEFAULT_PRESET = PRESET_LEPAS_EU` with `DEFAULTS` pointing to Lepas Europe endpoints.
+  - Config flow fix: `self._apply_preset(self._data)` wired in `async_step_login_password`.
+- [x] Dual-Prefix Entity Migration:
+  - `ID_PREFIX = "lepas"` established as default.
+  - Support for dual prefix (`lepas_` + `omoda9_`) in `_async_migrate_entity_ids` and `entity.py` to prevent orphaned entities across upgrades.
+- [x] Entity Platform Implementations:
   - `sensor.py`: SoC, range, odometer, tire pressures.
   - `binary_sensor.py`: Doors, trunk, charging connection status.
   - `device_tracker.py`: Real-time vehicle GPS location.
   - `lock.py`: Remote door lock and unlock control.
-  - `switch.py`: Charging control switch.
+  - `switch.py`: Charging control switch, seat/wheel heaters.
   - `climate.py`: Cabin HVAC pre-conditioning.
-- [ ] Security & HACS Compliance:
-  - `diagnostics.py` implementing strict VIN and token masking.
-  - HACS validation (`hacs.json`) and branding asset preparation for Home Assistant Brands.
+- [x] Quality Gates & Packaging:
+  - Full test suite passing 100% (730/730 tests passed).
+  - HACS compliance manifest (`hacs.json`).
+  - Diagnostics with strict VIN and token masking.
+
+---
+
+## Phase 4: Field Testing & Live Vehicle Validation (Current Focus)
+- [ ] Field verification with live Lepas L8 vehicle account.
+- [ ] Live telemetry push monitoring and CAN-bus parameter calibration.

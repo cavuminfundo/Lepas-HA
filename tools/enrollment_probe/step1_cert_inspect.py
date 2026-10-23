@@ -2,7 +2,7 @@
 """Step 1 — offline X.509 inspection of the bundled mutual-TLS material.
 
 The question this step answers: is the client certificate shipped in
-`custom_components/omoda9/certs/store.json` a *per-device* identity, or a
+`custom_components/lepas/certs/store.json` a *per-device* identity, or a
 constant shared by every user of a region?
 
 Reading key (from the investigation brief):

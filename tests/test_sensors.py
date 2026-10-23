@@ -12,7 +12,7 @@ import json
 
 
 def _coord(hass, entry):
-    from custom_components.omoda9.const import DOMAIN
+    from custom_components.lepas.const import DOMAIN
     return hass.data[DOMAIN][entry.entry_id]
 
 
@@ -52,7 +52,7 @@ async def test_tempo_ricarica_sparisce_a_carica_finita(hass, integrazione_avviat
     questo il test passerebbe anche col bug, perché nell'ambiente di test non c'è valore
     ripristinato ed è proprio quel valore che il difetto teneva inchiodato."""
     coord = _coord(hass, integrazione_avviata)
-    ent = "sensor.chery_connect_remaining_charge_time"
+    ent = "sensor.lepas_remaining_charge_time"
     _entita(hass, ent)._restored = 120.0     # come dopo un riavvio in carica
 
     await _push_realtime(hass, coord, _IN_CARICA)
@@ -73,14 +73,14 @@ async def test_gli_altri_sensori_non_spariscono_a_fine_carica(hass, integrazione
     await _push_realtime(hass, coord, _IN_CARICA)
     await _push_realtime(hass, coord, _A_RIPOSO)
 
-    assert hass.states.get("sensor.chery_connect_odometer").state == "4062.0"
-    assert hass.states.get("sensor.chery_connect_battery").state == "80.0"
+    assert hass.states.get("sensor.lepas_odometer").state == "4062.0"
+    assert hass.states.get("sensor.lepas_battery").state == "80.0"
 
 
 async def test_un_solo_sensore_e_volatile(hass, integrazione_avviata):
     """Guard-rail: rendere volatile un sensore che non lo è lo farebbe sparire a ogni
     lettura parziale. Oggi solo il tempo di ricarica lo è."""
-    from custom_components.omoda9.sensor import _RT_SENSORS
+    from custom_components.lepas.sensor import _RT_SENSORS
 
     vol = [s.field for s in _RT_SENSORS if s.volatile]
     assert vol == ["remainChargeTime"], f"sensori volatili inattesi: {vol}"
@@ -138,7 +138,7 @@ async def test_autonomia_in_miglia_dichiara_l_unita_giusta(hass, integrazione_av
     più in contraddizione con «Autonomia benzina» (182 km) sulla stessa dashboard."""
     from homeassistant.const import UnitOfLength
 
-    from custom_components.omoda9.sensor import _RT_SENSORS
+    from custom_components.lepas.sensor import _RT_SENSORS
 
     spec = next(s for s in _RT_SENSORS if s.field == "cruiseRange")
     assert spec.unit == UnitOfLength.MILES
@@ -164,10 +164,10 @@ async def test_batteria_ignora_il_frame_con_zero_km(hass, integrazione_avviata):
     coord = _coord(hass, integrazione_avviata)
 
     await _push_realtime(hass, coord, _CARICA_FINITA)
-    assert hass.states.get("sensor.chery_connect_battery").state == "100.0"
+    assert hass.states.get("sensor.lepas_battery").state == "100.0"
 
     await _push_realtime(hass, coord, _DEGRADATO)
-    assert hass.states.get("sensor.chery_connect_battery").state == "100.0", (
+    assert hass.states.get("sensor.lepas_battery").state == "100.0", (
         "il segnaposto a 0 km ha sovrascritto la carica reale"
     )
 
@@ -180,8 +180,8 @@ async def test_autonomie_ignorano_il_frame_con_zero_km(hass, integrazione_avviat
     await _push_realtime(hass, coord, _CARICA_FINITA)
     await _push_realtime(hass, coord, _DEGRADATO)
 
-    assert hass.states.get("sensor.chery_connect_electric_range").state == "150.0"
-    assert hass.states.get("sensor.chery_connect_total_range").state == "275.0"
+    assert hass.states.get("sensor.lepas_electric_range").state == "150.0"
+    assert hass.states.get("sensor.lepas_total_range").state == "275.0"
 
 
 async def test_una_carica_che_scende_davvero_passa(hass, integrazione_avviata):
@@ -194,15 +194,15 @@ async def test_una_carica_che_scende_davvero_passa(hass, integrazione_avviata):
     await _push_realtime(hass, coord, {**_CARICA_FINITA, "dumpEnergy": "62",
                                        "pureElectricRange": "93"})
 
-    assert hass.states.get("sensor.chery_connect_battery").state == "62.0"
-    assert hass.states.get("sensor.chery_connect_electric_range").state == "93.0"
+    assert hass.states.get("sensor.lepas_battery").state == "62.0"
+    assert hass.states.get("sensor.lepas_electric_range").state == "93.0"
 
 
 async def test_il_criterio_non_scatta_se_manca_il_campo(hass, integrazione_avviata):
     """Campo assente ≠ campo a zero. Una lettura parziale senza `pureElectricRange` non
     deve essere scambiata per degradata, altrimenti la batteria smetterebbe di aggiornarsi
     ogni volta che il cloud manda un frame ridotto."""
-    from custom_components.omoda9.sensor import _frame_batteria_degradato
+    from custom_components.lepas.sensor import _frame_batteria_degradato
 
     assert _frame_batteria_degradato({"dumpEnergy": "97"}) is False
     assert _frame_batteria_degradato({"pureElectricRange": "0"}) is True
@@ -211,7 +211,7 @@ async def test_il_criterio_non_scatta_se_manca_il_campo(hass, integrazione_avvia
     coord = _coord(hass, integrazione_avviata)
     await _push_realtime(hass, coord, _CARICA_FINITA)
     await _push_realtime(hass, coord, {"odometer": "4062", "dumpEnergy": "62"})
-    assert hass.states.get("sensor.chery_connect_battery").state == "62.0"
+    assert hass.states.get("sensor.lepas_battery").state == "62.0"
 
 
 async def test_il_ripiego_e_l_ultima_lettura_non_quella_dell_avvio(hass, integrazione_avviata):
@@ -223,14 +223,14 @@ async def test_il_ripiego_e_l_ultima_lettura_non_quella_dell_avvio(hass, integra
     ma a quella di giorni prima. Qui `_restored` = 20% (l'avvio), poi l'auto legge davvero
     47% e infine manda un segnaposto: deve restare 47, non tornare a 20."""
     coord = _coord(hass, integrazione_avviata)
-    _entita(hass, "sensor.chery_connect_battery")._restored = 20.0
+    _entita(hass, "sensor.lepas_battery")._restored = 20.0
 
     await _push_realtime(hass, coord, {**_CARICA_FINITA, "dumpEnergy": "47",
                                        "pureElectricRange": "71"})
-    assert hass.states.get("sensor.chery_connect_battery").state == "47.0"
+    assert hass.states.get("sensor.lepas_battery").state == "47.0"
 
     await _push_realtime(hass, coord, _DEGRADATO)
-    assert hass.states.get("sensor.chery_connect_battery").state == "47.0"
+    assert hass.states.get("sensor.lepas_battery").state == "47.0"
 
 
 async def test_ogni_entita_ha_un_nome_tradotto(hass, integrazione_avviata):
@@ -244,7 +244,7 @@ async def test_ogni_entita_ha_un_nome_tradotto(hass, integrazione_avviata):
 
     from homeassistant.helpers import entity_registry as er
 
-    base = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "omoda9"
+    base = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "lepas"
     strings = json.loads((base / "strings.json").read_text(encoding="utf-8"))
     voci = strings.get("entity", {})
     reg = er.async_get(hass)
@@ -264,7 +264,7 @@ def test_le_traduzioni_coprono_le_stesse_entita():
     import json
     import pathlib
 
-    base = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "omoda9"
+    base = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "lepas"
     rif = json.loads((base / "strings.json").read_text(encoding="utf-8")).get("entity", {})
     for lingua in ("it", "en"):
         tr = json.loads((base / "translations" / f"{lingua}.json").read_text(encoding="utf-8"))

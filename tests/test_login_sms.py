@@ -144,7 +144,7 @@ def test_il_motivo_ripiega_sul_returncode_se_non_c_e_altro(core):
 
 def test_il_numero_non_finisce_nel_messaggio_di_esito(core, ctx, monkeypatch):
     """Quella frase non resta nel config flow: diventa lo stato di
-    `sensor.chery_connect_session_status` (→ recorder, backup) ed è esportata verbatim nella
+    `sensor.lepas_session_status` (→ recorder, backup) ed è esportata verbatim nella
     diagnostica, fuori da ogni deny-list. Va mascherata alla sorgente."""
     session = core["session"]
     ctx.phone, ctx.area_code = FX.PHONE, FX.AREA_CODE
@@ -187,8 +187,8 @@ def test_i_log_del_conio_non_contengono_il_codice_ne_il_numero(core, monkeypatch
 async def test_la_diagnostica_non_espone_il_telefono(hass, integrazione_avviata):
     """Due vie diverse, entrambe reali: la chiave in `entry.data` e il numero scritto dentro
     una frase discorsiva. Chiudere solo la prima lascia aperta la seconda."""
-    from custom_components.omoda9.const import DOMAIN
-    from custom_components.omoda9.diagnostics import async_get_config_entry_diagnostics
+    from custom_components.lepas.const import DOMAIN
+    from custom_components.lepas.diagnostics import async_get_config_entry_diagnostics
 
     coord = hass.data[DOMAIN][integrazione_avviata.entry_id]
     coord.phone, coord.area_code = FX.PHONE, FX.AREA_CODE

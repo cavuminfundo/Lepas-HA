@@ -338,11 +338,11 @@ async def test_il_monitor_e_armato_prima_del_controllo_sessione(
     rileggere quando si indaga su un riavvio. Con il monitor armato DOPO (com'era), quel
     controllo non veniva mai registrato: verificato sul campo su 5 riavvii consecutivi,
     zero controlli d'avvio nel file. Qui si fissa l'ordine, non l'implementazione."""
-    from custom_components.omoda9.coordinator import Omoda9Coordinator
+    from custom_components.lepas.coordinator import LepasCoordinator
 
     ordine: list[str] = []
-    vero_diag = Omoda9Coordinator.async_setup_diag
-    vero_check = Omoda9Coordinator.async_check_session
+    vero_diag = LepasCoordinator.async_setup_diag
+    vero_check = LepasCoordinator.async_check_session
 
     async def spia_diag(self):
         ordine.append("diag")
@@ -352,21 +352,21 @@ async def test_il_monitor_e_armato_prima_del_controllo_sessione(
         ordine.append("sessione")
         return await vero_check(self)
 
-    monkeypatch.setattr(Omoda9Coordinator, "async_setup_diag", spia_diag)
-    monkeypatch.setattr(Omoda9Coordinator, "async_check_session", spia_check)
+    monkeypatch.setattr(LepasCoordinator, "async_setup_diag", spia_diag)
+    monkeypatch.setattr(LepasCoordinator, "async_check_session", spia_check)
     # stesse neutralizzazioni della fixture `integrazione_avviata`: qui non si possono
     # riusare perché le spie vanno installate PRIMA del setup, che la fixture fa da sé.
-    monkeypatch.setattr(Omoda9Coordinator, "_provision_certs",
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs",
                         lambda self: (True, "cert finti (test)"))
-    monkeypatch.setattr(Omoda9Coordinator, "_connect_car", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_keepalive", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_telemetry_poll", lambda self: None)
-    monkeypatch.setattr(Omoda9Coordinator, "async_start_drive_watch", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_keepalive", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_telemetry_poll", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_drive_watch", lambda self: None)
 
     async def _niente_backfill(self):
         return None
 
-    monkeypatch.setattr(Omoda9Coordinator, "async_ensure_vehicle_identity", _niente_backfill)
+    monkeypatch.setattr(LepasCoordinator, "async_ensure_vehicle_identity", _niente_backfill)
 
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
@@ -382,12 +382,12 @@ async def test_il_monitor_e_armato_prima_del_controllo_sessione(
 async def test_armare_il_monitor_due_volte_e_innocuo(hass, config_entry, cloud, monkeypatch):
     """`async_setup_entry` lo arma presto e `async_start` lo richiama: la seconda
     chiamata non deve creare un secondo scrittore sullo stesso file."""
-    from custom_components.omoda9.coordinator import Omoda9Coordinator
+    from custom_components.lepas.coordinator import LepasCoordinator
 
-    monkeypatch.setattr(Omoda9Coordinator, "_provision_certs",
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs",
                         lambda self: (True, "cert finti (test)"))
-    monkeypatch.setattr(Omoda9Coordinator, "_connect_car", lambda self: None)
-    coord = Omoda9Coordinator(hass, config_entry)
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+    coord = LepasCoordinator(hass, config_entry)
     finto = object()
     coord._diag = finto
     await coord.async_setup_diag()

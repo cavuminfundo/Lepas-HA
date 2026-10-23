@@ -15,7 +15,7 @@ import pytest
 
 
 async def _migra(hass, entry):
-    from custom_components.omoda9 import _async_migrate_entity_ids
+    from custom_components.lepas import _async_migrate_entity_ids
     await _async_migrate_entity_ids(hass, entry)
 
 
@@ -27,7 +27,7 @@ def registro(hass):
 
 async def test_una_entita_vecchia_viene_rinominata(hass, config_entry, registro):
     """Il caso normale: c'era `sensor.omoda9_batteria`, diventa
-    `sensor.chery_connect_battery`, e l'unique_id NON si tocca - e' l'identita', e
+    `sensor.lepas_battery`, e l'unique_id NON si tocca - e' l'identita', e
     cambiarla trasformerebbe un rename in una entita' nuova e vuota."""
     voce = registro.async_get_or_create(
         "sensor", "omoda9", "VINFINTO_batteria",
@@ -36,7 +36,7 @@ async def test_una_entita_vecchia_viene_rinominata(hass, config_entry, registro)
 
     await _migra(hass, config_entry)
 
-    dopo = registro.async_get("sensor.chery_connect_battery")
+    dopo = registro.async_get("sensor.lepas_battery")
     assert dopo is not None, "l'entita' non e' stata rinominata"
     assert dopo.unique_id == "VINFINTO_batteria", "l'unique_id non deve muoversi"
     assert registro.async_get("sensor.omoda9_batteria") is None
@@ -55,13 +55,13 @@ async def test_non_sovrascrive_un_nome_gia_occupato(hass, config_entry, registro
     # qualcun altro occupa gia' il posto di arrivo
     registro.async_get_or_create(
         "sensor", "altra_integrazione", "occupante",
-        suggested_object_id="chery_connect_battery")
+        suggested_object_id="lepas_battery")
 
     await _migra(hass, config_entry)
 
     assert registro.async_get("sensor.omoda9_batteria") is not None, \
         "la vecchia doveva restare dov'era invece di perdere lo storico"
-    assert registro.async_get("sensor.chery_connect_battery").unique_id == "occupante"
+    assert registro.async_get("sensor.lepas_battery").unique_id == "occupante"
 
 
 async def test_una_entita_gia_inglese_non_viene_toccata(hass, config_entry, registro):
@@ -69,7 +69,7 @@ async def test_una_entita_gia_inglese_non_viene_toccata(hass, config_entry, regi
     succede dal secondo riavvio in poi, per sempre."""
     voce = registro.async_get_or_create(
         "sensor", "omoda9", "VINFINTO_batteria",
-        suggested_object_id="chery_connect_battery", config_entry=config_entry)
+        suggested_object_id="lepas_battery", config_entry=config_entry)
     prima = voce.entity_id
 
     await _migra(hass, config_entry)
@@ -99,7 +99,7 @@ async def test_avvisa_l_utente_solo_se_ha_rinominato_qualcosa(hass, config_entry
     avviso che compare quando non c'e' nulla da fare insegna a ignorare anche quelli veri."""
     from homeassistant.helpers import issue_registry as ir
 
-    from custom_components.omoda9.const import DOMAIN
+    from custom_components.lepas.const import DOMAIN
 
     reg_issue = ir.async_get(hass)
     issue_id = f"entity_ids_rinominati_{config_entry.entry_id}"

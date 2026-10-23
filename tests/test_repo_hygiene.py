@@ -2,7 +2,7 @@
 
 Il repo è **pubblico**. Nella stessa cartella di lavoro convivono due mondi:
 
-  * il **package pubblicabile** (`custom_components/omoda9/`, README, LICENSE, hacs.json,
+  * il **package pubblicabile** (`custom_components/lepas/`, README, LICENSE, hacs.json,
     CHANGELOG) — ciò che finisce su GitHub e da lì in HACS;
   * il **materiale privato** (dati per-account: certificati, token, `.env`, file del
     monitor diagnostico; il ponte legacy; gli handoff personali) — che deve restare su
@@ -46,7 +46,7 @@ def tracciati() -> list[str]:
 
 # nomi che NON devono mai comparire fra i file tracciati, a qualsiasi profondità
 VIETATI_ESATTI = {
-    "omoda9.env", "token.json", ".mqtt_cred", ".gh_token", "ha_bridge.py",
+    "lepas.env", "omoda9.env", "token.json", ".mqtt_cred", ".gh_token", "ha_bridge.py",
     "hacs_refresh.py", "private-patterns.txt",
     "DEROGATIONS.log", "DEROGHE.log", "COMMENTI.log",
 }
@@ -91,12 +91,12 @@ def test_la_suite_resta_fuori_dal_package(tracciati):
 
     Il requisito originale resta però intatto, perché «tracciato» ≠ «spedito»: lo zip
     che HACS scarica è costruito da `release.sh` a partire dalla SOLA
-    `custom_components/omoda9/`. Quindi l'invariante da difendere è questo — nessun
+    `custom_components/lepas/`. Quindi l'invariante da difendere è questo — nessun
     file di test dentro il package pubblicabile — non l'assenza dal repo.
     """
     intrusi = [
         r for r in tracciati
-        if r.startswith("custom_components/omoda9/")
+        if r.startswith("custom_components/lepas/")
         and (os.path.basename(r).startswith("test_")
              or "/tests/" in r
              or os.path.basename(r) in {"conftest.py", "fixtures.py", "fake_cloud.py"})
@@ -113,14 +113,14 @@ def test_il_package_pubblicabile_e_completo(tracciati):
     Un file dimenticato qui si nota solo quando un utente aggiorna e l'integrazione
     non parte — cioè troppo tardi."""
     richiesti = [
-        "custom_components/omoda9/__init__.py",
-        "custom_components/omoda9/manifest.json",
-        "custom_components/omoda9/const.py",
-        "custom_components/omoda9/coordinator.py",
-        "custom_components/omoda9/config_flow.py",
-        "custom_components/omoda9/strings.json",
-        "custom_components/omoda9/translations/it.json",
-        "custom_components/omoda9/translations/en.json",
+        "custom_components/lepas/__init__.py",
+        "custom_components/lepas/manifest.json",
+        "custom_components/lepas/const.py",
+        "custom_components/lepas/coordinator.py",
+        "custom_components/lepas/config_flow.py",
+        "custom_components/lepas/strings.json",
+        "custom_components/lepas/translations/it.json",
+        "custom_components/lepas/translations/en.json",
         "hacs.json", "README.md", "LICENSE", "CHANGELOG.md",
     ]
     mancanti = [r for r in richiesti if r not in tracciati]
@@ -130,10 +130,10 @@ def test_il_package_pubblicabile_e_completo(tracciati):
 def test_ogni_piattaforma_dichiarata_e_tracciata(tracciati):
     """Una piattaforma in `PLATFORMS` il cui file non è tracciato = integrazione che
     fallisce il setup dopo l'aggiornamento HACS, ma funziona sul PC di chi sviluppa."""
-    from custom_components.omoda9.const import PLATFORMS
+    from custom_components.lepas.const import PLATFORMS
 
     mancanti = [p for p in PLATFORMS
-                if f"custom_components/omoda9/{p}.py" not in tracciati]
+                if f"custom_components/lepas/{p}.py" not in tracciati]
     assert not mancanti, f"piattaforme non tracciate: {mancanti}"
 
 
@@ -145,7 +145,7 @@ def test_i_moduli_core_sono_tracciati(tracciati):
     attesi = [f for f in os.listdir(os.path.abspath(core_loader.CORE_DIR))
               if f.endswith(".py")]
     mancanti = [f for f in attesi
-                if f"custom_components/omoda9/core/{f}" not in tracciati]
+                if f"custom_components/lepas/core/{f}" not in tracciati]
     assert not mancanti, f"moduli core/ non tracciati: {mancanti}"
 
 
@@ -165,7 +165,7 @@ def test_versione_manifest_e_changelog_allineati():
     pubblicata senza la sua voce di changelog arriva all'utente muta."""
     import json
 
-    with open(os.path.join(REPO, "custom_components/omoda9/manifest.json"),
+    with open(os.path.join(REPO, "custom_components/lepas/manifest.json"),
               encoding="utf-8") as fh:
         versione = json.load(fh)["version"]
     with open(os.path.join(REPO, "CHANGELOG.md"), encoding="utf-8") as fh:
@@ -192,17 +192,17 @@ def test_manifest_non_rivendica_logger_generici():
 
     Quando i moduli core/ si importavano per nome nudo, i loro logger si chiamavano
     `commands`, `wake`, `session`, `probe` e andavano dichiarati in `manifest.loggers`
-    per essere governabili. Ora vivono sotto `custom_components.omoda9.core.*`, dove Home
+    per essere governabili. Ora vivono sotto `custom_components.lepas.core.*`, dove Home
     Assistant li mappa da sé. Continuare a rivendicare quei nomi generici sarebbe peggio
     che inutile: se un'ALTRA integrazione scrivesse su un logger `commands`, HA
     attribuirebbe i suoi messaggi a noi."""
     import json
 
-    with open(os.path.join(REPO, "custom_components/omoda9/manifest.json"),
+    with open(os.path.join(REPO, "custom_components/lepas/manifest.json"),
               encoding="utf-8") as fh:
         manifest = json.load(fh)
 
-    generici = {"commands", "wake", "session", "probe", "codes", "omoda"}
+    generici = {"commands", "wake", "session", "probe", "codes", "omoda", "lepas"}
     rivendicati = set(manifest.get("loggers", []))
     assert not (rivendicati & generici), (
         f"il manifest rivendica logger dal nome generico: {rivendicati & generici}"
@@ -212,8 +212,8 @@ def test_manifest_non_rivendica_logger_generici():
 def test_i_logger_di_core_sono_nel_namespace_dell_integrazione():
     """Conferma il presupposto del test precedente: i logger dei moduli core/ sono
     ottenuti da `__name__`, quindi ereditano il namespace del pacchetto."""
-    from custom_components.omoda9.core import commands
+    from custom_components.lepas.core import commands
 
-    assert commands._LOGGER.name.startswith("custom_components.omoda9.core"), (
+    assert commands._LOGGER.name.startswith("custom_components.lepas.core"), (
         f"logger fuori dal namespace dell'integrazione: {commands._LOGGER.name}"
     )
