@@ -36,3 +36,9 @@
 - **Root Cause & Hazard**: When rebranding the domain from `omoda9` to `lepas`, changing `ID_PREFIX` in `naming.py` ensures all newly instantiated entities use `{platform}.lepas_{english_key}`. However, Home Assistant stores entity mappings in the Entity Registry (`er.EntityRegistry`) keyed by `unique_id`; without an active migration step, existing installations retain legacy `entity_id` values, while new installations receive the rebranded names, causing documentation divergence and breaking user automations.
 - **Dual-Prefix Traversal**: In `_async_migrate_entity_ids` (`custom_components/lepas/__init__.py`), the migration loop explicitly inspects both `f"{DOMAIN}_"` (`lepas_`) and `omoda9_` prefixes (`for prefix in (f"{DOMAIN}_", "omoda9_"):`) when extracting `old_key` to map against `ENGLISH_KEYS`. This guarantees clean migration whether an entity originated with Italian legacy names under `omoda9_` or under the intermediate domain transition.
 - **Collision & History Guard**: Renaming via `reg.async_update_entity(voce.entity_id, new_entity_id=nuovo)` preserves recorder history and long-term statistics. If `nuovo` already exists in `reg.entities`, the migration skips the rename with a warning rather than failing silently, preventing recorder history corruption.
+
+## 2026-10-23: HACS Direct Repository Download & GitHub Remote Alignment
+
+1. **Removed zip_release/filename from hacs.json**: Updated the `hacs.json` file to remove the `zip_release/filename` entry. This change allows HACS to download the `custom_components/lepas` directly from the branch or tags on the `cavuminfundo/Lepas-HA` repository, eliminating the need for a zip release asset.
+
+2. **Use `uv run --no-project --with-requirements requirements_test.txt pytest`**: Modified the command to use `uv run --no-project --with-requirements requirements_test.txt pytest` to avoid issues with the hatchling wheel build failure and the untracked `uv.lock` file creation.
