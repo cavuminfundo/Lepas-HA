@@ -5,16 +5,16 @@
     "recorder"
   ],
   "codeowners": [
-    "@Caslinovich"
+    "@cavuminfundo"
   ],
   "config_flow": true,
   "dependencies": [
     "http"
   ],
-  "documentation": "https://github.com/chery-connect-ha/lepas-ha",
+  "documentation": "https://github.com/cavuminfundo/Lepas-HA",
   "integration_type": "device",
   "iot_class": "cloud_push",
-  "issue_tracker": "https://github.com/chery-connect-ha/lepas-ha/issues",
+  "issue_tracker": "https://github.com/cavuminfundo/Lepas-HA/issues",
   "requirements": [
     "paho-mqtt>=2.0",
     "pycryptodome>=3.17",

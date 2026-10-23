@@ -217,3 +217,20 @@ def test_i_logger_di_core_sono_nel_namespace_dell_integrazione():
     assert commands._LOGGER.name.startswith("custom_components.lepas.core"), (
         f"logger fuori dal namespace dell'integrazione: {commands._LOGGER.name}"
     )
+
+
+def test_hacs_e_manifest_puntano_al_repo_ufficiale_senza_zip_release():
+    """HACS scarica direttamente dal repo (Opzione A) e il manifest punta a cavuminfundo/Lepas-HA."""
+    import json
+
+    with open(f"{REPO}/hacs.json", encoding="utf-8") as fh:
+        hacs = json.load(fh)
+    with open(f"{REPO}/custom_components/lepas/manifest.json", encoding="utf-8") as fh:
+        manifest = json.load(fh)
+
+    assert hacs.get("zip_release") is not True
+    assert "filename" not in hacs
+    assert manifest["documentation"] == "https://github.com/cavuminfundo/Lepas-HA"
+    assert manifest["issue_tracker"] == "https://github.com/cavuminfundo/Lepas-HA/issues"
+    assert manifest["codeowners"] == ["@cavuminfundo"]
+
