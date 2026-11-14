@@ -10,7 +10,7 @@ Before starting any work, consult the relevant documentation files below:
 - **System Architecture & Component Model:** Read [docs/architecture.md](file:///./docs/architecture.md).
 - **Project Roadmap & Evolution Phases:** Read [docs/roadmap.md](file:///./docs/roadmap.md).
 - **Low-Level Code Implementation & Security Bible:** Read [docs/code-implementation.md](file:///./docs/code-implementation.md).
-- **Lessons Learned & Discovered Telemetry Context:** Read [.agents/memory/lessons.md](file:///./.agents/memory/lessons.md).
+- **Domain Crash Antibodies & Archaeology (`lessons.md` Retired):** Consult [`.agents/memory/antibodies/lepas.md`](file:///home/federico/Lepas/.agents/memory/antibodies/lepas.md) and run `python3 /home/federico/skills_library/scripts/local_llm_offload.py --task archaeology --files <file>` before editing files `>600L`. Whenever you resolve a bug or regression, compile or update an `AB-LEP-NNN` Crash Antibody card in `.agents/memory/antibodies/lepas.md`.
 
 ---
 
