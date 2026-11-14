@@ -772,7 +772,8 @@ class LepasCoordinator(DataUpdateCoordinator):
             ok = (rc == 0) or (getattr(rc, "value", 1) == 0)
             self._update({"car_connected": ok})
             _LOGGER.info("[auto] MQTT on_connect rc=%s → %s (sub %s)",
-                         rc, "connesso" if ok else "RIFIUTATO", topic if ok else "-")
+                         rc, "connesso" if ok else "RIFIUTATO",
+                         f"app/{self.channel_id}/***/account/msgCenter/msg" if ok else "-")
             if ok:
                 cl.subscribe(topic, qos=1)
             if self._diag is not None:

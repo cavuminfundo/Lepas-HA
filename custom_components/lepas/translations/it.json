@@ -94,7 +94,7 @@
       },
       "reconfigure_pin": {
         "title": "PIN di controllo veicolo",
-        "description": "Inserisci il PIN a 4 cifre usato per i comandi remoti. Il PIN non serve per l'accesso, quindi qui non viene richiesto alcun codice di verifica. Correggilo se i comandi risultano «riusciti» ma l'auto non fa nulla.",
+        "description": "Inserisci il PIN (4 o 6 cifre) usato per i comandi remoti. Il PIN non serve per l'accesso, quindi qui non viene richiesto alcun codice di verifica. Correggilo se i comandi risultano «riusciti» ma l'auto non fa nulla.",
         "data": {
           "pin": "PIN di controllo veicolo"
         }
@@ -171,7 +171,7 @@
         "step": {
           "pin": {
             "title": "Correggi il PIN dei comandi",
-            "description": "I comandi remoti vengono rifiutati perché il PIN a 4 cifre è errato (i sensori continuano a funzionare: non è un problema di accesso). Inserisci il PIN corretto. Non insistere con un PIN errato, per evitare il blocco dell'account Chery.",
+            "description": "I comandi remoti vengono rifiutati perché il PIN (4 o 6 cifre) è errato (i sensori continuano a funzionare: non è un problema di accesso). Inserisci il PIN corretto. Non insistere con un PIN errato, per evitare il blocco dell'account Chery.",
             "data": {
               "pin": "PIN di controllo veicolo"
             }

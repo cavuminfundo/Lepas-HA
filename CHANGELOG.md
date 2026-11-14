@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.15.3 — 2026-11-14
+
+### 🇬🇧 English
+
+- **Security Hardening**: Masked `tuserid` in MQTT `on_connect` `INFO` logs (`coordinator.py`), switched temporary token file creation to atomic `0o600` mode via `os.open` (`core/wake.py`, `core/prova_token.py`), and HTML-escaped error messages in the Lovelace card `catch` block (`lovelace/lepas-card.js`).
+- **4- or 6-Digit Remote PIN Translations**: Updated UI descriptions in `strings.json`, `en.json`, `it.json`, and `nl.json` to clarify support for both 4-digit and 6-digit remote control PINs.
+
+### 🇮🇹 Italiano
+
+- **Hardening di sicurezza**: Mascherato `tuserid` nei log `INFO` di connessione MQTT (`coordinator.py`), resa atomica la creazione con permessi `0o600` dei file temporanei dei token tramite `os.open` (`core/wake.py`, `core/prova_token.py`) e applicato l'escaping HTML ai messaggi d'errore nel blocco `catch` della card Lovelace (`lovelace/lepas-card.js`).
+- **Traduzioni PIN comandi (4 o 6 cifre)**: Aggiornate le descrizioni UI in `strings.json`, `en.json`, `it.json` e `nl.json` per chiarire il supporto ai PIN di controllo remoto a 4 o 6 cifre.
+
 ## v1.15.2 — 2026-10-23
 
 ### 🇬🇧 English

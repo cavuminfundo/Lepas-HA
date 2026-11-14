@@ -81,7 +81,7 @@
       },
       "reconfigure_pin": {
         "title": "Voertuigbedienings-PIN",
-        "description": "Voer de 4-cijferige PIN in die wordt gebruikt voor externe commando's. De PIN wordt niet gebruikt om in te loggen, dus hier is geen verificatiecode nodig. Stel deze bij als commando's als \"succesvol\" terugkomen maar de auto het niet uitvoert.",
+        "description": "Voer de 4- of 6-cijferige PIN in die wordt gebruikt voor externe commando's. De PIN wordt niet gebruikt om in te loggen, dus hier is geen verificatiecode nodig. Stel deze bij als commando's als \"succesvol\" terugkomen maar de auto het niet uitvoert.",
         "data": {
           "pin": "Voertuigbedienings-PIN"
         }
@@ -127,7 +127,7 @@
         "step": {
           "pin": {
             "title": "Herstel de voertuigbedienings-PIN",
-            "description": "Externe commando's worden afgewezen omdat de 4-cijferige bedienings-PIN onjuist is (de sensoren blijven werken — dit is geen inlogprobleem). Voer de juiste PIN in. Probeer niet herhaaldelijk verkeerde waarden in te voeren.",
+            "description": "Externe commando's worden afgewezen omdat de 4- of 6-cijferige bedienings-PIN onjuist is (de sensoren blijven werken — dit is geen inlogprobleem). Voer de juiste PIN in. Probeer niet herhaaldelijk verkeerde waarden in te voeren.",
             "data": {
               "pin": "Voertuigbedienings-PIN"
             }

@@ -325,7 +325,7 @@ class LepasCard extends HTMLElement {
       this._render(hass);
     } catch (e) {
       this.content.innerHTML =
-        `<div style="padding:16px;color:#ff5252">Lepas card error: ${e && e.message ? e.message : e}</div>`;
+        `<div style="padding:16px;color:#ff5252">Lepas card error: ${this._h(e && e.message ? e.message : e)}</div>`;
     }
   }
 
@@ -364,7 +364,7 @@ class LepasCard extends HTMLElement {
 
     // ---- hero (photo, dark-studio fallback or gradient) ----
     const imgAttr = items.map((r) => r.s && r.s.attributes && r.s.attributes.vehicle_image).find(Boolean);
-    const img = cfg.image || imgAttr || "/lepas_card/lepas-hero.png?v=1.15.2";
+    const img = cfg.image || imgAttr || "/lepas_card/lepas-hero.png?v=1.15.3";
     const safeImg = this._imgUrl(img);
     const deviceId = this._deviceId(hass, items);
 

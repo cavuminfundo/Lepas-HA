@@ -215,7 +215,8 @@ def _refresh_token_detail(ctx) -> tuple[bool, str]:
         try:
             path = ctx.token_path
             tmp = path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(j, f, ensure_ascii=False)
             os.chmod(tmp, 0o600)   # il token è una credenziale: leggibile solo dal proprietario
             os.replace(tmp, path)

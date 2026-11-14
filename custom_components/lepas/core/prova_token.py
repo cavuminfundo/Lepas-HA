@@ -242,7 +242,8 @@ if __name__ == "__main__":
     if tok:
         # scrittura atomica: tmp + rename (token.json mai troncato se il processo muore)
         tmp = _TOKEN_OUT + ".tmp"
-        with open(tmp, "w") as fh:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(j, fh, indent=2, ensure_ascii=False)
         os.chmod(tmp, 0o600)   # il token è una credenziale: leggibile solo dal proprietario
         os.replace(tmp, _TOKEN_OUT)

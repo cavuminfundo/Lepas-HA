@@ -94,7 +94,7 @@
       },
       "reconfigure_pin": {
         "title": "Vehicle control PIN",
-        "description": "Enter the 4-digit PIN used for remote commands. The PIN is not used to sign in, so no verification code is needed here. Fix it if commands come back as \"successful\" but the car does nothing.",
+        "description": "Enter the 4- or 6-digit PIN used for remote commands. The PIN is not used to sign in, so no verification code is needed here. Fix it if commands come back as \"successful\" but the car does nothing.",
         "data": {
           "pin": "Vehicle control PIN"
         }
@@ -171,7 +171,7 @@
         "step": {
           "pin": {
             "title": "Fix the vehicle control PIN",
-            "description": "Remote commands are being rejected because the 4-digit control PIN is wrong (the sensors keep working — this is not a login problem). Enter the correct PIN. Do not keep retrying with a wrong PIN, to avoid locking the Chery account.",
+            "description": "Remote commands are being rejected because the 4- or 6-digit control PIN is wrong (the sensors keep working — this is not a login problem). Enter the correct PIN. Do not keep retrying with a wrong PIN, to avoid locking the Chery account.",
             "data": {
               "pin": "Vehicle control PIN"
             }
