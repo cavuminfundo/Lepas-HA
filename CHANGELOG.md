@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.16.1 — 2026-11-15
+
+### 🇬🇧 English
+
+- **Command PIN / `checkPassword` Routing (`A00361`)**: Backend error `A00361` ("User does not exist") wrapped in `code=1, message='A00361'` is now extracted and classified as a non-PIN configuration/user-ID issue (`reason="config"`) instead of falsely triggering the PIN error message and anti-lockout counter.
+- **`tUserId` Alignment from `queryList`**: `checkPassword` now passes `tUserId`/`channelId` to `vmc/queryList` (matching the official Lepas app) and aligns `tUserId` from the vehicle entry if missing or mismatched.
+
+### 🇮🇹 Italiano
+
+- **Classificazione errore `A00361` in `checkPassword`**: Il codice applicativo `A00361` ("User does not exist") restituito dentro `code=1, message='A00361'` viene ora estratto e classificato correttamente come errore di configurazione/utente (`reason="config"`) invece di essere scambiato per PIN errato e consumare il contatore anti-lockout.
+- **Allineamento `tUserId` da `queryList`**: `checkPassword` invia ora `tUserId`/`channelId` a `vmc/queryList` (come l'app ufficiale Lepas) e riallinea `tUserId` dal veicolo se mancante o disallineato.
+
 ## v1.16.0 — 2026-11-15
 
 ### 🇬🇧 English

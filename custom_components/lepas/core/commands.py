@@ -399,6 +399,24 @@ def _mint_taskid_impl(ctx, tuid):
             reason="pin") from None
 
 
+def _tuserid_da_querylist(ql: dict, vin: str) -> str:
+    """Estrae il tUserId associato a `vin` dalla risposta di vmc/queryList, se presente."""
+    data = ql.get("data")
+    items: list[dict] = []
+    if isinstance(data, list):
+        items = [x for x in data if isinstance(x, dict)]
+    elif isinstance(data, dict):
+        for v in data.values():
+            if isinstance(v, list):
+                items.extend(x for x in v if isinstance(x, dict))
+    for item in items:
+        if item.get("vin") == vin:
+            tu = str(item.get("tUserId") or "").strip()
+            if tu and tu != "None":
+                return tu
+    return ""
+
+
 def _checkpassword(ctx, tuid, tentativo):
     """Catena BFF vera e propria. Gira col lock dell'anti-lockout già preso; dichiara
     l'esito su `tentativo` SOLO quando è davvero attribuibile al PIN."""
@@ -418,12 +436,22 @@ def _checkpassword(ctx, tuid, tentativo):
         # MED: il BFF può restituire un top-level non-dict (stringa) → normalizza a {}
         return j if isinstance(j, dict) else {}
 
-    bff("/tsp/v1/app/vmc/queryList", {})
+    tuid_str = str(tuid or "").strip()
+    if tuid_str == "None":
+        tuid_str = ""
+    ql = bff("/tsp/v1/app/vmc/queryList",
+             {"tUserId": tuid_str, "channelId": ctx.channel_id} if tuid_str else {})
+    ql_tuid = _tuserid_da_querylist(ql, ctx.vin)
+    if ql_tuid and (not tuid_str or tuid_str != ql_tuid):
+        _LOGGER.debug("[taskId] tUserId allineato da queryList (presente=%s)", bool(tuid_str))
+        tuid_str = ql_tuid
+    if not tuid_str:
+        _LOGGER.warning("[taskId] tUserId vuoto prima di checkPassword")
     bff("/tsp/v1/app/vmc/setVecDefault", {"vin": ctx.vin})
     plain = hashlib.md5(ctx.pin.encode()).hexdigest()
     password = A.sm4_code(plain, "padRight32")
     j = bff("/tsp/v1/app/cpm/checkPassword",
-            {"vin": ctx.vin, "tUserId": str(tuid), "channelId": ctx.channel_id,
+            {"vin": ctx.vin, "tUserId": tuid_str, "channelId": ctx.channel_id,
              "password": password, "needDecode": 0, "scene": 0, "type": 0})
     data = j.get("data") if isinstance(j.get("data"), dict) else {}
     tid = data.get("taskId") or j.get("taskId")
@@ -442,14 +470,18 @@ def _checkpassword(ctx, tuid, tentativo):
     _LOGGER.warning("[taskId] checkPassword NON ha restituito un taskId → %s "
                     "(risposta backend grezza; se non è un PIN errato la causa è qui)", detail)
 
+    # Alcuni wrapper BFF restituiscono code=1 e il codice applicativo (es. 'A00361') in message.
+    code_str = str(code) if code is not None else ""
+    routing_code = cp_msg if (not code_str.startswith("A0") and cp_msg.startswith("A0")) else code
     # P2-5: un'unica interrogazione alla tabella decide rimedio E se contare per il blocco.
     # Prima erano due `if` su insiemi separati più un ramo di default: tre punti da tenere
     # allineati a mano, ed è lì che la classificazione era andata storta.
-    esito = routing.classifica(code, routing.CONTESTO_CHECKPASSWORD)
+    esito = routing.classifica(routing_code, routing.CONTESTO_CHECKPASSWORD)
     if esito.conta_lockout:
         tentativo.fallito()
+    err_code = cp_msg if routing_code == cp_msg else (str(code) if code else None)
     raise CommandError(_messaggio_checkpassword(esito, detail),
-                       code=str(code) if code else None, reason=esito.reason)
+                       code=err_code, reason=esito.reason)
 
 
 def _messaggio_checkpassword(esito, detail: str) -> str:

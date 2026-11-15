@@ -32,6 +32,7 @@ CODE_MEANING = {
     "A00084": ("funzione non autorizzata su questa auto 🚫 (non è il PIN) · "
                "not authorised on this vehicle (this is not your PIN)"),
     "A00089": "taskId non valido ❌ (serve un taskId benedetto da checkPassword)",
+    "A00361": "utente inesistente ❌ (tUserId non riconosciuto)",
     "A00546": "taskId non valido ❌ (scene errato in checkPassword)",
     "A00567": "parametri checkPassword incompleti ❌",
     "A00000": "token scaduto/non valido ❌ (rifai il login OTP)",

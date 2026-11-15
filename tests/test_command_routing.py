@@ -76,6 +76,29 @@ def test_il_codice_grezzo_finisce_nel_messaggio(core, cloud, ctx):
     assert "A00285" in str(err.value)
 
 
+def test_checkpassword_code_1_con_a00361_in_message_non_conta_lockout(core, cloud, ctx):
+    """Il BFF può avvolgere A00361 in code=1, message='A00361' (User does not exist):
+    non è un errore di PIN e non deve consumare tentativi anti-lockout."""
+    commands = core["commands"]
+    cloud.on("/tsp/v1/app/cpm/checkPassword", {"code": 1, "message": "A00361"})
+    with pytest.raises(commands.CommandError) as err:
+        commands._mint_taskid(ctx, FX.TUSERID)
+    assert err.value.reason == "config"
+    assert ctx.lockout.tentativi_falliti == 0
+    assert "A00361" in str(err.value)
+
+
+def test_checkpassword_usa_tuserid_da_querylist_se_tuid_vuoto(core, cloud, ctx):
+    """Se auth/login restituisce tuid vuoto, _checkpassword recupera tUserId da queryList."""
+    commands = core["commands"]
+    cloud.on("/tsp/v1/app/vmc/queryList", data=[{"vin": FX.VIN, "tUserId": "99887766"}])
+    cloud.on("/tsp/v1/app/cpm/checkPassword", data={"taskId": FX.TASKID})
+    tid = commands._mint_taskid(ctx, "")
+    assert tid == FX.TASKID
+    cp_call = cloud.calls_to("checkPassword")[0]["body"]
+    assert cp_call["tUserId"] == "99887766"
+
+
 # ───────────────────────── send() → esito ─────────────────────────
 @pytest.mark.parametrize("code,atteso", sorted(FX.COMMAND_CODES.items()))
 def test_esito_comando_per_codice(core, cloud, ctx, code, atteso):

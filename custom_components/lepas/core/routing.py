@@ -130,6 +130,7 @@ _TABELLA: dict[str, Classificazione] = {
     # NON contano per l'anti-lockout: contarli avvicinerebbe il blocco dell'account
     # reale per una causa che col PIN non c'entra nulla (bug P1-2).
     "A00374": _voce(reason=REASON_CONFIG),   # permessi veicolo
+    "A00361": _voce(reason=REASON_CONFIG),   # utente inesistente (tUserId non riconosciuto)
     "A00554": _voce(reason=REASON_CONFIG),   # autorizzazione veicolo
     "A00604": _voce(reason=REASON_CONFIG),   # clientType mancante/errato
     "A00643": _voce(reason=REASON_CONFIG),   # taskId assente nella richiesta
