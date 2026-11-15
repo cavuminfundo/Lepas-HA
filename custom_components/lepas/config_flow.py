@@ -373,6 +373,8 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._tuserid: str = ""
         self._vins: list[str] = []
         self._reauth_reason: str = ""       # reauth: motivo dell'ultimo tentativo, mostrato nel menu
+        self._pending_login_step: str = ""
+        self._pending_password: str = ""
 
     @staticmethod
     @callback
@@ -380,16 +382,7 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return LepasOptionsFlow(config_entry)
 
     def _region_fields(self) -> dict:
-        """Campi opzionali di REGIONE / MARCHIO / LINGUA, comuni ai tre login.
-
-        Il preset è la scelta normale: «Lepas (Europa)» (default nativo) o alternative.
-        Riempie da solo BFF + TENANT-CODE + channelId + countryId.
-        I campi sotto servono a chi sta su un'altra regione/marchio: si sceglie «Custom» e li si
-        compila a mano. TSP host, broker MQTT e certificati sono comuni per regione (EU di
-        default) e restano validi per entrambi i marchi.
-
-        La LINGUA è indipendente dal preset: decide l'header `Accept-Language`, quindi la lingua
-        di e-mail/SMS OTP e dei messaggi del server, non la regione a cui ci si collega."""
+        """Preset di regione/marchio e lingua di comunicazione (comuni ai tre login)."""
         return {
             vol.Optional(CONF_PRESET, default=DEFAULT_PRESET): SelectSelector(
                 SelectSelectorConfig(
@@ -400,30 +393,38 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         SelectOptionDict(value=PRESET_CHERY_EU,
                                          label="Chery — Europe"),
                         SelectOptionDict(value=PRESET_CUSTOM,
-                                         label="Custom / other region (use the fields below)"),
+                                         label="Custom / other region (next step)"),
                     ],
                 )
             ),
-            # Lingua delle chiamate (Accept-Language): decide la lingua di e-mail/SMS OTP e dei
-            # messaggi del server. Nuovi account: inglese; si può scegliere l'italiano.
             vol.Optional(CONF_LANGUAGE, default=DEFAULT_LANGUAGE): SelectSelector(
                 SelectSelectorConfig(
                     mode=SelectSelectorMode.DROPDOWN,
                     options=[SelectOptionDict(value=v, label=lbl) for v, lbl in LANGUAGES.items()],
                 )
             ),
-            # Valori riempiti dal preset (tranne «Custom»). Restano modificabili per le
-            # regioni/marchi non coperti da un preset.
+        }
+
+    def _custom_region_schema(self) -> vol.Schema:
+        """Parametri tecnici di connessione per regioni o marchi non coperti da preset."""
+        return vol.Schema({
             vol.Optional(CONF_BFF, default=DEFAULTS[CONF_BFF]): str,
             vol.Optional(CONF_TENANT_CODE, default=DEFAULTS[CONF_TENANT_CODE]): str,
             vol.Optional(CONF_COUNTRY_ID, default=DEFAULTS[CONF_COUNTRY_ID]): str,
             vol.Optional(CONF_CHANNEL_ID, default=DEFAULTS[CONF_CHANNEL_ID]): str,
-            # Comuni per regione (default EU): un setup non-EU li cambia insieme al resto.
             vol.Optional(CONF_TSP_HOST, default=DEFAULTS[CONF_TSP_HOST]): str,
             vol.Optional(CONF_CAR_MQTT_HOST, default=DEFAULTS[CONF_CAR_MQTT_HOST]): str,
             vol.Optional(CONF_CAR_MQTT_PORT, default=DEFAULTS[CONF_CAR_MQTT_PORT]): vol.Coerce(int),
             vol.Optional(CONF_CERTS_SRC, default=""): str,
-        }
+        })
+
+    def _password_schema(self) -> vol.Schema:
+        return vol.Schema({
+            vol.Required(CONF_EMAIL): str,
+            vol.Required(CONF_PIN): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+            vol.Required(CONF_PASSWORD): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+            **self._region_fields(),
+        })
 
     @staticmethod
     def _apply_preset(data: dict) -> None:
@@ -448,23 +449,19 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _submit_login(self, user_input: dict[str, Any], step_id: str, schema):
-        """Logica comune ai due login: salva i dati, prova a inviare l'OTP, va allo step OTP."""
+        """Logica comune ai due login OTP: salva i dati o instrada a custom_region."""
+        preset = user_input.get(CONF_PRESET, DEFAULT_PRESET)
+        if preset == PRESET_CUSTOM:
+            self._data.update(user_input)
+            self._pending_login_step = step_id
+            return await self.async_step_custom_region()
+
         self._data.update(user_input)
-        # Preset di marchio → risolve BFF/TENANT-CODE/channelId/countryId prima di coniare il
-        # token: il primo login deve già partire verso il gateway/tenant giusto.
         self._apply_preset(self._data)
         ok, msg = await self.hass.async_add_executor_job(_send_otp, self.hass, self._data)
         if ok:
             return await self.async_step_otp()
         _LOGGER.warning("Lepas: invio OTP fallito: %s", msg)
-        # Ripropone quanto già digitato: senza questo i campi tornano vuoti e — peggio — i
-        # parametri di REGIONE tornano ai default europei. Un utente fuori dall'Europa che
-        # non se ne accorge riprova con gli endpoint sbagliati, e se poi riesce si ritrova
-        # l'entry creato con quelli.
-        # ⚠️ Il PIN NO. `add_suggested_values_to_schema` riempie ogni chiave che trova, e il
-        # campo del PIN è un `str` normale, non un campo password: ri-proponendolo lo si
-        # rimanda a schermo in chiaro. Il resto del file tratta il PIN come credenziale da non
-        # far ricomparire nel form (vedi il passo di riconfigurazione), qui la cautela mancava.
         schema = self.add_suggested_values_to_schema(
             schema, {k: v for k, v in user_input.items() if k != CONF_PIN})
         return self.async_show_form(step_id=step_id, data_schema=schema,
@@ -483,6 +480,70 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="login_email", data_schema=schema,
                                     description_placeholders={"reason": ""})
 
+    async def _complete_password_login(
+        self,
+        password: str,
+        step_id: str,
+        schema: vol.Schema,
+        user_input: dict[str, Any],
+    ):
+        """Conia il token con grant ROPC e scopre il veicolo (usato da login_password e custom_region)."""
+        ok, msg = await self.hass.async_add_executor_job(
+            _mint_password, self.hass, self._data, password)
+        if ok:
+            d_ok, tu, vins, detail = await self.hass.async_add_executor_job(
+                _discover, self.hass, self._data)
+            if not d_ok or not vins:
+                await self.hass.async_add_executor_job(_cleanup_pending, self.hass)
+                _LOGGER.warning("Lepas: scoperta veicolo (password) fallita: %s", detail)
+                reason = _reason_line(detail)
+                if step_id == "custom_region":
+                    err_schema = self.add_suggested_values_to_schema(
+                        self._custom_region_schema(), user_input)
+                    return self.async_show_form(
+                        step_id="custom_region",
+                        data_schema=err_schema,
+                        errors={"base": "no_vehicle"},
+                        description_placeholders={"reason": reason},
+                    )
+                err_schema = self.add_suggested_values_to_schema(
+                    schema, {k: v for k, v in user_input.items() if k not in (CONF_PIN, CONF_PASSWORD)})
+                return self.async_show_form(
+                    step_id=step_id,
+                    data_schema=err_schema,
+                    errors={"base": "no_vehicle"},
+                    description_placeholders={"reason": reason},
+                )
+            self._pending_password = ""
+            self._tuserid = tu
+            self._vins = vins
+            self._data[CONF_LOGIN_METHOD] = LOGIN_METHOD_PASSWORD
+            if len(vins) == 1:
+                return await self._create_entry(vins[0])
+            return await self.async_step_select_vehicle()
+
+        await self.hass.async_add_executor_job(_cleanup_pending, self.hass)
+        self._pending_password = ""
+        _LOGGER.warning("Lepas: login password fallito: %s", msg)
+        reason = _reason_line(msg)
+        if step_id == "custom_region":
+            suggested = {k: v for k, v in self._data.items() if k not in (CONF_PIN, CONF_PASSWORD)}
+            err_schema = self.add_suggested_values_to_schema(self._password_schema(), suggested)
+            return self.async_show_form(
+                step_id="login_password",
+                data_schema=err_schema,
+                errors={"base": "password_invalid"},
+                description_placeholders={"reason": reason},
+            )
+        err_schema = self.add_suggested_values_to_schema(
+            schema, {k: v for k, v in user_input.items() if k not in (CONF_PIN, CONF_PASSWORD)})
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=err_schema,
+            errors={"base": "password_invalid"},
+            description_placeholders={"reason": reason},
+        )
+
     async def async_step_login_password(self, user_input: dict[str, Any] | None = None):
         """Login con e-mail + password (ROPC), SENZA OTP: conia il token e scopre il VIN in un
         colpo solo.
@@ -491,47 +552,19 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         salvata nell'entry. Da qui la sessione vive sul `refresh_token`, come per l'OTP; se un
         giorno access e refresh muoiono entrambi, la reauth richiede di nuovo la password
         (riconosciuta dal marcatore `CONF_LOGIN_METHOD`)."""
-        schema = vol.Schema({
-            vol.Required(CONF_EMAIL): str,
-            vol.Required(CONF_PIN): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
-            vol.Required(CONF_PASSWORD): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
-            **self._region_fields(),
-        })
-        errors: dict[str, str] = {}
-        reason = ""
+        schema = self._password_schema()
         if user_input is not None:
             password = user_input.get(CONF_PASSWORD, "")
-            # ⚠️ la password NON entra nei dati dell'entry: la si toglie subito e la si passa a parte
+            preset = user_input.get(CONF_PRESET, DEFAULT_PRESET)
             self._data.update({k: v for k, v in user_input.items() if k != CONF_PASSWORD})
+            if preset == PRESET_CUSTOM:
+                self._pending_password = password
+                self._pending_login_step = "login_password"
+                return await self.async_step_custom_region()
             self._apply_preset(self._data)
-            ok, msg = await self.hass.async_add_executor_job(
-                _mint_password, self.hass, self._data, password)
-            if ok:
-                d_ok, tu, vins, detail = await self.hass.async_add_executor_job(
-                    _discover, self.hass, self._data)
-                if not d_ok or not vins:
-                    await self.hass.async_add_executor_job(_cleanup_pending, self.hass)
-                    errors["base"] = "no_vehicle"
-                    reason = _reason_line(detail)
-                    _LOGGER.warning("Lepas: scoperta veicolo (password) fallita: %s", detail)
-                else:
-                    self._tuserid = tu
-                    self._vins = vins
-                    # marcatore per la reauth (NON la password): dice di richiedere la password
-                    self._data[CONF_LOGIN_METHOD] = LOGIN_METHOD_PASSWORD
-                    if len(vins) == 1:
-                        return await self._create_entry(vins[0])
-                    return await self.async_step_select_vehicle()
-            else:
-                await self.hass.async_add_executor_job(_cleanup_pending, self.hass)
-                errors["base"] = "password_invalid"
-                reason = _reason_line(msg)
-                _LOGGER.warning("Lepas: login password fallito: %s", msg)
-            # ripropone i campi digitati MA né PIN né PASSWORD (credenziali, campi mascherati)
-            schema = self.add_suggested_values_to_schema(
-                schema, {k: v for k, v in user_input.items() if k not in (CONF_PIN, CONF_PASSWORD)})
-        return self.async_show_form(step_id="login_password", data_schema=schema, errors=errors,
-                                    description_placeholders={"reason": reason})
+            return await self._complete_password_login(password, "login_password", schema, user_input)
+        return self.async_show_form(step_id="login_password", data_schema=schema,
+                                    description_placeholders={"reason": ""})
 
     async def async_step_login_phone(self, user_input: dict[str, Any] | None = None):
         """Login via SMS: numero di telefono + prefisso internazionale (Italia = 39)."""
@@ -557,6 +590,47 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self._submit_login(user_input, "login_phone", schema)
         return self.async_show_form(step_id="login_phone", data_schema=schema,
                                     description_placeholders={"reason": ""})
+
+    async def async_step_custom_region(self, user_input: dict[str, Any] | None = None):
+        """Configurazione parametri tecnici per regioni o marchi personalizzati."""
+        schema = self._custom_region_schema()
+        if user_input is not None:
+            self._data.update(user_input)
+            self._data.pop(CONF_PRESET, None)
+            if self._pending_login_step == "login_password":
+                return await self._complete_password_login(
+                    self._pending_password, "custom_region", schema, user_input
+                )
+            ok, msg = await self.hass.async_add_executor_job(_send_otp, self.hass, self._data)
+            if ok:
+                return await self.async_step_otp()
+            _LOGGER.warning("Lepas: invio OTP (custom region) fallito: %s", msg)
+            err_schema = self.add_suggested_values_to_schema(schema, user_input)
+            return self.async_show_form(
+                step_id="custom_region",
+                data_schema=err_schema,
+                errors={"base": "otp_send_failed"},
+                description_placeholders={"reason": _reason_line(msg)},
+            )
+
+        custom_keys = (
+            CONF_BFF,
+            CONF_TENANT_CODE,
+            CONF_COUNTRY_ID,
+            CONF_CHANNEL_ID,
+            CONF_TSP_HOST,
+            CONF_CAR_MQTT_HOST,
+            CONF_CAR_MQTT_PORT,
+            CONF_CERTS_SRC,
+        )
+        prefill = {k: self._data[k] for k in custom_keys if k in self._data}
+        if prefill:
+            schema = self.add_suggested_values_to_schema(schema, prefill)
+        return self.async_show_form(
+            step_id="custom_region",
+            data_schema=schema,
+            description_placeholders={"reason": ""},
+        )
 
     async def async_step_otp(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}

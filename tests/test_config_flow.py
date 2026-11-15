@@ -15,14 +15,19 @@ from custom_components.lepas.config_flow import LepasConfigFlow
 from custom_components.lepas.const import (
     CONF_AREA_CODE,
     CONF_BFF,
+    CONF_CAR_MQTT_HOST,
+    CONF_CAR_MQTT_PORT,
+    CONF_CERTS_SRC,
     CONF_CHANNEL_ID,
     CONF_COUNTRY_ID,
     CONF_EMAIL,
+    CONF_LANGUAGE,
     CONF_PASSWORD,
     CONF_PHONE,
     CONF_PIN,
     CONF_PRESET,
     CONF_TENANT_CODE,
+    CONF_TSP_HOST,
     CONF_VIN,
     DEFAULT_PRESET,
     DEFAULT_VEHICLE_NAME,
@@ -519,4 +524,279 @@ async def test_login_password_applica_preset_lepas(hass, flusso_ok, monkeypatch)
     assert len(chiamate_apply) >= 1
     assert flow._data.get(CONF_BFF) == "https://eu-lepas.cheryinternational.com/api"
     assert flow._data.get(CONF_TENANT_CODE) == "3000011"
+
+
+CAMPI_TECNICI = (
+    CONF_BFF,
+    CONF_TENANT_CODE,
+    CONF_COUNTRY_ID,
+    CONF_CHANNEL_ID,
+    CONF_TSP_HOST,
+    CONF_CAR_MQTT_HOST,
+    CONF_CAR_MQTT_PORT,
+    CONF_CERTS_SRC,
+)
+
+
+def _schema_keys(schema) -> list[str]:
+    """Estrae i nomi effettivi delle chiavi da uno schema voluptuous."""
+    return [k.schema if hasattr(k, "schema") else k for k in schema.schema.keys()]
+
+
+async def _init_e_phone(hass):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER})
+    assert result["step_id"] == "user"
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "login_phone"})
+
+
+async def _init_e_password(hass):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER})
+    assert result["step_id"] == "user"
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "login_password"})
+
+
+async def test_login_forms_nascondono_campi_tecnici(hass):
+    """Verifica che i tre form di login mostrino solo preset e lingua, nascondendo gli 8 campi tecnici."""
+    for init_fn in (_init_e_email, _init_e_phone, _init_e_password):
+        result = await init_fn(hass)
+        keys = _schema_keys(result["data_schema"])
+        assert CONF_PRESET in keys
+        assert CONF_LANGUAGE in keys
+        for campo in CAMPI_TECNICI:
+            assert campo not in keys
+
+        for marker, selector in result["data_schema"].schema.items():
+            name = marker.schema if hasattr(marker, "schema") else marker
+            if name == CONF_PRESET:
+                options = getattr(selector, "config", {}).get("options", [])
+                custom_opt = next((o for o in options if (o.get("value") if isinstance(o, dict) else getattr(o, "value", None)) == PRESET_CUSTOM), None)
+                assert custom_opt is not None
+                lbl = custom_opt.get("label") if isinstance(custom_opt, dict) else getattr(custom_opt, "label", None)
+                assert lbl == "Custom / other region (next step)"
+
+
+async def test_custom_preset_instrada_a_custom_region_email(hass, flusso_ok):
+    """Selezionando PRESET_CUSTOM in login_email, il flow va a custom_region prima di inviare OTP."""
+    chiamate_otp = []
+    from custom_components.lepas import config_flow as cf
+    original_send_otp = cf._send_otp
+
+    def spy_send_otp(h, data):
+        chiamate_otp.append(dict(data))
+        return original_send_otp(h, data)
+
+    cf._send_otp = spy_send_otp
+
+    result = await _init_e_email(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN, CONF_PRESET: PRESET_CUSTOM},
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "custom_region"
+    assert len(chiamate_otp) == 0
+
+    keys = _schema_keys(result["data_schema"])
+    for campo in CAMPI_TECNICI:
+        assert campo in keys
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_BFF: "https://custom-gateway.example.com/api",
+            CONF_TENANT_CODE: "999999",
+        },
+    )
+
+    assert len(chiamate_otp) == 1
+    assert chiamate_otp[0][CONF_BFF] == "https://custom-gateway.example.com/api"
+    assert chiamate_otp[0][CONF_TENANT_CODE] == "999999"
+    assert result["step_id"] == "otp"
+
+
+async def test_custom_preset_instrada_a_custom_region_phone(hass, flusso_ok):
+    """Selezionando PRESET_CUSTOM in login_phone, il flow normalizza il telefono e va a custom_region."""
+    chiamate_otp = []
+    from custom_components.lepas import config_flow as cf
+    original_send_otp = cf._send_otp
+
+    def spy_send_otp(h, data):
+        chiamate_otp.append(dict(data))
+        return original_send_otp(h, data)
+
+    cf._send_otp = spy_send_otp
+
+    result = await _init_e_phone(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_PHONE: "340 123 4567",
+            CONF_AREA_CODE: "+39",
+            CONF_PIN: FX.PIN,
+            CONF_PRESET: PRESET_CUSTOM,
+        },
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "custom_region"
+    assert len(chiamate_otp) == 0
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_BFF: "https://custom-phone.example.com/api"},
+    )
+
+    assert len(chiamate_otp) == 1
+    assert chiamate_otp[0][CONF_PHONE] == "3401234567"
+    assert chiamate_otp[0][CONF_AREA_CODE] == "39"
+    assert chiamate_otp[0][CONF_BFF] == "https://custom-phone.example.com/api"
+    assert result["step_id"] == "otp"
+
+
+async def test_custom_preset_instrada_a_custom_region_password(hass, flusso_ok, monkeypatch):
+    """Selezionando PRESET_CUSTOM in login_password, il flow salva pending_password (non in self._data) e completa da custom_region."""
+    from custom_components.lepas import config_flow as cf
+
+    chiamate_mint = []
+    monkeypatch.setattr(
+        cf,
+        "_mint_password",
+        lambda h, d, p: (chiamate_mint.append((dict(d), p)) or True, "token ok"),
+    )
+
+    result = await _init_e_password(hass)
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_EMAIL: FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            CONF_PASSWORD: "super_secret_password",
+            CONF_PRESET: PRESET_CUSTOM,
+        },
+    )
+
+    assert result["step_id"] == "custom_region"
+    assert CONF_PASSWORD not in flow._data
+    assert flow._pending_password == "super_secret_password"
+    assert flow._pending_login_step == "login_password"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_BFF: "https://custom-pwd.example.com/api"},
+    )
+
+    assert len(chiamate_mint) == 1
+    data_ricevuto, pwd_ricevuta = chiamate_mint[0]
+    assert pwd_ricevuta == "super_secret_password"
+    assert data_ricevuto[CONF_BFF] == "https://custom-pwd.example.com/api"
+    assert flow._pending_password == ""
+    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert CONF_PASSWORD not in result["data"]
+
+
+async def test_custom_region_failure_branches(hass, monkeypatch):
+    """Verifica la gestione degli errori e il rispetto delle credenziali nei rami di fallimento di custom_region."""
+    from custom_components.lepas import config_flow as cf
+
+    # (a) _send_otp fallito in custom_region
+    monkeypatch.setattr(cf, "_send_otp", lambda h, d: (False, "server.timeout"))
+    result = await _init_e_email(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN, CONF_PRESET: PRESET_CUSTOM},
+    )
+    assert result["step_id"] == "custom_region"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_BFF: "https://fail-otp.example.com/api"},
+    )
+    assert result["step_id"] == "custom_region"
+    assert result["errors"]["base"] == "otp_send_failed"
+    assert "server.timeout" in result["description_placeholders"]["reason"]
+
+    # (b) _mint_password fallito in custom_region: torna a login_password, azzera pending_password, preserva custom fields in self._data
+    monkeypatch.setattr(cf, "_mint_password", lambda h, d, p: (False, "password.invalid"))
+    monkeypatch.setattr(cf, "_cleanup_pending", lambda h: None)
+
+    result = await _init_e_password(hass)
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_EMAIL: FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            CONF_PASSWORD: "wrong_password",
+            CONF_PRESET: PRESET_CUSTOM,
+        },
+    )
+    assert result["step_id"] == "custom_region"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_BFF: "https://fail-pwd.example.com/api"},
+    )
+    assert result["step_id"] == "login_password"
+    assert result["errors"]["base"] == "password_invalid"
+    assert "password.invalid" in result["description_placeholders"]["reason"]
+    assert flow._pending_password == ""
+
+    # Verifica Crash Antibodies AB-LEP-001/002: mai PIN o password nei suggested values
+    for marker in result["data_schema"].schema:
+        name = marker.schema if hasattr(marker, "schema") else marker
+        if name in (CONF_PIN, CONF_PASSWORD):
+            desc = marker.description if hasattr(marker, "description") else {}
+            assert (isinstance(desc, dict) and "suggested_value" not in desc) or not isinstance(desc, dict)
+
+    # I campi custom sono preservati in self._data: inviando di nuovo con PRESET_CUSTOM, custom_region è precompilato
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_EMAIL: FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            CONF_PASSWORD: "retry_password",
+            CONF_PRESET: PRESET_CUSTOM,
+        },
+    )
+    assert result["step_id"] == "custom_region"
+    bff_marker = next(
+        m for m in result["data_schema"].schema
+        if (m.schema if hasattr(m, "schema") else m) == CONF_BFF
+    )
+    desc = bff_marker.description if hasattr(bff_marker, "description") else {}
+    assert isinstance(desc, dict) and desc.get("suggested_value") == "https://fail-pwd.example.com/api"
+
+    # (c) _discover fallito in custom_region: mostra no_vehicle su custom_region e preserva pending_password
+    monkeypatch.setattr(cf, "_mint_password", lambda h, d, p: (True, "token ok"))
+    monkeypatch.setattr(cf, "_discover", lambda h, d: (False, "", [], "no_vehicle_found"))
+
+    result = await _init_e_password(hass)
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_EMAIL: FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            CONF_PASSWORD: "valid_password",
+            CONF_PRESET: PRESET_CUSTOM,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_BFF: "https://fail-discover.example.com/api"},
+    )
+    assert result["step_id"] == "custom_region"
+    assert result["errors"]["base"] == "no_vehicle"
+    assert "no_vehicle_found" in result["description_placeholders"]["reason"]
+    assert flow._pending_password == "valid_password"
+
 

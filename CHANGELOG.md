@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.15.4 — 2026-11-14
+
+### 🇬🇧 English
+
+- **Cleaner Config Flow UX (`custom_region` Step)**: Moved the 8 advanced/regional endpoint fields (`bff`, `tenant_code`, `country_id`, `channel_id`, `tsp_host`, `car_mqtt_host`, `car_mqtt_port`, `certs_src`) out of the `login_email`, `login_phone`, and `login_password` forms into a dedicated `custom_region` step shown only when the **Custom** preset is selected. Standard EU logins now show only credentials, language, and brand/region preset.
+
+### 🇮🇹 Italiano
+
+- **UX Config Flow più pulita (step dedicato `custom_region`)**: Spostati gli 8 campi tecnici avanzati di regione/marchio (`bff`, `tenant_code`, `country_id`, `channel_id`, `tsp_host`, `car_mqtt_host`, `car_mqtt_port`, `certs_src`) fuori dai form `login_email`, `login_phone` e `login_password`, in uno step secondario dedicato `custom_region` mostrato solo scegliendo il preset **Custom**. I login EU standard ora mostrano solo credenziali, lingua e preset.
+
 ## v1.15.3 — 2026-11-14
 
 ### 🇬🇧 English

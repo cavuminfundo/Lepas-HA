@@ -17,18 +17,10 @@
           "preset": "Preset marchio / regione",
           "email": "Email dell'account",
           "pin": "PIN di controllo veicolo",
-          "language": "Lingua (e-mail / SMS OTP)",
-          "bff": "Endpoint BFF (regione)",
-          "tenant_code": "Tenant code (avanzato)",
-          "country_id": "Country ID (avanzato)",
-          "tsp_host": "Host console TSP (regione)",
-          "car_mqtt_host": "Host broker MQTT del veicolo (regione)",
-          "car_mqtt_port": "Porta broker MQTT del veicolo (regione)",
-          "channel_id": "Channel ID (regione)",
-          "certs_src": "Cartella coi certificati mutual-TLS da importare (opzionale)"
+          "language": "Lingua (e-mail / SMS OTP)"
         },
         "data_description": {
-          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
+          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per configurare un'altra regione nel passaggio successivo."
         }
       },
       "login_phone": {
@@ -39,18 +31,24 @@
           "phone": "Numero di telefono (senza prefisso)",
           "area_code": "Prefisso internazionale in cifre (es. 39)",
           "pin": "PIN di controllo veicolo",
-          "language": "Lingua (e-mail / SMS OTP)",
+          "language": "Lingua (e-mail / SMS OTP)"
+        },
+        "data_description": {
+          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per configurare un'altra regione nel passaggio successivo."
+        }
+      },
+      "custom_region": {
+        "title": "Regione / marchio personalizzato",
+        "description": "Configura gli endpoint di connessione e i parametri tecnici per la tua regione o marchio.{reason}",
+        "data": {
           "bff": "Endpoint BFF (regione)",
           "tenant_code": "Tenant code (avanzato)",
           "country_id": "Country ID (avanzato)",
+          "channel_id": "Channel ID (regione)",
           "tsp_host": "Host console TSP (regione)",
           "car_mqtt_host": "Host broker MQTT del veicolo (regione)",
           "car_mqtt_port": "Porta broker MQTT del veicolo (regione)",
-          "channel_id": "Channel ID (regione)",
           "certs_src": "Cartella coi certificati mutual-TLS da importare (opzionale)"
-        },
-        "data_description": {
-          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
         }
       },
       "otp": {
@@ -122,18 +120,10 @@
           "email": "E-mail account",
           "pin": "PIN comandi veicolo",
           "password": "Password account",
-          "language": "Lingua (e-mail / SMS OTP)",
-          "bff": "Endpoint BFF (regione)",
-          "tenant_code": "Tenant code (avanzato)",
-          "country_id": "Country ID (avanzato)",
-          "tsp_host": "Host console TSP (regione)",
-          "car_mqtt_host": "Host broker MQTT del veicolo (regione)",
-          "car_mqtt_port": "Porta broker MQTT del veicolo (regione)",
-          "channel_id": "Channel ID (regione)",
-          "certs_src": "Cartella coi certificati mutual-TLS da importare (opzionale)"
+          "language": "Lingua (e-mail / SMS OTP)"
         },
         "data_description": {
-          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per impostare a mano BFF, tenant code, country/channel ID, broker MQTT e certificati per qualsiasi altra regione o marchio."
+          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per configurare un'altra regione nel passaggio successivo."
         }
       },
       "reauth_password": {
