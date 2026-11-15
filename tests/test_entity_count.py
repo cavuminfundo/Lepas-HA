@@ -36,14 +36,13 @@ from custom_components.lepas.const import (
 ATTESO = {
     "binary_sensor": 27,
     "sensor": 41,
-    "button": 15,
+    "button": 13,
     "switch": 18,
     "cover": 3,
     "number": 2,
     "climate": 1,
     "lock": 1,
     "device_tracker": 1,
-    "text": 1,
     "time": 1,
 }
 # 107 -> 110 il 2026-08-24: portati dalla linea fork i due contatori di energia di ricarica
@@ -71,7 +70,7 @@ ATTESO = {
 # 110 -> 111 on 2026-10-02: `button.lepas_vent_sunroof` ("Vent sunroof", command
 # `tetto_ventila`, skylightControl controlType 2). A deliberate extra button, the sunroof
 # counterpart of `button.lepas_vent_windows`; the sunroof cover is unchanged.
-TOTALE_ATTESO = 111
+TOTALE_ATTESO = 108
 
 
 def test_totale_dichiarato_coerente():

@@ -95,8 +95,8 @@ def test_refresh_tentato_anche_con_data_vuoto(core, cloud, ctx, token_file):
         "col `data` vuoto il refresh non è stato nemmeno tentato"
 
 
-def test_otp_e_email_non_passano_da_argv(core, ctx, monkeypatch):
-    """P1-4 (sicurezza): OTP ed email viaggiano nell'ambiente del sottoprocesso, MAI
+def test_password_e_email_non_passano_da_argv(core, ctx, monkeypatch):
+    """P1-4 (sicurezza): password ed email viaggiano nell'ambiente del sottoprocesso, MAI
     nella riga di comando — `/proc/<pid>/cmdline` e `ps aux` sono leggibili da chiunque
     sulla macchina. Si ispeziona la chiamata a subprocess."""
     session = core["session"]
@@ -114,22 +114,18 @@ def test_otp_e_email_non_passano_da_argv(core, ctx, monkeypatch):
 
     monkeypatch.setattr(session.subprocess, "run", finto_run)
     monkeypatch.setattr(session, "check", lambda _c: (True, "ok", "OK"))
-    session.confirm_otp(ctx, "123456")
+    session.login_with_password(ctx, "mia_password_segreta")
 
     riga = " ".join(str(a) for a in visto["argv"])
-    assert "123456" not in riga, "OTP esposto in argv (visibile con `ps aux`)"
+    assert "mia_password_segreta" not in riga, "password esposta in argv (visibile con `ps aux`)"
     assert FX.EMAIL not in riga, "email esposta in argv"
-    assert visto["env"].get("LEPAS_OTP") == "123456"
+    assert visto["env"].get("LEPAS_PASSWORD") == "mia_password_segreta"
 
 
-def test_otp_accettato_ma_gateway_ko_dice_perche(core, ctx, monkeypatch):
-    """Issue #62: tre persone in Romania, Spagna e Belgio, tre cause possibili, un solo
-    messaggio. Il codice OTP viene ACCETTATO (`RESULT: OK`) e cio' che fallisce e' il login
+def test_password_accettata_ma_gateway_ko_dice_perche(core, ctx, monkeypatch):
+    """La password viene ACCETTATA (`RESULT: OK`) e cio' che fallisce e' il login
     al gateway subito dopo. `check` sa gia' distinguere rete / scaduta / rinnovo fallito, ma
-    il motivo veniva scartato nell'assegnazione e l'utente leggeva sempre la stessa frase.
-
-    Questo test esiste perche' la riga scartata e' invisibile a occhio in una rilettura:
-    `ok, _detail, _status = check(ctx)` sembra corretta, e per due mesi nessuno l'ha notata."""
+    il motivo non deve perdersi e l'utente deve poter leggere il marcatore di stato."""
     session = core["session"]
 
     class Esito:
@@ -144,26 +140,27 @@ def test_otp_accettato_ma_gateway_ko_dice_perche(core, ctx, monkeypatch):
         ("Sessione scaduta \u274c \u2014 riautentica", "EXPIRED"),
     ):
         monkeypatch.setattr(session, "check", lambda _c, d=dettaglio, s=stato: (False, d, s))
-        ok, msg = session.confirm_otp(ctx, "123456")
+        ok, msg = session.login_with_password(ctx, "mia_password")
         assert ok is False
         assert dettaglio in msg, f"il motivo di check non arriva all'utente: {msg!r}"
         assert stato in msg, f"il marcatore di stato non arriva all'utente: {msg!r}"
 
     # E quando va bene, va bene: nessuna regressione sul ramo felice.
     monkeypatch.setattr(session, "check", lambda _c: (True, "Sessione attiva", "OK"))
-    ok, _msg = session.confirm_otp(ctx, "123456")
+    ok, _msg = session.login_with_password(ctx, "mia_password")
     assert ok is True
 
 
-def test_codice_otp_vuoto_non_lancia_il_sottoprocesso(core, ctx, monkeypatch):
+def test_password_vuota_non_lancia_il_sottoprocesso(core, ctx, monkeypatch):
     session = core["session"]
 
     def esplodi(*a, **kw):
-        raise AssertionError("sottoprocesso lanciato con un codice vuoto")
+        raise AssertionError("sottoprocesso lanciato con una password vuota")
 
     monkeypatch.setattr(session.subprocess, "run", esplodi)
-    ok, detail = session.confirm_otp(ctx, "   ")
+    ok, detail = session.login_with_password(ctx, "   ")
     assert ok is False
+    assert detail == "nessuna password inserita"
 
 
 # ───────────────────── rinnovo del token: perché è fallito ─────────────────────

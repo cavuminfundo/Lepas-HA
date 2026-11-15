@@ -1,10 +1,4 @@
-"""Config flow, riautenticazione e Repair del PIN — i tre punti in cui l'utente
-non tecnico interagisce con l'integrazione quando qualcosa non va.
-
-Sono anche i percorsi in cui un errore si paga caro: il codice OTP è **usa e getta**
-(un flow che lo spende e poi fallisce costringe a ricominciare da capo) e il PIN
-sbagliato, ripetuto, blocca l'account Chery.
-"""
+"""Config flow, riautenticazione e Repair del PIN — flusso password-only."""
 from __future__ import annotations
 
 import pytest
@@ -22,6 +16,7 @@ from custom_components.lepas.const import (
     CONF_COUNTRY_ID,
     CONF_EMAIL,
     CONF_LANGUAGE,
+    CONF_LOGIN_METHOD,
     CONF_PASSWORD,
     CONF_PHONE,
     CONF_PIN,
@@ -33,6 +28,7 @@ from custom_components.lepas.const import (
     DEFAULT_VEHICLE_NAME,
     DEFAULTS,
     DOMAIN,
+    LOGIN_METHOD_PASSWORD,
     PRESET_CUSTOM,
     PRESET_LEPAS_EU,
     PRESET_CHERY_EU,
@@ -41,11 +37,10 @@ from custom_components.lepas.const import (
 
 @pytest.fixture
 def flusso_ok(monkeypatch):
-    """Backend che coopera: OTP inviato, token coniato, un veicolo trovato."""
+    """Backend che coopera: password accettata, token coniato, un veicolo trovato."""
     from custom_components.lepas import config_flow as cf
 
-    monkeypatch.setattr(cf, "_send_otp", lambda hass, data: (True, "codice inviato"))
-    monkeypatch.setattr(cf, "_mint_token", lambda hass, data, code: (True, "token ok"))
+    monkeypatch.setattr(cf, "_mint_password", lambda hass, data, password: (True, "token ok"))
     monkeypatch.setattr(cf, "_discover",
                         lambda hass, data: (True, FX.TUSERID, [FX.VIN], "ok"))
     monkeypatch.setattr(cf, "_finalize_token", lambda hass, vin: True)
@@ -53,32 +48,20 @@ def flusso_ok(monkeypatch):
     return cf
 
 
-DATI_UTENTE = {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN}
-DATI_TELEFONO = {CONF_PHONE: FX.PHONE, CONF_AREA_CODE: FX.AREA_CODE, CONF_PIN: FX.PIN}
+DATI_UTENTE = {CONF_EMAIL: FX.EMAIL, CONF_PASSWORD: "secret_password", CONF_PIN: FX.PIN}
+DATI_TELEFONO = {CONF_EMAIL: FX.PHONE, CONF_AREA_CODE: FX.AREA_CODE, CONF_PASSWORD: "secret_password", CONF_PIN: FX.PIN}
 
 
-async def _scegli_email(hass, result):
-    """Dal menu iniziale (email/telefono) sceglie il ramo EMAIL e mostra il form."""
-    return await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "login_email"})
-
-
-async def _init_e_email(hass):
-    """Init del flow + selezione del ramo email: ritorna il form 'login_email' pronto."""
+async def _init_login_password(hass):
+    """Init del flow utente: mostra direttamente il form 'login_password'."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER})
-    assert result["step_id"] == "user"
-    return await _scegli_email(hass, result)
+    assert result["step_id"] == "login_password"
+    return result
 
 
 def _forza_blocco(coordinator) -> None:
-    """Porta l'anti-lockout del veicolo allo stato "bloccato", come dopo N PIN errati.
-
-    Si passa dall'API pubblica (`attempt()`) invece di scrivere nei contatori: così il
-    test resta valido anche se la rappresentazione interna cambia — ed è la stessa
-    ragione per cui lo stato è stato incapsulato in P2-3.
-
-    P2-6: il blocco è del VEICOLO, quindi si agisce sul contesto di quel coordinator."""
+    """Porta l'anti-lockout del veicolo allo stato 'bloccato', come dopo N PIN errati."""
     lockout = coordinator.ctx.lockout
     for _ in range(lockout.max_fail):
         with lockout.attempt() as tentativo:
@@ -87,80 +70,98 @@ def _forza_blocco(coordinator) -> None:
 
 
 async def test_configurazione_completa(hass, flusso_ok):
-    """Il percorso normale: email + PIN → OTP → entry creato col VIN scoperto."""
-    result = await _init_e_email(hass)
-    assert result["step_id"] == "login_email"
-
+    """Il percorso normale con email: login_password → entry creato col VIN scoperto."""
+    result = await _init_login_password(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], DATI_UTENTE)
-    assert result["step_id"] == "otp"
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "123456"})
     assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_VIN] == FX.VIN
     assert result["data"][CONF_EMAIL] == FX.EMAIL
+    assert result["data"][CONF_PHONE] == ""
+    assert result["data"][CONF_LOGIN_METHOD] == LOGIN_METHOD_PASSWORD
+    assert CONF_PASSWORD not in result["data"]
 
 
 async def test_configurazione_via_telefono(hass, flusso_ok):
-    """Login via SMS: menu → telefono → OTP → entry con numero e prefisso salvati.
-
-    Alcuni account sono registrati col numero e non hanno email: il ramo telefono manda
-    il codice via SMS (invio dietro WAF risolto con client BoringSSL) e conia il token
-    con grant_type=mobile."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER})
-    assert result["step_id"] == "user"
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "login_phone"})
-    assert result["step_id"] == "login_phone"
-
+    """Login con numero di telefono e prefisso internazionale."""
+    result = await _init_login_password(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], DATI_TELEFONO)
-    assert result["step_id"] == "otp"
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "123456"})
     assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_VIN] == FX.VIN
     assert result["data"][CONF_PHONE] == FX.PHONE
     assert result["data"][CONF_AREA_CODE] == FX.AREA_CODE
+    assert result["data"][CONF_EMAIL] == ""
+    assert result["data"][CONF_LOGIN_METHOD] == LOGIN_METHOD_PASSWORD
+    assert CONF_PASSWORD not in result["data"]
 
 
-async def test_invio_otp_fallito_resta_nel_primo_passo(hass, monkeypatch):
-    """Se l'OTP non parte non si prosegue: chiedere un codice mai inviato manderebbe
-    l'utente a cercare un'email che non arriverà."""
+async def test_setup_telefono_con_prefisso_popola_campi(hass, flusso_ok):
+    """Setup con telefono e prefisso internazionale popola phone, area_code e svuota email."""
+    result = await _init_login_password(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_EMAIL: "3331234567",
+            CONF_AREA_CODE: "39",
+            CONF_PASSWORD: "secret_password",
+            CONF_PIN: FX.PIN,
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PHONE] == "3331234567"
+    assert result["data"][CONF_AREA_CODE] == "39"
+    assert result["data"][CONF_EMAIL] == ""
+    assert result["data"][CONF_LOGIN_METHOD] == LOGIN_METHOD_PASSWORD
+    assert CONF_PASSWORD not in result["data"]
+
+
+@pytest.mark.parametrize("valore,area,errore", [
+    ("non-una-email@", "39", "email_invalid"),
+    ("utente@dominio", "39", "email_invalid"),
+    ("12", "39", "phone_invalid"),
+    ("", "39", "phone_invalid"),
+])
+async def test_identita_invalida_blocca_prima_di_mint_password(hass, monkeypatch, valore, area, errore):
+    """Un'identità non valida (email o telefono) blocca prima di _mint_password e non salva la password."""
     from custom_components.lepas import config_flow as cf
 
-    monkeypatch.setattr(cf, "_send_otp", lambda hass, data: (False, "email.not.exists"))
-    result = await _init_e_email(hass)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], DATI_UTENTE)
+    chiamate_mint = []
+    monkeypatch.setattr(
+        cf, "_mint_password", lambda h, d, p: (chiamate_mint.append(p) or True, "ok")
+    )
 
-    assert result["step_id"] == "login_email"
-    assert result["errors"]["base"] == "otp_send_failed"
+    result = await _init_login_password(hass)
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    payload = {CONF_EMAIL: valore, CONF_AREA_CODE: area, CONF_PIN: FX.PIN}
+    payload[CONF_PASSWORD] = FX.PIN
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], payload)
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "login_password"
+    assert result["errors"]["base"] == errore
+    assert len(chiamate_mint) == 0, "_mint_password non deve essere chiamata su identità invalida"
+    assert flow._pending_password == "", "la password pendente deve essere azzerata"
 
 
-async def test_otp_errato_ripulisce_il_token_a_meta(hass, monkeypatch):
-    """Un OTP rifiutato deve lasciare il disco pulito: un `pending_token` orfano
-    verrebbe scambiato per una sessione valida al tentativo successivo."""
+async def test_login_password_fallito_mostra_errore(hass, monkeypatch):
+    """Se _mint_password fallisce, il form torna su login_password con errore e azzera pending_password."""
     from custom_components.lepas import config_flow as cf
 
     pulizie = {"n": 0}
-    monkeypatch.setattr(cf, "_send_otp", lambda hass, data: (True, ""))
-    monkeypatch.setattr(cf, "_mint_token",
-                        lambda hass, data, code: (False, "codice scaduto"))
-    monkeypatch.setattr(cf, "_cleanup_pending",
-                        lambda hass: pulizie.__setitem__("n", pulizie["n"] + 1))
+    monkeypatch.setattr(cf, "_mint_password", lambda h, d, p: (False, "credenziali errate"))
+    monkeypatch.setattr(cf, "_cleanup_pending", lambda h: pulizie.__setitem__("n", pulizie["n"] + 1))
 
-    result = await _init_e_email(hass)
+    result = await _init_login_password(hass)
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
     result = await hass.config_entries.flow.async_configure(result["flow_id"], DATI_UTENTE)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "000000"})
-
-    assert result["errors"]["base"] == "otp_invalid"
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "login_password"
+    assert result["errors"]["base"] == "password_invalid"
+    assert "credenziali errate" in result["description_placeholders"]["reason"]
     assert pulizie["n"] == 1
+    assert flow._pending_password == ""
 
 
 async def test_piu_veicoli_chiede_quale(hass, flusso_ok, monkeypatch):
@@ -169,10 +170,8 @@ async def test_piu_veicoli_chiede_quale(hass, flusso_ok, monkeypatch):
     monkeypatch.setattr(flusso_ok, "_discover",
                         lambda hass, data: (True, FX.TUSERID, [FX.VIN, altro], "ok"))
 
-    result = await _init_e_email(hass)
+    result = await _init_login_password(hass)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], DATI_UTENTE)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "123456"})
     assert result["step_id"] == "select_vehicle"
 
     result = await hass.config_entries.flow.async_configure(
@@ -181,26 +180,20 @@ async def test_piu_veicoli_chiede_quale(hass, flusso_ok, monkeypatch):
 
 
 async def test_stesso_veicolo_non_si_configura_due_volte(hass, flusso_ok, config_entry):
-    """Il VIN è l'identità univoca: un secondo entry darebbe due set di entità in
-    conflitto sulla stessa auto."""
-    result = await _init_e_email(hass)
+    """Il VIN è l'identità univoca: un secondo entry darebbe due set di entità in conflitto."""
+    result = await _init_login_password(hass)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], DATI_UTENTE)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "123456"})
 
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
 
 async def test_token_non_spostabile_fa_fallire_il_flow(hass, flusso_ok, monkeypatch):
-    """Senza token in posizione il coordinator non potrebbe autenticarsi: meglio un
-    abort esplicito che un'integrazione creata e subito rotta."""
+    """Senza token in posizione il coordinator non potrebbe autenticarsi."""
     monkeypatch.setattr(flusso_ok, "_finalize_token", lambda hass, vin: False)
 
-    result = await _init_e_email(hass)
+    result = await _init_login_password(hass)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], DATI_UTENTE)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "123456"})
 
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "token_move_failed"
@@ -208,10 +201,7 @@ async def test_token_non_spostabile_fa_fallire_il_flow(hass, flusso_ok, monkeypa
 
 # ───────────────────────── riconfigurazione PIN ─────────────────────────
 async def test_riconfigura_pin_azzera_sempre_il_lockout(hass, integrazione_avviata):
-    """P0-2: il reset dell'anti-lockout deve avvenire ANCHE reinserendo lo STESSO PIN.
-
-    È il caso reale segnalato: l'utente riconferma il PIN (che era giusto), sembra
-    risolto, ma i comandi restano bloccati in silenzio fino allo scadere della finestra."""
+    """P0-2: il reset dell'anti-lockout deve avvenire ANCHE reinserendo lo STESSO PIN."""
     coord = hass.data[DOMAIN][integrazione_avviata.entry_id]
     _forza_blocco(coord)
 
@@ -220,13 +210,10 @@ async def test_riconfigura_pin_azzera_sempre_il_lockout(hass, integrazione_avvia
         context={"source": config_entries.SOURCE_RECONFIGURE,
                  "entry_id": integrazione_avviata.entry_id})
     assert result["step_id"] == "reconfigure"
-    # «Configura» è un MENU: il PIN vive in un passo suo, così chi entra per cambiare il modo
-    # in cui riceve il codice non si trova a dover ridigitare una credenziale che non c'entra.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": "reconfigure_pin"})
     assert result["step_id"] == "reconfigure_pin"
 
-    # STESSO PIN di prima: è proprio il caso che prima non sbloccava
     await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_PIN: FX.PIN})
     await hass.async_block_till_done()
 
@@ -235,8 +222,7 @@ async def test_riconfigura_pin_azzera_sempre_il_lockout(hass, integrazione_avvia
 
 
 async def test_form_pin_non_mostra_il_pin_attuale(hass, integrazione_avviata):
-    """P1-5 (sicurezza): il PIN è una credenziale. Non deve comparire pre-riempito nel
-    form — finirebbe negli screenshot che l'utente allega alle richieste di supporto."""
+    """P1-5 (sicurezza): il PIN è una credenziale. Non deve comparire pre-riempito nel form."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
         context={"source": config_entries.SOURCE_RECONFIGURE,
@@ -248,7 +234,7 @@ async def test_form_pin_non_mostra_il_pin_attuale(hass, integrazione_avviata):
     campo = next(k for k in schema if str(k) == CONF_PIN)
     assert getattr(campo, "default", None) in (None, vol_undefined()), \
         "il form ripropone il PIN attuale come default"
-    # ed è un campo password, non testo in chiaro
+
     selettore = schema[campo]
     assert "password" in str(selettore.config).lower()
 
@@ -272,8 +258,7 @@ async def test_pin_vuoto_rifiutato(hass, integrazione_avviata):
 
 # ───────────────────────── Repair «PIN comandi errato» ─────────────────────────
 async def test_repair_pin_sblocca_e_applica(hass, integrazione_avviata):
-    """Il Repair è il rimedio che l'utente non tecnico incontra davvero: deve
-    scrivere il nuovo PIN E azzerare il blocco, altrimenti "si aggiusta" solo in apparenza."""
+    """Il Repair deve scrivere il nuovo PIN E azzerare il blocco."""
     from custom_components.lepas import repairs
 
     coord = hass.data[DOMAIN][integrazione_avviata.entry_id]
@@ -308,36 +293,7 @@ async def test_repair_senza_entry_si_interrompe(hass):
     assert result["reason"] == "entry_not_found"
 
 
-# ───────────────────── riautenticazione: nessun OTP non richiesto ─────────────────────
-# Episodio reale del 21/07/2026: la sessione è morta alle 22:21 e all'utente sono
-# arrivate TRE mail con codice OTP che non aveva chiesto. Una per la scadenza, due
-# per altrettanti riavvii di Home Assistant — perché il flow di reauth si ricrea a
-# ogni avvio finché la sessione è morta, e all'epoca spediva un codice appena aperto.
-# In più il reinvio era nascosto dietro «lascia il campo vuoto e conferma», che il
-# frontend rifiuta perché il campo è obbligatorio: l'utente restava con in mano solo
-# un codice ormai scaduto e nessun modo di chiederne un altro.
-
-
-@pytest.fixture
-def spia_otp(hass, integrazione_avviata, monkeypatch):
-    """Conta gli invii di OTP e permette di pilotare l'esito di invio/conferma."""
-    coord = hass.data[DOMAIN][integrazione_avviata.entry_id]
-    stato = {"inviati": 0, "invio_ok": True, "codice_giusto": "123456"}
-
-    def _request_otp():
-        stato["inviati"] += 1
-        return stato["invio_ok"], ("codice inviato" if stato["invio_ok"]
-                                   else "invio non riuscito")
-
-    def _confirm_otp(code):
-        giusto = code == stato["codice_giusto"]
-        return giusto, ("token coniato" if giusto else "codice errato")
-
-    monkeypatch.setattr(coord, "_request_otp", _request_otp)
-    monkeypatch.setattr(coord, "_confirm_otp", _confirm_otp)
-    return stato
-
-
+# ───────────────────── riautenticazione con password ─────────────────────
 async def _apri_reauth(hass, entry):
     """Apre la riautenticazione come fa Home Assistant quando la sessione muore."""
     return await hass.config_entries.flow.async_init(
@@ -347,88 +303,72 @@ async def _apri_reauth(hass, entry):
     )
 
 
-async def test_aprire_la_riautenticazione_non_manda_nessun_otp(
-        hass, integrazione_avviata, spia_otp):
-    """LA regressione da bloccare: aprire la pagina non deve spedire niente."""
+async def test_reauth_instrada_subito_a_reauth_password(hass, integrazione_avviata):
+    """La riautenticazione instrada direttamente a reauth_password richiedendo la password."""
     result = await _apri_reauth(hass, integrazione_avviata)
-    assert result["type"] is data_entry_flow.FlowResultType.MENU
-    assert spia_otp["inviati"] == 0, "aprire la reauth ha spedito un OTP non richiesto"
-
-
-async def test_riavvii_ripetuti_non_generano_mail(hass, integrazione_avviata, spia_otp):
-    """Tre aperture del flow (= tre riavvii di HA a sessione morta) = zero mail."""
-    for _ in range(3):
-        result = await _apri_reauth(hass, integrazione_avviata)
-        hass.config_entries.flow.async_abort(result["flow_id"])
-    assert spia_otp["inviati"] == 0
-
-
-async def test_il_codice_parte_solo_su_richiesta_esplicita(
-        hass, integrazione_avviata, spia_otp):
-    """L'unico modo di far partire un OTP è chiederlo dal menu."""
-    result = await _apri_reauth(hass, integrazione_avviata)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "send_code"})
-    assert spia_otp["inviati"] == 1
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "enter_code"
+    assert result["step_id"] == "reauth_password"
+    keys = _schema_keys(result["data_schema"])
+    assert CONF_PASSWORD in keys
 
 
-async def test_codice_sbagliato_non_lascia_in_trappola(
-        hass, integrazione_avviata, spia_otp):
-    """Dopo un codice rifiutato si torna al menu, da cui se ne può chiedere uno nuovo.
+async def test_reauth_password_riuscita_fa_backfill_login_method(
+        hass, integrazione_avviata, monkeypatch):
+    """Reauth con password corretta conia il token e aggiorna CONF_LOGIN_METHOD nell'entry."""
+    coord = hass.data[DOMAIN][integrazione_avviata.entry_id]
+    monkeypatch.setattr(coord, "_login_with_password",
+                        lambda pwd: (True, "Sessione ripristinata ✅"))
 
-    È il vicolo cieco in cui l'utente è finito davvero: codice scaduto in mano e
-    nessun pulsante per farsene mandare un altro."""
     result = await _apri_reauth(hass, integrazione_avviata)
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "send_code"})
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "000000"})
-    assert result["type"] is data_entry_flow.FlowResultType.MENU
-    assert spia_otp["inviati"] == 1, "un codice errato non deve reinviare da solo"
-
-    # ...e da qui il codice nuovo si può chiedere, con un tap
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "send_code"})
-    assert spia_otp["inviati"] == 2
-    assert result["step_id"] == "enter_code"
-
-
-async def test_invio_fallito_torna_al_menu_col_motivo(
-        hass, integrazione_avviata, spia_otp):
-    """Se la mail non parte l'utente deve saperlo, non restare ad aspettarla."""
-    spia_otp["invio_ok"] = False
-    result = await _apri_reauth(hass, integrazione_avviata)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "send_code"})
-    assert result["type"] is data_entry_flow.FlowResultType.MENU
-    assert "invio non riuscito" in result["description_placeholders"]["reason"]
-
-
-async def test_riautenticazione_riuscita(hass, integrazione_avviata, spia_otp):
-    """Il percorso felice: codice giusto → entry ricaricato."""
-    result = await _apri_reauth(hass, integrazione_avviata)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "send_code"})
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"code": "123456"})
+        result["flow_id"], {CONF_PASSWORD: "nuova_password"})
     await hass.async_block_till_done()
+
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
+    assert integrazione_avviata.data.get(CONF_LOGIN_METHOD) == LOGIN_METHOD_PASSWORD
 
 
-async def test_si_puo_inserire_un_codice_gia_in_mano(
-        hass, integrazione_avviata, spia_otp):
-    """Chi ha già un codice valido non deve essere costretto a farsene mandare un altro."""
+async def test_reauth_password_errata_mostra_errore(
+        hass, integrazione_avviata, monkeypatch):
+    """Password errata in reauth mostra errore password_invalid e il motivo."""
+    coord = hass.data[DOMAIN][integrazione_avviata.entry_id]
+    monkeypatch.setattr(coord, "_login_with_password",
+                        lambda pwd: (False, "credenziali non valide"))
+
     result = await _apri_reauth(hass, integrazione_avviata)
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "enter_code"})
+        result["flow_id"], {CONF_PASSWORD: "password_sbagliata"})
+
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "enter_code"
-    assert spia_otp["inviati"] == 0
+    assert result["step_id"] == "reauth_password"
+    assert result["errors"]["base"] == "password_invalid"
+    assert "credenziali non valide" in result["description_placeholders"]["reason"]
 
 
+async def test_reauth_password_vuota_richiesta(hass, integrazione_avviata):
+    """Password vuota in reauth è rifiutata con password_required."""
+    result = await _apri_reauth(hass, integrazione_avviata)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_PASSWORD: "   "})
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "reauth_password"
+    assert result["errors"]["base"] == "password_required"
+
+
+async def test_reauth_senza_entry_abortisce(hass):
+    """Reauth senza entry valida abortisce con reauth_no_entry."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_REAUTH, "entry_id": "non_esiste"},
+        data={},
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "reauth_no_entry"
+
+
+# ───────────────────────── Preset e parametri di regione ─────────────────────────
 def test_domain_and_defaults_lepas():
     """Verifica il dominio nativo lepas e i parametri predefiniti di connessione."""
     assert DOMAIN == "lepas"
@@ -501,12 +441,9 @@ def test_apply_preset_custom():
 
 async def test_login_password_applica_preset_lepas(hass, flusso_ok, monkeypatch):
     """Verifica che il login via password invochi _apply_preset garantendo i default Lepas."""
-    for fn_name in ("_login_password", "_login_with_password", "_login_pwd", "_auth_password"):
-        if hasattr(flusso_ok, fn_name):
-            monkeypatch.setattr(flusso_ok, fn_name, lambda h, d: (True, "token ok"))
-
     flow = LepasConfigFlow()
     flow.hass = hass
+    flow.context = {"source": "user"}
     flow._data = {CONF_PRESET: PRESET_LEPAS_EU}
 
     chiamate_apply = []
@@ -543,63 +480,49 @@ def _schema_keys(schema) -> list[str]:
     return [k.schema if hasattr(k, "schema") else k for k in schema.schema.keys()]
 
 
-async def _init_e_phone(hass):
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER})
-    assert result["step_id"] == "user"
-    return await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "login_phone"})
-
-
-async def _init_e_password(hass):
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER})
-    assert result["step_id"] == "user"
-    return await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"next_step_id": "login_password"})
-
-
 async def test_login_forms_nascondono_campi_tecnici(hass):
-    """Verifica che i tre form di login mostrino solo preset e lingua, nascondendo gli 8 campi tecnici."""
-    for init_fn in (_init_e_email, _init_e_phone, _init_e_password):
-        result = await init_fn(hass)
-        keys = _schema_keys(result["data_schema"])
-        assert CONF_PRESET in keys
-        assert CONF_LANGUAGE in keys
-        for campo in CAMPI_TECNICI:
-            assert campo not in keys
+    """Verifica che il form di login_password mostri solo preset e lingua, nascondendo gli 8 campi tecnici."""
+    result = await _init_login_password(hass)
+    keys = _schema_keys(result["data_schema"])
+    assert CONF_PRESET in keys
+    assert CONF_LANGUAGE in keys
+    for campo in CAMPI_TECNICI:
+        assert campo not in keys
 
-        for marker, selector in result["data_schema"].schema.items():
-            name = marker.schema if hasattr(marker, "schema") else marker
-            if name == CONF_PRESET:
-                options = getattr(selector, "config", {}).get("options", [])
-                custom_opt = next((o for o in options if (o.get("value") if isinstance(o, dict) else getattr(o, "value", None)) == PRESET_CUSTOM), None)
-                assert custom_opt is not None
-                lbl = custom_opt.get("label") if isinstance(custom_opt, dict) else getattr(custom_opt, "label", None)
-                assert lbl == "Custom / other region (next step)"
+    for marker, selector in result["data_schema"].schema.items():
+        name = marker.schema if hasattr(marker, "schema") else marker
+        if name == CONF_PRESET:
+            options = getattr(selector, "config", {}).get("options", [])
+            custom_opt = next((o for o in options if (o.get("value") if isinstance(o, dict) else getattr(o, "value", None)) == PRESET_CUSTOM), None)
+            assert custom_opt is not None
+            lbl = custom_opt.get("label") if isinstance(custom_opt, dict) else getattr(custom_opt, "label", None)
+            assert lbl == "Custom / other region (next step)"
 
 
-async def test_custom_preset_instrada_a_custom_region_email(hass, flusso_ok):
-    """Selezionando PRESET_CUSTOM in login_email, il flow va a custom_region prima di inviare OTP."""
-    chiamate_otp = []
+async def test_custom_preset_instrada_a_custom_region_email(hass, flusso_ok, monkeypatch):
+    """Selezionando PRESET_CUSTOM in login_password con email, il flow va a custom_region prima di coniare il token."""
     from custom_components.lepas import config_flow as cf
-    original_send_otp = cf._send_otp
 
-    def spy_send_otp(h, data):
-        chiamate_otp.append(dict(data))
-        return original_send_otp(h, data)
+    chiamate_mint = []
+    monkeypatch.setattr(
+        cf,
+        "_mint_password",
+        lambda h, d, p: (chiamate_mint.append((dict(d), p)) or True, "token ok"),
+    )
 
-    cf._send_otp = spy_send_otp
+    result = await _init_login_password(hass)
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
 
-    result = await _init_e_email(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN, CONF_PRESET: PRESET_CUSTOM},
+        {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN, CONF_PASSWORD: "secret_password", CONF_PRESET: PRESET_CUSTOM},
     )
 
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "custom_region"
-    assert len(chiamate_otp) == 0
+    assert len(chiamate_mint) == 0
+    assert CONF_PASSWORD not in flow._data
+    assert flow._pending_password == "secret_password"
 
     keys = _schema_keys(result["data_schema"])
     for campo in CAMPI_TECNICI:
@@ -613,53 +536,18 @@ async def test_custom_preset_instrada_a_custom_region_email(hass, flusso_ok):
         },
     )
 
-    assert len(chiamate_otp) == 1
-    assert chiamate_otp[0][CONF_BFF] == "https://custom-gateway.example.com/api"
-    assert chiamate_otp[0][CONF_TENANT_CODE] == "999999"
-    assert result["step_id"] == "otp"
+    assert len(chiamate_mint) == 1
+    data_ricevuto, pwd_ricevuta = chiamate_mint[0]
+    assert pwd_ricevuta == "secret_password"
+    assert data_ricevuto[CONF_BFF] == "https://custom-gateway.example.com/api"
+    assert data_ricevuto[CONF_TENANT_CODE] == "999999"
+    assert flow._pending_password == ""
+    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert CONF_PASSWORD not in result["data"]
 
 
-async def test_custom_preset_instrada_a_custom_region_phone(hass, flusso_ok):
-    """Selezionando PRESET_CUSTOM in login_phone, il flow normalizza il telefono e va a custom_region."""
-    chiamate_otp = []
-    from custom_components.lepas import config_flow as cf
-    original_send_otp = cf._send_otp
-
-    def spy_send_otp(h, data):
-        chiamate_otp.append(dict(data))
-        return original_send_otp(h, data)
-
-    cf._send_otp = spy_send_otp
-
-    result = await _init_e_phone(hass)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_PHONE: "340 123 4567",
-            CONF_AREA_CODE: "+39",
-            CONF_PIN: FX.PIN,
-            CONF_PRESET: PRESET_CUSTOM,
-        },
-    )
-
-    assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "custom_region"
-    assert len(chiamate_otp) == 0
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_BFF: "https://custom-phone.example.com/api"},
-    )
-
-    assert len(chiamate_otp) == 1
-    assert chiamate_otp[0][CONF_PHONE] == "3401234567"
-    assert chiamate_otp[0][CONF_AREA_CODE] == "39"
-    assert chiamate_otp[0][CONF_BFF] == "https://custom-phone.example.com/api"
-    assert result["step_id"] == "otp"
-
-
-async def test_custom_preset_instrada_a_custom_region_password(hass, flusso_ok, monkeypatch):
-    """Selezionando PRESET_CUSTOM in login_password, il flow salva pending_password (non in self._data) e completa da custom_region."""
+async def test_custom_preset_instrada_a_custom_region_phone(hass, flusso_ok, monkeypatch):
+    """Selezionando PRESET_CUSTOM in login_password con telefono, il flow normalizza il telefono e va a custom_region."""
     from custom_components.lepas import config_flow as cf
 
     chiamate_mint = []
@@ -669,35 +557,43 @@ async def test_custom_preset_instrada_a_custom_region_password(hass, flusso_ok, 
         lambda h, d, p: (chiamate_mint.append((dict(d), p)) or True, "token ok"),
     )
 
-    result = await _init_e_password(hass)
+    result = await _init_login_password(hass)
     flow = hass.config_entries.flow._progress[result["flow_id"]]
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            CONF_EMAIL: FX.EMAIL,
+            CONF_EMAIL: "340 123 4567",
+            CONF_AREA_CODE: "+39",
             CONF_PIN: FX.PIN,
-            CONF_PASSWORD: "super_secret_password",
+            CONF_PASSWORD: "secret_password",
             CONF_PRESET: PRESET_CUSTOM,
         },
     )
 
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "custom_region"
-    assert CONF_PASSWORD not in flow._data
-    assert flow._pending_password == "super_secret_password"
-    assert flow._pending_login_step == "login_password"
+    assert len(chiamate_mint) == 0
+    assert flow._data[CONF_PHONE] == "3401234567"
+    assert flow._data[CONF_AREA_CODE] == "39"
+    assert flow._data[CONF_EMAIL] == ""
+    assert flow._pending_password == "secret_password"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_BFF: "https://custom-pwd.example.com/api"},
+        {CONF_BFF: "https://custom-phone.example.com/api"},
     )
 
     assert len(chiamate_mint) == 1
     data_ricevuto, pwd_ricevuta = chiamate_mint[0]
-    assert pwd_ricevuta == "super_secret_password"
-    assert data_ricevuto[CONF_BFF] == "https://custom-pwd.example.com/api"
-    assert flow._pending_password == ""
+    assert pwd_ricevuta == "secret_password"
+    assert data_ricevuto[CONF_PHONE] == "3401234567"
+    assert data_ricevuto[CONF_AREA_CODE] == "39"
+    assert data_ricevuto[CONF_BFF] == "https://custom-phone.example.com/api"
     assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PHONE] == "3401234567"
+    assert result["data"][CONF_AREA_CODE] == "39"
+    assert result["data"][CONF_EMAIL] == ""
     assert CONF_PASSWORD not in result["data"]
 
 
@@ -705,28 +601,11 @@ async def test_custom_region_failure_branches(hass, monkeypatch):
     """Verifica la gestione degli errori e il rispetto delle credenziali nei rami di fallimento di custom_region."""
     from custom_components.lepas import config_flow as cf
 
-    # (a) _send_otp fallito in custom_region
-    monkeypatch.setattr(cf, "_send_otp", lambda h, d: (False, "server.timeout"))
-    result = await _init_e_email(hass)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN, CONF_PRESET: PRESET_CUSTOM},
-    )
-    assert result["step_id"] == "custom_region"
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_BFF: "https://fail-otp.example.com/api"},
-    )
-    assert result["step_id"] == "custom_region"
-    assert result["errors"]["base"] == "otp_send_failed"
-    assert "server.timeout" in result["description_placeholders"]["reason"]
-
-    # (b) _mint_password fallito in custom_region: torna a login_password, azzera pending_password, preserva custom fields in self._data
+    # (a) _mint_password fallito in custom_region: torna a login_password, azzera pending_password, preserva custom fields in self._data
     monkeypatch.setattr(cf, "_mint_password", lambda h, d, p: (False, "password.invalid"))
     monkeypatch.setattr(cf, "_cleanup_pending", lambda h: None)
 
-    result = await _init_e_password(hass)
+    result = await _init_login_password(hass)
     flow = hass.config_entries.flow._progress[result["flow_id"]]
 
     result = await hass.config_entries.flow.async_configure(
@@ -774,11 +653,11 @@ async def test_custom_region_failure_branches(hass, monkeypatch):
     desc = bff_marker.description if hasattr(bff_marker, "description") else {}
     assert isinstance(desc, dict) and desc.get("suggested_value") == "https://fail-pwd.example.com/api"
 
-    # (c) _discover fallito in custom_region: mostra no_vehicle su custom_region e preserva pending_password
+    # (b) _discover fallito in custom_region: mostra no_vehicle su custom_region e preserva pending_password
     monkeypatch.setattr(cf, "_mint_password", lambda h, d, p: (True, "token ok"))
     monkeypatch.setattr(cf, "_discover", lambda h, d: (False, "", [], "no_vehicle_found"))
 
-    result = await _init_e_password(hass)
+    result = await _init_login_password(hass)
     flow = hass.config_entries.flow._progress[result["flow_id"]]
 
     await hass.config_entries.flow.async_configure(
@@ -797,6 +676,4 @@ async def test_custom_region_failure_branches(hass, monkeypatch):
     assert result["step_id"] == "custom_region"
     assert result["errors"]["base"] == "no_vehicle"
     assert "no_vehicle_found" in result["description_placeholders"]["reason"]
-    assert flow._pending_password == "valid_password"
-
-
+    assert flow._pending_password == ""

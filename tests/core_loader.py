@@ -17,8 +17,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 CORE_DIR = os.path.join(_HERE, "..", "custom_components", "lepas", "core")
 
 _NOMI = (
-    "codes", "lepas", "lepas_auth", "tsp_sign", "captcha_solver", "prova_token",
-    "login_lepas", "wake", "session", "probe", "provision", "permessi", "commands",
+    "codes", "lepas", "lepas_auth", "tsp_sign", "prova_token",
+    "wake", "session", "probe", "provision", "permessi", "commands",
 )
 
 

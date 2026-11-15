@@ -59,11 +59,9 @@ ENGLISH_KEYS: dict[str, str] = {
     "clima_raffredda_on":             "cool_everything",      # Cool everything
     "clima_riscalda_off":             "heat_everything_off",  # Heat everything off
     "clima_riscalda_on":              "heat_everything",      # Heat everything
-    "conferma_otp":                   "confirm_otp",          # Confirm OTP
     "finestrini_ventila":             "vent_windows",         # Vent windows
     "tetto_ventila":                  "vent_sunroof",         # Vent sunroof
     "localizza":                      "locate_car_gps",       # Locate car (GPS)
-    "richiedi_codice_otp":            "request_otp_code",     # Request OTP code
     "sveglia_auto":                   "wake_car",             # Wake car
     "trova_auto":                     "find_car_flash_lights",# Find car (flash lights)
     # --- climate ---
@@ -146,8 +144,6 @@ ENGLISH_KEYS: dict[str, str] = {
     "ventilazione_sedile_passeggero": "passenger_seat_ventilation",# Passenger seat ventilation
     "ventilazione_sedile_post_dx":    "rear_right_seat_ventilation",# Rear right seat ventilation
     "ventilazione_sedile_post_sx":    "rear_left_seat_ventilation",# Rear left seat ventilation
-    # --- text ---
-    "codice_otp":                     "otp_code",             # OTP code
     # --- time ---
     "ricarica_orario_di_inizio":      "charge_start_time",    # Charge start time
 }
@@ -192,8 +188,6 @@ CANON_ENTITY_ID: dict[tuple[str, str], str] = {
     ("button", "cmd_finestrini_ventila"):               "button.lepas_vent_windows",
     ("button", "cmd_localizza"):                        "button.lepas_locate_car_gps",
     ("button", "cmd_trova_auto"):                       "button.lepas_find_car_flash_lights",
-    ("button", "otp_confirm"):                          "button.lepas_confirm_otp",
-    ("button", "otp_request"):                          "button.lepas_request_otp_code",
     ("button", "refresh_full"):                         "button.lepas_refresh_full_status",
     ("button", "refresh_pos"):                          "button.lepas_refresh_location",
     ("button", "wake"):                                 "button.lepas_wake_car",
@@ -264,7 +258,6 @@ CANON_ENTITY_ID: dict[tuple[str, str], str] = {
     ("switch", "ricarica_programmata"):                 "switch.lepas_scheduled_charging",
     ("switch", "riscalda_tutto"):                       "switch.lepas_heat_everything",
     ("switch", "steerWheelHeating"):                    "switch.lepas_steering_wheel_heating",
-    ("text", "otp_code"):                               "text.lepas_otp_code",
     ("time", "ricarica_orario_inizio"):                 "time.lepas_charge_start_time",
 }
 

@@ -379,7 +379,6 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._note_cmd: list[str] = []
         self._note_cmd_at: float | None = None
         self.position: dict | None = None
-        self.otp_code: str = ""   # impostato dall'entità text «Codice OTP», letto da confirm
         self.data = {"fields": {}, "msg_fields": {}, "position": None,
                      "awake": False, "car_connected": False,
                      "session_ok": None, "session_detail": "",
@@ -541,11 +540,11 @@ class LepasCoordinator(DataUpdateCoordinator):
         """Pianifica un refresh sessione periodico per non far scadere il token.
 
         `_bff_login` rinnova da sé l'access_token col refresh_token quando scade
-        (senza OTP) → ricontrollare la sessione ogni `DEFAULT_SESSION_EVERY` tiene
+        → ricontrollare la sessione ogni `DEFAULT_SESSION_EVERY` tiene
         viva la sessione anche da fermi (rotazione del refresh_token prima che la
-        sua finestra si chiuda) ed evita un re-OTP a sorpresa per inattività. Come
+        sua finestra si chiuda) ed evita una riautenticazione a sorpresa per inattività. Come
         bonus aggiorna le entità sessione. Non protegge dall'apertura dell'app
-        ufficiale (sessione singola lato cloud → serve comunque OTP)."""
+        ufficiale (sessione singola lato cloud → richiede nuovo login)."""
         if self._timers.is_armed(KEEPALIVE):
             return
         self._timers.arm(KEEPALIVE, lambda: async_track_time_interval(
@@ -557,7 +556,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             # Prima il rinnovo PROATTIVO: se il token è a fine vita lo si rinnova adesso,
             # con la sessione ancora viva. Aspettare che scada significa rinnovare fino a
             # 15 minuti dopo la scadenza (la cadenza di questo timer), all'estremo della
-            # finestra utile del refresh_token. Sola lettura verso il cloud, nessun OTP.
+            # finestra utile del refresh_token. Sola lettura verso il cloud.
             rinnovato, motivo = await self.hass.async_add_executor_job(self._refresh_proattivo)
             if rinnovato:
                 _LOGGER.debug("[keepalive] token rinnovato in anticipo")
@@ -1325,7 +1324,7 @@ class LepasCoordinator(DataUpdateCoordinator):
 
         Il PIN errato NON tocca `session_ok`: la sessione è valida e i sensori
         funzionano: il problema è solo il PIN a 4 cifre dei comandi remoti, e proporre
-        la riautenticazione sarebbe il rimedio sbagliato (l'OTP non cambia il PIN).
+        la riautenticazione sarebbe il rimedio sbagliato (il login non cambia il PIN).
         """
         from .core import routing
 
@@ -1785,7 +1784,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         # P1-1 (H7): la reauth si decide sul MARCATORE STABILE, non sul testo umano. Prima si
         # faceva `detail.startswith("Sessione scaduta")`: bastava ritoccare il messaggio (o
         # tradurlo) per non aprire più la card «Riautentica». Solo EXPIRED = token morto; un
-        # NET_ERROR è transitorio e NON deve far rifare un OTP inutile all'utente.
+        # NET_ERROR è transitorio e NON deve far rifare il login all'utente.
         # HA deduplica: se una reauth è già in corso non ne apre un'altra.
         if self._diag is not None:
             # `status` è il marcatore stabile, `detail` il testo umano: registrarli
@@ -1808,39 +1807,6 @@ class LepasCoordinator(DataUpdateCoordinator):
     def _id_avviso(self) -> str:
         return f"{DOMAIN}_sessione_{self.entry.entry_id}"
 
-    def _num_avviso(self) -> str:
-        """Numero mascherato per i testi rivolti all'utente. Le ultime 4 cifre bastano a
-        riconoscere «è il mio», e la notifica finisce negli screenshot che si allegano alle
-        richieste di aiuto. Regola unica in `core/mask.py`: qui la copia locale ometteva gli
-        asterischi quando il numero era corto, restituendo il solo prefisso."""
-        from .core import mask
-        return mask.numero_con_prefisso(self.phone, self.area_code)
-
-    def _mail_avviso(self) -> str:
-        """E-mail mascherata per i testi rivolti all'utente.
-
-        ⚠️ Stessa ragione del numero, e stessa asimmetria da non ripetere: qui il telefono era
-        mascherato e l'indirizzo usciva per esteso, dieci righe sotto la docstring che spiega
-        perché mascherare («la notifica finisce negli screenshot che si allegano alle richieste
-        di aiuto»). Per un indirizzo aziendale l'indirizzo dice anche dove uno lavora."""
-        from .core import mask
-        return mask.indirizzo_email(self.email)
-
-    def _dove_arriva_it(self) -> str:
-        """Dove arriva il codice. ⚠️ Non si può dire «via email» a chi si è registrato col
-        NUMERO: per quegli account `self.email` è la stringa vuota, e la frase usciva
-        troncata («il codice arriverà a .»). Il verbo cambia col canale, non solo il valore."""
-        if self.phone:
-            return f"il codice arriverà via SMS al numero {self._num_avviso()}"
-        return f"il codice arriverà via email a {self._mail_avviso()}" if self.email else \
-               "il codice ti verrà inviato"
-
-    def _dove_arriva_en(self) -> str:
-        if self.phone:
-            return f"the code will be sent by SMS to {self._num_avviso()}"
-        return f"the code will be emailed to {self._mail_avviso()}" if self.email else \
-               "the code will be sent to you"
-
     def _avvisa_sessione_morta(self) -> None:
         from homeassistant.components import persistent_notification
 
@@ -1850,19 +1816,18 @@ class LepasCoordinator(DataUpdateCoordinator):
             testo = (
                 f"L'integrazione non riesce più a parlare con l'auto: comandi e sensori "
                 f"restano fermi finché non riautentichi.\n\n"
-                f"Vai su **Impostazioni → Dispositivi e servizi → Chery Connect → "
-                f"Riautentica** e scegli **«Inviami un codice nuovo»**: {self._dove_arriva_it()}.\n\n"
-                f"Nessun codice è stato inviato in automatico — parte solo se lo chiedi tu."
+                f"Vai su **Impostazioni → Dispositivi e servizi → Lepas Connect → "
+                f"Riautentica** e inserisci la password dell'account.\n\n"
+                f"La password serve solo a ripristinare la sessione e non viene salvata."
             )
         else:
             titolo = f"{auto}: session expired"
             testo = (
                 f"The integration can no longer talk to the car: commands and sensors "
                 f"stay frozen until you re-authenticate.\n\n"
-                f"Go to **Settings → Devices & services → Chery Connect → "
-                f"Reconfigure/Re-authenticate** and pick **“Send me a new code”**: "
-                f"{self._dove_arriva_en()}.\n\n"
-                f"No code was sent automatically — one is only sent when you ask for it."
+                f"Go to **Settings → Devices & services → Lepas Connect → "
+                f"Re-authenticate** and enter your account password.\n\n"
+                f"The password is used only to restore the session and is not stored."
             )
         persistent_notification.async_create(
             self.hass, testo, title=titolo, notification_id=self._id_avviso)
@@ -1882,37 +1847,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             status = SESSION_STATUS_EXPIRED
         return ok, detail, status
 
-    # ───────────────── recupero sessione (OTP da HA) ─────────────────
-    async def async_request_otp(self) -> str:
-        """Invia il codice OTP all'utente — via email o via SMS, secondo com'è registrato
-        l'account (button «Richiedi OTP»). Il ramo lo sceglie `session.request_otp` guardando
-        `ctx.phone`, che arriva da qui: vedi il contesto costruito più sopra."""
-        _ok, detail = await self.hass.async_add_executor_job(self._request_otp)
-        return detail
-
-    def _request_otp(self) -> tuple[bool, str]:
-        """Ritorna (inviato, dettaglio). L'esito NON va perso: la riautenticazione deve
-        poter dire all'utente «il codice non è partito» invece di lasciarlo ad aspettare
-        una mail che non arriverà."""
-        from .core import session as SESSION
-        msgs: list[str] = []
-        ok = bool(SESSION.request_otp(self.ctx, emit=msgs.append))
-        detail = msgs[-1] if msgs else ("richiesta inviata" if ok else "invio non riuscito")
-        self._update({"session_detail": detail})
-        return ok, detail
-
-    async def async_confirm_otp(self) -> tuple[bool, str]:
-        """Conia il token col codice inserito (button «Conferma OTP») e ricontrolla la sessione."""
-        ok, detail = await self.hass.async_add_executor_job(self._confirm_otp, self.otp_code)
-        self._update({"session_ok": ok, "session_detail": detail})
-        return ok, detail
-
-    def _confirm_otp(self, code: str) -> tuple[bool, str]:
-        from .core import session as SESSION
-        return SESSION.confirm_otp(self.ctx, code or "")
-
     def _login_with_password(self, password: str) -> tuple[bool, str]:
-        """Reauth degli account password: riconia il token con la password (usa-e-getta, mai
-        salvata) e ricontrolla la sessione. Speculare a `_confirm_otp` per il ramo OTP."""
+        """Riconia il token con la password (usa-e-getta, mai salvata) e ricontrolla la sessione."""
         from .core import session as SESSION
         return SESSION.login_with_password(self.ctx, password or "")

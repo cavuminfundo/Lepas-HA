@@ -5,7 +5,6 @@ import logging
 
 from homeassistant.components.button import ENTITY_ID_FORMAT, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -31,11 +30,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     # clima (unico modo per accendere l'alta tensione, da cui dipendono i dati freschi).
     ents.append(LepasActionButton(coord, "Lepas Aggiorna stato completo", "refresh_full",
                                     coord.async_refresh_full_status))
-    # recupero sessione: azioni "di servizio" → categoria diagnostica (fuori dai controlli)
-    ents.append(LepasActionButton(coord, "Lepas Richiedi codice OTP", "otp_request",
-                                    coord.async_request_otp, category=EntityCategory.DIAGNOSTIC))
-    ents.append(LepasActionButton(coord, "Lepas Conferma OTP", "otp_confirm",
-                                    coord.async_confirm_otp, category=EntityCategory.DIAGNOSTIC))
     add(ents)
 
 
@@ -65,23 +59,17 @@ class LepasActionButton(LepasEntity, ButtonEntity):
         "wake": "mdi:car-connected",
         "refresh_pos": "mdi:crosshairs-gps",
         "refresh_full": "mdi:car-info",
-        "otp_request": "mdi:email-fast",
-        "otp_confirm": "mdi:check-decagram",
     }
 
     def __init__(self, coord, name: str, suffix: str, action, category=None) -> None:
         super().__init__(coord, name, suffix, entity_id_format=ENTITY_ID_FORMAT)
         self._action = action
         self._attr_icon = self._ICONS.get(suffix, "mdi:gesture-tap-button")
-        # Il codice arriva via SMS se l'account è registrato con un numero: mostrare comunque
-        # una busta significherebbe promettere una mail che non arriverà mai.
-        if suffix == "otp_request" and (getattr(coord, "phone", "") or ""):
-            self._attr_icon = "mdi:message-text-fast"
         if category is not None:
             self._attr_entity_category = category
 
     async def async_press(self) -> None:
-        # [LOW] sveglia/sonda/OTP: l'esito va nei sensori diagnostici; logga e non
+        # [LOW] sveglia/sonda: l'esito va nei sensori diagnostici; logga e non
         # propagare un'eccezione grezza nella UI.
         try:
             await self._action()

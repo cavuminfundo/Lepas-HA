@@ -90,3 +90,28 @@ async def test_una_entita_fuori_tabella_resta_com_e(hass, config_entry, registro
 
     assert registro.async_get("sensor.lepas_cosa_sconosciuta") is not None
 
+
+async def test_rimozione_entita_otp_orfane(hass, config_entry, registro):
+    """Le entità generate dal vecchio flusso OTP (_otp_code, _otp_confirm, _otp_request)
+    vengono eliminate dal registro entità alla migrazione, mentre le altre entità rimangono."""
+    e_code = registro.async_get_or_create(
+        "text", "lepas", f"{config_entry.unique_id}_otp_code",
+        suggested_object_id="lepas_otp_code", config_entry=config_entry)
+    e_confirm = registro.async_get_or_create(
+        "button", "lepas", f"{config_entry.unique_id}_otp_confirm",
+        suggested_object_id="lepas_otp_confirm", config_entry=config_entry)
+    e_request = registro.async_get_or_create(
+        "button", "lepas", f"{config_entry.unique_id}_otp_request",
+        suggested_object_id="lepas_otp_request", config_entry=config_entry)
+    e_legit = registro.async_get_or_create(
+        "sensor", "lepas", f"{config_entry.unique_id}_battery",
+        suggested_object_id="lepas_battery", config_entry=config_entry)
+
+    await _migra(hass, config_entry)
+
+    assert registro.async_get(e_code.entity_id) is None, "e_code doveva essere rimossa"
+    assert registro.async_get(e_confirm.entity_id) is None, "e_confirm doveva essere rimossa"
+    assert registro.async_get(e_request.entity_id) is None, "e_request doveva essere rimossa"
+    assert registro.async_get(e_legit.entity_id) is not None, "e_legit non doveva essere rimossa"
+    assert registro.async_get(e_legit.entity_id).unique_id == f"{config_entry.unique_id}_battery"
+

@@ -1,40 +1,27 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Lepas Connect",
-        "description": "Choose how to sign in to your Lepas account. Use the phone option if your account is registered with a phone number instead of an email.",
-        "menu_options": {
-          "login_email": "Sign in with email",
-          "login_phone": "Sign in with phone number (SMS)",
-          "login_password": "Sign in with password (no code)"
-        }
-      },
-      "login_email": {
-        "title": "Sign in with email",
-        "description": "Enter your Lepas account email and vehicle PIN. An OTP code will be sent to your email; VIN and account ID are detected automatically.{reason}",
+      "login_password": {
+        "title": "Sign in with password",
+        "description": "Enter your Lepas account email or phone number, password, and vehicle PIN. VIN and account ID are detected automatically. The password is encrypted, used once to sign in and never stored in Home Assistant.{reason}",
         "data": {
-          "preset": "Brand / region preset",
-          "email": "Account email",
-          "pin": "Vehicle control PIN",
-          "language": "Language (OTP emails / SMS)"
-        },
-        "data_description": {
-          "preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to configure another region in the next step."
-        }
-      },
-      "login_phone": {
-        "title": "Sign in with phone (SMS)",
-        "description": "Enter the phone number registered on your Lepas account, its country code (Italy = 39, without +) and the vehicle PIN. A verification code will be sent by SMS; VIN and account ID are detected automatically.{reason}",
-        "data": {
-          "preset": "Brand / region preset",
-          "phone": "Phone number (without country code)",
+          "email": "Email or phone number",
           "area_code": "Country code in digits (e.g. 39)",
+          "password": "Account password",
           "pin": "Vehicle control PIN",
-          "language": "Language (OTP emails / SMS)"
+          "preset": "Brand / region preset",
+          "region_preset": "Brand / region preset",
+          "tsp_host": "TSP console host (region)",
+          "bff": "BFF endpoint (region)",
+          "language": "Language"
         },
         "data_description": {
-          "preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to configure another region in the next step."
+          "email": "The email address or mobile phone number registered with your Lepas account.",
+          "area_code": "Only required if signing in with a phone number (e.g. 39 for Italy, without +). Ignored for email.",
+          "password": "Used once to mint the OAuth token, never stored in Home Assistant.",
+          "pin": "The 4- or 6-digit PIN used for remote commands.",
+          "preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to configure another region in the next step.",
+          "region_preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically."
         }
       },
       "custom_region": {
@@ -51,13 +38,6 @@
           "certs_src": "Folder with mutual-TLS certs to import (optional)"
         }
       },
-      "otp": {
-        "title": "Verification code",
-        "description": "Enter the OTP code you received (by email or SMS).{reason}",
-        "data": {
-          "code": "OTP code"
-        }
-      },
       "select_vehicle": {
         "title": "Select vehicle",
         "description": "Your account has more than one vehicle. Choose the VIN to add.",
@@ -67,27 +47,9 @@
       },
       "reconfigure": {
         "title": "Change settings",
-        "description": "What do you want to correct? Each option only asks for what it changes: changing how you receive the code will not ask for your PIN.",
+        "description": "Update the vehicle control PIN.",
         "menu_options": {
-          "reconfigure_pin": "Vehicle control PIN",
-          "reconfigure_email": "Receive the code by email",
-          "reconfigure_phone": "Receive the code by SMS"
-        }
-      },
-      "reauth_confirm": {
-        "title": "Re-authenticate Lepas Connect",
-        "description": "The session has expired: until you re-authenticate, the integration cannot talk to the car and commands and sensors stay frozen.\n\n**No code has been sent automatically.** Choose “Send me a new code” to have a fresh one sent to {email}.{reason}",
-        "menu_options": {
-          "send_code": "Send me a new code",
-          "enter_code": "I already have a valid code",
-          "install_fallback": "Install the fallback TLS client (download, ~12 MB)"
-        }
-      },
-      "enter_code": {
-        "title": "Enter the verification code",
-        "description": "Enter the code just sent to {email}. Codes expire after a few minutes: if it is rejected you can go back and request a new one.{reason}",
-        "data": {
-          "code": "OTP code"
+          "reconfigure_pin": "Vehicle control PIN"
         }
       },
       "reconfigure_pin": {
@@ -95,35 +57,6 @@
         "description": "Enter the 4- or 6-digit PIN used for remote commands. The PIN is not used to sign in, so no verification code is needed here. Fix it if commands come back as \"successful\" but the car does nothing.",
         "data": {
           "pin": "Vehicle control PIN"
-        }
-      },
-      "reconfigure_email": {
-        "title": "Receive the code by email",
-        "description": "The verification code will be sent to this address from now on. Use this if your account is registered with an email address, or to correct a typo.\n\nYour current session stays valid: only the next code changes route.",
-        "data": {
-          "email": "Account email"
-        }
-      },
-      "reconfigure_phone": {
-        "title": "Receive the code by SMS",
-        "description": "The verification code will be sent to this number from now on. Write the number without the country code, and the country code as digits only (Italy = 39, no +).\n\nYour current session stays valid: only the next code changes route. If the number is not the one registered with your Lepas account the SMS will not arrive — you can switch back to email from this same menu.",
-        "data": {
-          "phone": "Phone number (without country code)",
-          "area_code": "Country code, digits only (Italy = 39)"
-        }
-      },
-      "login_password": {
-        "title": "Sign in with password",
-        "description": "Enter your account email, password and vehicle PIN — no OTP code needed. VIN and account ID are detected automatically. The password is used once to sign in and is never stored.{reason}",
-        "data": {
-          "preset": "Brand / region preset",
-          "email": "Account email",
-          "pin": "Vehicle control PIN",
-          "password": "Account password",
-          "language": "Language (OTP emails / SMS)"
-        },
-        "data_description": {
-          "preset": "Lepas (Europe) and Chery (Europe) fill in everything automatically. Choose Custom to configure another region in the next step."
         }
       },
       "reauth_password": {
@@ -135,15 +68,13 @@
       }
     },
     "error": {
-      "otp_send_failed": "Could not send the code. Check the email/phone and PIN and try again.",
-      "otp_invalid": "Invalid or expired OTP code.",
-      "no_vehicle": "Signed in, but this account has no vehicles. If your car is registered under a different login (e.g. your email address), sign in with that one instead.",
-      "pin_required": "Enter the vehicle control PIN.",
-      "otp_required": "Enter the code you received.",
-      "phone_invalid": "That phone number does not look right. Enter the digits of the number only, without the country code and without spaces; in the other field put only the digits of the country code (Italy = 39).",
+      "cannot_connect": "Failed to connect to Lepas servers.",
       "email_invalid": "That email address does not look right.",
+      "no_vehicle": "Signed in, but this account has no vehicles. If your car is registered under a different login (e.g. your email address), sign in with that one instead.",
       "password_invalid": "Wrong username or password.",
-      "password_required": "Enter your account password."
+      "password_required": "Enter your account password.",
+      "phone_invalid": "That phone number does not look right. Enter the digits of the number only, without the country code and without spaces; in the other field put only the digits of the country code (Italy = 39).",
+      "pin_required": "Enter the vehicle control PIN."
     },
     "abort": {
       "already_configured": "This vehicle (VIN) is already configured.",
@@ -298,9 +229,6 @@
       "heat_everything": {
         "name": "Heat everything"
       },
-      "confirm_otp": {
-        "name": "Confirm OTP"
-      },
       "vent_windows": {
         "name": "Vent windows"
       },
@@ -309,9 +237,6 @@
       },
       "locate_car_gps": {
         "name": "Locate car (GPS)"
-      },
-      "request_otp_code": {
-        "name": "Request OTP code"
       },
       "wake_car": {
         "name": "Wake car"
@@ -542,11 +467,6 @@
       },
       "rear_left_seat_ventilation": {
         "name": "Rear left seat ventilation"
-      }
-    },
-    "text": {
-      "otp_code": {
-        "name": "OTP code"
       }
     },
     "time": {

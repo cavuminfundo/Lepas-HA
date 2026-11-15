@@ -97,10 +97,10 @@ def test_l_ambiente_del_sottoprocesso_e_effimero(core, ctx):
     session = core["session"]
     prima = dict(os.environ)
 
-    env = session._subenv(ctx, LEPAS_OTP="123456")
+    env = session._subenv(ctx, LEPAS_PASSWORD="secret")
 
     assert env["LEPAS_EMAIL"] == ctx.email
-    assert env["LEPAS_OTP"] == "123456"
+    assert env["LEPAS_PASSWORD"] == "secret"
     assert env["LEPAS_TOKEN_PATH"] == ctx.token_path
     assert dict(os.environ) == prima, "os.environ è stato modificato dalla chiamata"
 

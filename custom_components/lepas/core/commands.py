@@ -459,7 +459,7 @@ def _messaggio_checkpassword(esito, detail: str) -> str:
     tradurre senza toccare l'instradamento, e viceversa."""
     if esito.reason == routing.REASON_REAUTH:
         return (f"Sessione scaduta [checkPassword {detail}] — riautentica dall'avviso di "
-                "Home Assistant (nuovo codice OTP)")
+                "Home Assistant (inserisci la password)")
     if esito.reason == routing.REASON_CONFIG:
         # Bilingue: è un messaggio d'errore mostrato all'utente e l'integrazione è usata
         # anche fuori dall'Italia. Qui non c'è il limite dei 255 caratteri degli stati.
@@ -769,9 +769,9 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
 
     token, tuid = wake._bff_login(ctx)
     if not token:
-        emit("login fallito (token scaduto? rifare OTP ad app chiusa)")
+        emit("login fallito (token scaduto? riautenticarsi con password)")
         raise CommandError(
-            "Sessione scaduta — riautentica dall'avviso di Home Assistant (nuovo codice OTP)",
+            "Sessione scaduta — riautentica dall'avviso di Home Assistant (inserisci la password)",
             reason="reauth")
 
     # Lista permessi del veicolo: si legge UNA volta sola, qui, perché è l'unico punto in cui

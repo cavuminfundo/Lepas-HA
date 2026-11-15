@@ -1,40 +1,27 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Lepas Connect",
-        "description": "Kies hoe u zich aanmeldt bij uw Lepas-account. Gebruik de telefoonoptie als uw account is geregistreerd met een telefoonnummer in plaats van een e-mail.",
-        "menu_options": {
-          "login_email": "Aanmelden met e-mail",
-          "login_phone": "Aanmelden met telefoonnummer (SMS)",
-          "login_password": "Aanmelden met wachtwoord (geen code)"
-        }
-      },
-      "login_email": {
-        "title": "Aanmelden met e-mail",
-        "description": "Voer het e-mailadres van uw Lepas-account en de voertuig-PIN in. Er wordt een OTP-code naar uw e-mail gestuurd; VIN en account-ID worden automatisch gedetecteerd.{reason}",
+      "login_password": {
+        "title": "Aanmelden met wachtwoord",
+        "description": "Voer het account-e-mailadres of telefoonnummer, wachtwoord en de voertuigbedienings-PIN in. VIN en account-ID worden automatisch gedetecteerd. Het wachtwoord wordt eenmalig versleuteld gebruikt en nooit opgeslagen in Home Assistant.{reason}",
         "data": {
-          "preset": "Merk- / regiopreset",
-          "email": "Account-e-mail",
+          "email": "E-mail of telefoonnummer",
+          "area_code": "Landcode in cijfers (bijv. 31 of 32)",
+          "password": "Accountwachtwoord",
           "pin": "Voertuigbedienings-PIN",
-          "language": "Taal (OTP e-mails / SMS)"
+          "preset": "Merk- / regiopreset",
+          "region_preset": "Merk- / regiopreset",
+          "tsp_host": "TSP console host (regio)",
+          "bff": "BFF-endpoint (regio)",
+          "language": "Taal"
         },
         "data_description": {
-          "preset": "Lepas (Europa) en Chery (Europa) vullen alles automatisch in. Kies Aangepast om in de volgende stap een andere regio te configureren."
-        }
-      },
-      "login_phone": {
-        "title": "Aanmelden met telefoon (SMS)",
-        "description": "Voer het telefoonnummer in dat aan uw Lepas-account is gekoppeld, de landcode (Nederland = 31, België = 32, zonder +) en de voertuig-PIN. Er wordt een verificatiecode per SMS verzonden; VIN en account-ID worden automatisch gedetecteerd.{reason}",
-        "data": {
-          "preset": "Merk- / regiopreset",
-          "phone": "Telefoonnummer (zonder landcode)",
-          "area_code": "Landcode in cijfers (bijv. 31)",
-          "pin": "Voertuigbedienings-PIN",
-          "language": "Taal (OTP e-mails / SMS)"
-        },
-        "data_description": {
-          "preset": "Lepas (Europa) en Chery (Europa) vullen alles automatisch in. Kies Aangepast om in de volgende stap een andere regio te configureren."
+          "email": "Het e-mailadres of telefoonnummer dat aan uw Lepas-account is gekoppeld.",
+          "area_code": "Alleen vereist bij aanmelden met een telefoonnummer (bijv. 31 of 32, zonder +). Wordt genegeerd voor e-mail.",
+          "password": "Wordt eenmalig gebruikt om het OAuth-token aan te maken en nooit opgeslagen in Home Assistant.",
+          "pin": "De 4- of 6-cijferige pincode voor externe voertuigcommando's.",
+          "preset": "Lepas (Europa) en Chery (Europa) vullen alles automatisch in. Kies Aangepast om in de volgende stap een andere regio te configureren.",
+          "region_preset": "Lepas (Europa) en Chery (Europa) vullen alles automatisch in."
         }
       },
       "custom_region": {
@@ -51,13 +38,6 @@
           "certs_src": "Map met mutual-TLS certificaten om te importeren (optioneel)"
         }
       },
-      "otp": {
-        "title": "Verificatiecode",
-        "description": "Voer de OTP-code in die u heeft ontvangen (per e-mail of SMS).{reason}",
-        "data": {
-          "code": "OTP-code"
-        }
-      },
       "select_vehicle": {
         "title": "Selecteer voertuig",
         "description": "Uw account heeft meer dan één voertuig. Kies de VIN om toe te voegen.",
@@ -67,27 +47,9 @@
       },
       "reconfigure": {
         "title": "Instellingen wijzigen",
-        "description": "Wat wilt u corrigeren? Elke optie vraagt alleen om wat hij verandert: het wijzigen van hoe u de code ontvangt vraagt niet om uw PIN.",
+        "description": "Werk de voertuigbedienings-PIN bij.",
         "menu_options": {
-          "reconfigure_pin": "Voertuigbedienings-PIN",
-          "reconfigure_email": "Ontvang de code per e-mail",
-          "reconfigure_phone": "Ontvang de code per SMS"
-        }
-      },
-      "reauth_confirm": {
-        "title": "Opnieuw verifiëren Lepas Connect",
-        "description": "De sessie is verlopen: totdat u opnieuw geverifieerd bent, kan de integratie niet met de auto communiceren en blijven commando's en sensoren vaststaan.\n\n**Er is geen code automatisch verzonden.** Kies hoe u wilt doorgaan of voer een bestaande code in.",
-        "menu_options": {
-          "send_code": "Stuur me een nieuwe code",
-          "enter_code": "Ik heb al een geldige code",
-          "install_fallback": "Installeer de fallback TLS-client (download, ~12 MB)"
-        }
-      },
-      "enter_code": {
-        "title": "Voer de verificatiecode in",
-        "description": "Voer de code in die zojuist naar {email} is verzonden. Codes verlopen na een paar minuten: als deze wordt geweigerd kunt u teruggaan en een nieuwe aanvragen.{reason}",
-        "data": {
-          "code": "OTP-code"
+          "reconfigure_pin": "Voertuigbedienings-PIN"
         }
       },
       "reconfigure_pin": {
@@ -95,35 +57,6 @@
         "description": "Voer de 4- of 6-cijferige PIN in die wordt gebruikt voor externe commando's. De PIN wordt niet gebruikt om in te loggen, dus hier is geen verificatiecode nodig. Stel deze bij als commando's als \"succesvol\" terugkomen maar de auto het niet uitvoert.",
         "data": {
           "pin": "Voertuigbedienings-PIN"
-        }
-      },
-      "reconfigure_email": {
-        "title": "Ontvang de code per e-mail",
-        "description": "De verificatiecode wordt voortaan naar dit adres gestuurd. Gebruik dit als uw account met een e-mailadres geregistreerd is, of om een typfout te corrigeren.\n\nUw huidige sessie blijft geldig totdat u opnieuw verifieert.",
-        "data": {
-          "email": "Account-e-mail"
-        }
-      },
-      "reconfigure_phone": {
-        "title": "Ontvang de code per SMS",
-        "description": "De verificatiecode wordt voortaan naar dit nummer gestuurd. Schrijf het nummer zonder de landcode, en de landcode als cijfers alleen (Nederland = 31, België = 32).\n\nUw huidige sessie blijft geldig totdat u opnieuw verifieert.",
-        "data": {
-          "phone": "Telefoonnummer (zonder landcode)",
-          "area_code": "Landcode, alleen cijfers (Nederland = 31, België = 32)"
-        }
-      },
-      "login_password": {
-        "title": "Aanmelden met wachtwoord",
-        "description": "Voer het account-e-mailadres, wachtwoord en de voertuigbedienings-PIN in — geen OTP-code nodig. VIN en account-ID worden automatisch gedetecteerd. Het wachtwoord wordt eenmalig gebruikt en nooit opgeslagen.{reason}",
-        "data": {
-          "preset": "Merk- / regiopreset",
-          "email": "Account-e-mail",
-          "pin": "Voertuigbedienings-PIN",
-          "password": "Accountwachtwoord",
-          "language": "Taal (OTP e-mails / SMS)"
-        },
-        "data_description": {
-          "preset": "Lepas (Europa) en Chery (Europa) vullen alles automatisch in. Kies Aangepast om in de volgende stap een andere regio te configureren."
         }
       },
       "reauth_password": {
@@ -135,15 +68,13 @@
       }
     },
     "error": {
-      "otp_send_failed": "Kon de code niet verzenden. Controleer e-mail/telefoon en PIN en probeer het opnieuw.",
-      "otp_invalid": "Ongeldige of verlopen OTP-code.",
-      "no_vehicle": "Aanmelding geslaagd, maar er is geen voertuig gevonden op dit account.",
-      "pin_required": "Voer de voertuigbedienings-PIN in.",
-      "otp_required": "Voer de ontvangen code in.",
-      "phone_invalid": "Dat telefoonnummer lijkt niet juist. Voer alleen de cijfers van het nummer in, zonder landcode en zonder spaties; in het andere veld zet u alleen de cijfers van de landcode.",
+      "cannot_connect": "Kan geen verbinding maken met de Lepas-servers.",
       "email_invalid": "Dat e-mailadres lijkt niet juist.",
+      "no_vehicle": "Aanmelding geslaagd, maar er is geen voertuig gevonden op dit account.",
       "password_invalid": "Onjuiste gebruikersnaam of wachtwoord.",
-      "password_required": "Voer uw accountwachtwoord in."
+      "password_required": "Voer uw accountwachtwoord in.",
+      "phone_invalid": "Dat telefoonnummer lijkt niet juist. Voer alleen de cijfers van het nummer in, zonder landcode en zonder spaties; in het andere veld zet u alleen de cijfers van de landcode.",
+      "pin_required": "Voer de voertuigbedienings-PIN in."
     },
     "abort": {
       "already_configured": "Dit voertuig (VIN) is al geconfigureerd.",
@@ -298,9 +229,6 @@
       "heat_everything": {
         "name": "Verwarming aan"
       },
-      "confirm_otp": {
-        "name": "OTP bevestigen"
-      },
       "vent_windows": {
         "name": "Ramen ventileren"
       },
@@ -309,9 +237,6 @@
       },
       "locate_car_gps": {
         "name": "Auto lokaliseren (GPS)"
-      },
-      "request_otp_code": {
-        "name": "Vraag OTP-code aan"
       },
       "wake_car": {
         "name": "Auto wekken"
@@ -542,11 +467,6 @@
       },
       "rear_left_seat_ventilation": {
         "name": "Achterste linker stoel ventilatie"
-      }
-    },
-    "text": {
-      "otp_code": {
-        "name": "OTP-code"
       }
     },
     "time": {

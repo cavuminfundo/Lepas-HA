@@ -90,6 +90,13 @@ async def _async_migrate_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> 
     esistenti = {e.entity_id for e in reg.entities.values()}
     fatti = 0
     for voce in er.async_entries_for_config_entry(reg, entry.entry_id):
+        if voce.unique_id and any(voce.unique_id.endswith(sfx) for sfx in ("_otp_code", "_otp_confirm", "_otp_request")):
+            try:
+                reg.async_remove(voce.entity_id)
+                esistenti.discard(voce.entity_id)
+            except Exception:
+                pass
+            continue
         piattaforma, _, object_id = voce.entity_id.partition(".")
         old_key = None
         for prefix in (f"{DOMAIN}_",):
@@ -127,7 +134,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # PRIMA di costruire qualunque entita': il rename tocca il registro, e il registro va
     # sistemato mentre nessuna entita' e' ancora montata.
-    await _async_migrate_entity_ids(hass, entry)
+    try:
+        await _async_migrate_entity_ids(hass, entry)
+    except Exception as err:
+        _LOGGER.warning("Lepas: errore migrazione entita': %s", err)
 
     coordinator = LepasCoordinator(hass, entry)
 

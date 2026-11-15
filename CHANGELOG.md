@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.16.0 — 2026-11-15
+
+### 🇬🇧 English
+
+- **Password-Only Authentication (Email or Phone + Password)**: Removed the deprecated OTP login/reauth flow (email/SMS OTP, captcha solver, WAF TLS fallback, `numpy` dependency, and the 3 OTP entities `text.lepas_otp_code`, `button.lepas_request_otp_code`, `button.lepas_confirm_otp`). Setup now goes directly to a unified `login_password` form supporting both email and international phone number with area code.
+- **Automatic Cleanup & Migration**: Existing installations automatically remove orphaned OTP entities from the Home Assistant entity registry on startup, and reauthentication routes directly to password login with automatic entry migration.
+- **Documentation (`README.md`)**: Added clear prerequisites and setup instructions, including the requirement to set a password in the official Lepas app, one-shot password handling, and first-start `unknown` sensor behavior when the vehicle is asleep.
+
+### 🇮🇹 Italiano
+
+- **Autenticazione esclusiva con Password (Email o Telefono + Password)**: Rimosso il flusso di login/riautenticazione tramite codice OTP (email/SMS, solver captcha, ripiego TLS WAF, dipendenza `numpy` e le 3 entità OTP `text.lepas_otp_code`, `button.lepas_request_otp_code`, `button.lepas_confirm_otp`). La configurazione passa ora direttamente al form unificato `login_password` che supporta sia email sia numero di telefono con prefisso internazionale.
+- **Pulizia e Migrazione Automatica**: Le installazioni esistenti rimuovono automaticamente dal registro di Home Assistant le entità OTP orfane all'avvio, e la riautenticazione porta direttamente al login con password aggiornando l'entry.
+- **Documentazione (`README.md`)**: Aggiunti i prerequisiti e la guida dettagliata per la registrazione, inclusa la necessità di impostare una password nell'app ufficiale Lepas, la gestione one-shot della password e il comportamento dei sensori `unknown` al primo avvio ad auto spenta.
+
 ## v1.15.4 — 2026-11-14
 
 ### 🇬🇧 English

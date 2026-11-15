@@ -1,40 +1,27 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Lepas Connect",
-        "description": "Scegli come accedere al tuo account Lepas. Usa l'opzione telefono se il tuo account è registrato con un numero di telefono invece che con un'email.",
-        "menu_options": {
-          "login_email": "Accedi con email",
-          "login_phone": "Accedi con numero di telefono (SMS)",
-          "login_password": "Accedi con password (senza codice)"
-        }
-      },
-      "login_email": {
-        "title": "Accedi con email",
-        "description": "Inserisci l'email del tuo account Lepas e il PIN del veicolo. Riceverai un codice OTP via email; VIN e ID account vengono rilevati automaticamente.{reason}",
+      "login_password": {
+        "title": "Accedi con password",
+        "description": "Inserisci l'email o il numero di telefono dell'account Lepas, la password e il PIN di controllo del veicolo. VIN e ID account vengono rilevati automaticamente. La password viene cifrata, usata solo una volta per accedere e non viene mai salvata in Home Assistant.{reason}",
         "data": {
-          "preset": "Preset marchio / regione",
-          "email": "Email dell'account",
-          "pin": "PIN di controllo veicolo",
-          "language": "Lingua (e-mail / SMS OTP)"
-        },
-        "data_description": {
-          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per configurare un'altra regione nel passaggio successivo."
-        }
-      },
-      "login_phone": {
-        "title": "Accedi con telefono (SMS)",
-        "description": "Inserisci il numero di telefono registrato sul tuo account Lepas, il prefisso internazionale (Italia = 39, senza +) e il PIN del veicolo. Riceverai un codice via SMS; VIN e ID account vengono rilevati automaticamente.{reason}",
-        "data": {
-          "preset": "Preset marchio / regione",
-          "phone": "Numero di telefono (senza prefisso)",
+          "email": "Email o numero di telefono",
           "area_code": "Prefisso internazionale in cifre (es. 39)",
+          "password": "Password account",
           "pin": "PIN di controllo veicolo",
-          "language": "Lingua (e-mail / SMS OTP)"
+          "preset": "Preset marchio / regione",
+          "region_preset": "Preset marchio / regione",
+          "tsp_host": "Host console TSP (regione)",
+          "bff": "Endpoint BFF (regione)",
+          "language": "Lingua"
         },
         "data_description": {
-          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per configurare un'altra regione nel passaggio successivo."
+          "email": "L'indirizzo email o il numero di cellulare registrato sul tuo account Lepas.",
+          "area_code": "Necessario solo per il login con numero di telefono (es. 39 per Italia, senza +). Ignorato per email.",
+          "password": "Usata una sola volta per ottenere il token OAuth, non viene mai salvata in Home Assistant.",
+          "pin": "Il PIN di 4 o 6 cifre usato per i comandi remoti del veicolo.",
+          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per configurare un'altra regione nel passaggio successivo.",
+          "region_preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli."
         }
       },
       "custom_region": {
@@ -51,13 +38,6 @@
           "certs_src": "Cartella coi certificati mutual-TLS da importare (opzionale)"
         }
       },
-      "otp": {
-        "title": "Codice di verifica",
-        "description": "Inserisci il codice OTP ricevuto (via email o SMS).{reason}",
-        "data": {
-          "code": "Codice OTP"
-        }
-      },
       "select_vehicle": {
         "title": "Seleziona veicolo",
         "description": "Il tuo account ha più di un veicolo. Scegli il VIN da aggiungere.",
@@ -67,27 +47,9 @@
       },
       "reconfigure": {
         "title": "Modifica le impostazioni",
-        "description": "Cosa vuoi correggere? Ogni voce chiede soltanto ciò che cambia: se cambi il modo in cui ricevi il codice, il PIN non ti viene richiesto.",
+        "description": "Aggiorna il PIN di controllo veicolo.",
         "menu_options": {
-          "reconfigure_pin": "PIN di controllo veicolo",
-          "reconfigure_email": "Ricevi il codice via email",
-          "reconfigure_phone": "Ricevi il codice via SMS"
-        }
-      },
-      "reauth_confirm": {
-        "title": "Ri-autentica Lepas Connect",
-        "description": "La sessione è scaduta: finché non riautentichi l'integrazione non riesce a parlare con l'auto e comandi e sensori restano fermi.\n\n**Nessun codice è stato inviato in automatico.** Scegli «Inviami un codice nuovo» per riceverne uno fresco a {email}.{reason}",
-        "menu_options": {
-          "send_code": "Inviami un codice nuovo",
-          "enter_code": "Ho già un codice valido",
-          "install_fallback": "Installa il client TLS di ripiego (scaricamento, ~12 MB)"
-        }
-      },
-      "enter_code": {
-        "title": "Inserisci il codice di verifica",
-        "description": "Inserisci il codice appena inviato a {email}. I codici scadono dopo pochi minuti: se viene rifiutato puoi tornare indietro e chiederne subito uno nuovo.{reason}",
-        "data": {
-          "code": "Codice OTP"
+          "reconfigure_pin": "PIN di controllo veicolo"
         }
       },
       "reconfigure_pin": {
@@ -95,35 +57,6 @@
         "description": "Inserisci il PIN (4 o 6 cifre) usato per i comandi remoti. Il PIN non serve per l'accesso, quindi qui non viene richiesto alcun codice di verifica. Correggilo se i comandi risultano «riusciti» ma l'auto non fa nulla.",
         "data": {
           "pin": "PIN di controllo veicolo"
-        }
-      },
-      "reconfigure_email": {
-        "title": "Ricevi il codice via email",
-        "description": "D'ora in poi il codice di verifica arriverà a questo indirizzo. Usa questa voce se il tuo account è registrato con un'email, oppure per correggere un errore di battitura.\n\nLa sessione in corso resta valida: cambia solo dove arriverà il prossimo codice.",
-        "data": {
-          "email": "Email dell'account"
-        }
-      },
-      "reconfigure_phone": {
-        "title": "Ricevi il codice via SMS",
-        "description": "D'ora in poi il codice di verifica arriverà a questo numero. Scrivi il numero senza prefisso internazionale, e il prefisso solo in cifre (Italia = 39, senza +).\n\nLa sessione in corso resta valida: cambia solo dove arriverà il prossimo codice. Se il numero non è quello registrato sul tuo account Lepas l'SMS non arriverà — puoi tornare all'email da questo stesso menu.",
-        "data": {
-          "phone": "Numero di telefono (senza prefisso internazionale)",
-          "area_code": "Prefisso internazionale, solo cifre (Italia = 39)"
-        }
-      },
-      "login_password": {
-        "title": "Accedi con password",
-        "description": "Inserisci e-mail, password e PIN del veicolo — nessun codice OTP. VIN e ID account rilevati in automatico. La password serve solo per accedere e non viene salvata.{reason}",
-        "data": {
-          "preset": "Preset marchio / regione",
-          "email": "E-mail account",
-          "pin": "PIN comandi veicolo",
-          "password": "Password account",
-          "language": "Lingua (e-mail / SMS OTP)"
-        },
-        "data_description": {
-          "preset": "Lepas (Europa) e Chery (Europa) compilano tutto da soli. Scegli «Custom» per configurare un'altra regione nel passaggio successivo."
         }
       },
       "reauth_password": {
@@ -135,15 +68,13 @@
       }
     },
     "error": {
-      "otp_send_failed": "Impossibile inviare il codice. Controlla email/telefono e PIN e riprova.",
-      "otp_invalid": "Codice OTP non valido o scaduto.",
-      "no_vehicle": "Accesso riuscito, ma questo account non ha veicoli. Se l'auto è registrata su un altro accesso (es. la tua e-mail), usa quello.",
-      "pin_required": "Inserisci il PIN di controllo veicolo.",
-      "otp_required": "Inserisci il codice che hai ricevuto.",
-      "phone_invalid": "Questo numero non sembra giusto. Scrivi solo le cifre del numero, senza prefisso internazionale e senza spazi; nell'altro campo metti solo le cifre del prefisso (Italia = 39).",
+      "cannot_connect": "Impossibile connettersi ai server Lepas.",
       "email_invalid": "Questo indirizzo email non sembra giusto.",
+      "no_vehicle": "Accesso riuscito, ma questo account non ha veicoli. Se l'auto è registrata su un altro accesso (es. la tua e-mail), usa quello.",
       "password_invalid": "Nome utente o password errati.",
-      "password_required": "Inserisci la password dell'account."
+      "password_required": "Inserisci la password dell'account.",
+      "phone_invalid": "Questo numero non sembra giusto. Scrivi solo le cifre del numero, senza prefisso internazionale e senza spazi; nell'altro campo metti solo le cifre del prefisso (Italia = 39).",
+      "pin_required": "Inserisci il PIN di controllo veicolo."
     },
     "abort": {
       "already_configured": "Questo veicolo (VIN) è già configurato.",
@@ -298,9 +229,6 @@
       "heat_everything": {
         "name": "Riscalda tutto"
       },
-      "confirm_otp": {
-        "name": "Conferma OTP"
-      },
       "vent_windows": {
         "name": "Ventila finestrini"
       },
@@ -309,9 +237,6 @@
       },
       "locate_car_gps": {
         "name": "Localizza auto (GPS)"
-      },
-      "request_otp_code": {
-        "name": "Richiedi codice OTP"
       },
       "wake_car": {
         "name": "Sveglia auto"
@@ -542,11 +467,6 @@
       },
       "rear_left_seat_ventilation": {
         "name": "Ventilazione sedile post. SX"
-      }
-    },
-    "text": {
-      "otp_code": {
-        "name": "Codice OTP"
       }
     },
     "time": {

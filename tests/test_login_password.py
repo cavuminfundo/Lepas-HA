@@ -42,6 +42,30 @@ def test_la_password_e_cifrata_aes_cbc_nei_parametri(core):
     assert dec == PWD, "il round-trip AES-CBC non torna alla password"
 
 
+def test_parametri_password_mobile_con_prefisso(core):
+    """Quando is_phone=True, i parametri impostano loginType='mobile' e areaCode,
+    mentre per is_phone=False (default) impostano loginType='email' senza areaCode."""
+    pt, A = core["prova_token"], core["lepas_auth"]
+    p_phone = pt.build_params_password("3331234567", PWD, is_phone=True, area="39")
+
+    assert p_phone["username"] == "3331234567"
+    assert p_phone["loginType"] == "mobile"
+    assert p_phone["areaCode"] == "39"
+    assert p_phone["needDecode"] == "1"
+    assert p_phone["grant_type"] == "password"
+    assert p_phone["password"] != PWD
+
+    from Crypto.Cipher import AES
+    from Crypto.Util.Padding import unpad
+    c = AES.new(A.AES_PWD_KEY, AES.MODE_CBC, A.AES_PWD_KEY)
+    dec = unpad(c.decrypt(base64.b64decode(p_phone["password"])), AES.block_size).decode("utf-8")
+    assert dec == PWD
+
+    p_email = pt.build_params_password("mario@rossi.it", PWD, is_phone=False)
+    assert p_email["loginType"] == "email"
+    assert "areaCode" not in p_email
+
+
 def test_la_password_va_nel_body_non_in_query(core, monkeypatch):
     """I parametri vanno nel BODY (`data=`), non in query: è ciò che il server accetta per
     decifrare, ed è anche ciò che tiene la password fuori dalla URL."""

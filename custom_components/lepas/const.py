@@ -2,7 +2,7 @@
 
 DOMAIN = "lepas"
 PLATFORMS = ["sensor", "binary_sensor", "button", "lock", "switch", "climate",
-             "number", "time", "cover", "device_tracker", "text"]
+             "number", "time", "cover", "device_tracker"]
 
 # Campi auto (5A02) ora rappresentati da entità native ATTUABILI (lock/switch/cover):
 # esclusi dalla creazione di sensor/binary_sensor "di sola lettura" per non duplicarli.
@@ -52,24 +52,19 @@ CONF_EMAIL = "email"
 CONF_PIN = "pin"
 CONF_VIN = "vin"
 CONF_TUSERID = "tuserid"
-# Login via SMS (telefono): alternativa all'email. Alcuni account sono registrati col
-# numero e NON hanno email → per loro il login email fallisce. Se `phone` è valorizzato
-# nell'entry, il login usa il ramo SMS (invio codice via sendSmsCode + grant_type=mobile).
+# Login con USERNAME + PASSWORD (ROPC). L'account può essere identificato da email
+# o numero di telefono (con prefisso internazionale). La password è una CREDENZIALE
+# transitoria: serve SOLO a coniare il token al setup/reauth e NON viene mai salvata
+# in entry.data (la sessione vive sul refresh_token).
 CONF_PHONE = "phone"
 CONF_AREA_CODE = "area_code"     # prefisso internazionale in sole cifre (Italia = 39)
 DEFAULT_AREA_CODE = "39"
 
-# Login con USERNAME + PASSWORD (ROPC): alternativa all'OTP (email/SMS). La password è una
-# CREDENZIALE usa-e-getta: serve SOLO a coniare il token al setup/reauth e NON viene mai salvata
-# in entry.data (da lì la sessione vive sul refresh_token, come per l'OTP). `login_method` è un
-# marcatore salvato nell'entry — NON la password — così la reauth sa chiedere di nuovo la password
-# invece di un OTP. Vedi `core/session.login_with_password`.
 CONF_PASSWORD = "password"          # campo del form, transitorio: MAI in entry.data
-CONF_LOGIN_METHOD = "login_method"  # "password" per gli account che accedono con la password
+CONF_LOGIN_METHOD = "login_method"  # marcatore salvato nell'entry
 LOGIN_METHOD_PASSWORD = "password"
-# Lingua delle chiamate al backend: guida l'header `Accept-Language`, che a sua volta decide la
-# lingua di e-mail OTP, SMS e messaggi del server (il backend non ha un parametro `lang` sul
-# codice: comanda l'header). Il valore memorizzato È il valore dell'header (`en-GB`/`it-IT`).
+# Lingua delle chiamate al backend: guida l'header `Accept-Language`.
+# Il valore memorizzato È il valore dell'header (`en-GB`/`it-IT`).
 #   * setup ESISTENTI (nessun campo `language`) → `LANGUAGE_FALLBACK` = it-IT: comportamento
 #     storico invariato;
 #   * setup NUOVI → il dropdown parte da `DEFAULT_LANGUAGE` = en-GB (questo fork è in inglese).

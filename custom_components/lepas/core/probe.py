@@ -109,7 +109,7 @@ def probe_once(ctx, publish, force=False, on_data=None):
         publish("🛰️ Sonda posizione: l'auto è sveglia, provo a leggere GPS/realtime…")
         ut, tu = W._bff_login(ctx)
         if not ut:
-            publish("🔑 Sonda: sessione scaduta (rifai login OTP). Riprovo al prossimo risveglio")
+            publish("🔑 Sonda: sessione scaduta (riautenticati con password). Riprovo al prossimo risveglio")
             _log({"event": "probe", "ok": False, "reason": "no_usertoken"})
             return {"ok": False, "reason": "no_usertoken"}
 

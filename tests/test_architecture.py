@@ -68,7 +68,6 @@ ENTITY_PLATFORMS = (
     "select.py",
     "sensor.py",
     "switch.py",
-    "text.py",
     "time.py",
 )
 

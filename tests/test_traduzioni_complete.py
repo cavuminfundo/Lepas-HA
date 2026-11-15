@@ -73,7 +73,7 @@ def test_ogni_lingua_ha_le_chiavi_di_strings(nome):
 # confrontarli con quello che il form DISEGNA.
 # --------------------------------------------------------------------------------------
 
-STEP_CON_CAMPI_DI_REGIONE = ("login_email", "login_phone", "login_password")
+STEP_CON_CAMPI_DI_REGIONE = ("login_password",)
 
 
 def _campi_di_regione() -> set[str]:
