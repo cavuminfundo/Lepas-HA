@@ -288,7 +288,8 @@ class LepasCoordinator(DataUpdateCoordinator):
         self.entry = entry
         cfg = {**DEFAULTS, **dict(entry.data)}
         self.vin = cfg[CONF_VIN]
-        self.tuserid = cfg[CONF_TUSERID]
+        from .core import wake
+        self.tuserid = wake._valid_tuserid(cfg.get(CONF_TUSERID))
         self.channel_id = str(cfg.get(CONF_CHANNEL_ID, "1"))
         self.car_host = cfg[CONF_CAR_MQTT_HOST]
         self.car_port = int(cfg[CONF_CAR_MQTT_PORT])

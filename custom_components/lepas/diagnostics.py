@@ -42,8 +42,31 @@ from .core import mask
 TO_REDACT = {
     "email", "pin", "vin", "tuserid", "seq", "certs_src",
     "phone", "area_code", "mobile",
+    "user_id", "userid", "access_token", "refresh_token", "usertoken",
     "lat", "lon", "latitude", "longitude", "position",
 }
+
+
+def _token_has_user_id(token_path: str) -> bool:
+    """Verifica in sicurezza se token.json contiene un user_id valido (senza esporlo)."""
+    if not os.path.isfile(token_path):
+        return False
+    try:
+        import json
+        with open(token_path, encoding="utf-8") as f:
+            tok = json.load(f)
+        if not isinstance(tok, dict):
+            return False
+        d = tok.get("data", tok)
+        sources = (d, tok) if isinstance(d, dict) else (tok,)
+        for src in sources:
+            uid = src.get("user_id") or src.get("userId")
+            uid_str = str(uid or "").strip()
+            if uid_str and uid_str not in ("None", "0"):
+                return True
+        return False
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _scrub_valore(obj: Any, ago: str) -> Any:
@@ -145,6 +168,13 @@ async def async_get_config_entry_diagnostics(
     token_present = await hass.async_add_executor_job(
         os.path.isfile, coordinator.token_path
     )
+    token_has_user_id = await hass.async_add_executor_job(
+        _token_has_user_id, coordinator.token_path
+    )
+    from .core import wake
+    tuid = wake._valid_tuserid(getattr(coordinator, "tuserid", ""))
+    tuserid_present = bool(tuid)
+    tuserid_length = len(tuid)
     certs_present: dict[str, bool] = {}
     for fname in CERT_FILES:
         path = os.path.join(coordinator.certs_dir, fname)
@@ -199,6 +229,9 @@ async def async_get_config_entry_diagnostics(
             "enabled": coordinator.poll_enabled,
         },
         "token_present": token_present,
+        "token_has_user_id": token_has_user_id,
+        "tuserid_present": tuserid_present,
+        "tuserid_length": tuserid_length,
         "certs_present": certs_present,
         "state": {
             "session_ok": data.get("session_ok"),

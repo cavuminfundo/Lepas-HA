@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.16.3 — 2026-11-16
+
+### 🇬🇧 English
+
+- **APK Signature Path Parity (`_normalize_sig_url`)**: Normalized BFF signature calculation and `url` header by stripping the leading microservice prefix (`/tsp/` and `/marketing/` -> `/v1/...`, matching `http_utils.dart` in the official Lepas app) while keeping `/auth/oauth2/token` unchanged.
+- **OAuth Refresh `user_id` Preservation & `getUserInfo` Recovery**: `_refresh_token_detail` now preserves `user_id` and identity metadata across token refreshes instead of overwriting `token.json` with a stripped refresh response, and `_resolve_tuserid` recovers missing `user_id` via `GET /marketing/v1/app/user` (`UserState::getUserInfo`) under `lock_token` with `0o600` atomic writes.
+- **Pre-`checkPassword` Hard Gate, Controlled `A00361` Retry & Non-PII Diagnostics**: Aborts before `setVecDefault`/`checkPassword` when `tUserId` is unavailable (zero PIN lockout attempts consumed), performs a single `getTuserId` retry if `A00361` occurs with a login-supplied `tUserId` when an alternative ID is returned, normalizes `tuserid` on coordinator startup and password reauthentication, and exposes strictly non-PII health flags (`token_has_user_id`, `tuserid_present`, `tuserid_length`) in diagnostics and logs.
+
+### 🇮🇹 Italiano
+
+- **Parità Firma APK su Path BFF (`_normalize_sig_url`)**: Normalizzati il calcolo della firma e l'header `url` rimuovendo il prefisso del microservizio (`/tsp/` e `/marketing/` -> `/v1/...`, come in `http_utils.dart` dell'app ufficiale Lepas), lasciando invariato `/auth/oauth2/token`.
+- **Preservazione `user_id` al Refresh OAuth & Fallback `getUserInfo`**: `_refresh_token_detail` conserva ora `user_id` e i metadati identitari durante il rinnovo del token senza più cancellarli da `token.json`; se assente, `_resolve_tuserid` recupera `user_id` tramite `GET /marketing/v1/app/user` (`UserState::getUserInfo`) serializzato sotto `lock_token` con scrittura atomica `0o600`.
+- **Hard Gate Pre-`checkPassword`, Retry Singolo `A00361` & Telemetria Non-PII**: Blocca prima di `setVecDefault`/`checkPassword` se `tUserId` manca (zero tentativi PIN consumati), esegue un solo retry con `getTuserId` alternativo su `A00361` da login, normalizza `tuserid` all'avvio del coordinator e nella riautenticazione con password, e aggiunge flag sintetici non-PII (`token_has_user_id`, `tuserid_present`, `tuserid_length`) in diagnostica e log.
+
 ## v1.16.2 — 2026-11-16
 
 ### 🇬🇧 English

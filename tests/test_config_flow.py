@@ -688,6 +688,10 @@ def test_discover_authorized_control_car_list_e_tuserid_zero(hass, cloud):
         {"code": "000000", "data": {"userToken": FX.USER_TOKEN, "tUserId": "0"}},
     )
     cloud.on(
+        "/marketing/v1/app/user",
+        {"code": 200, "data": {"id": "u-discover-1"}},
+    )
+    cloud.on(
         "/tsp/v1/app/auth/getTuserId",
         {"code": "000000", "data": {"tUserId": "7766554433"}},
     )

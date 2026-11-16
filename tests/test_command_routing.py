@@ -239,3 +239,69 @@ def test_checkpassword_ignora_tuid_zero_e_risolve_prima_di_checkpassword(core, c
     assert cloud.count("queryVehicleAuthority") == 0
     assert cloud.count("queryPermissions") == 0
 
+
+def test_checkpassword_blocca_se_tuserid_vuoto_senza_chiamare_backend(core, cloud, ctx, token_file):
+    """Hard gate: se tUserId non è risolvibile, solleva CommandError(reason='config') prima di checkPassword."""
+    import json
+    commands = core["commands"]
+
+    # token_file privo di user_id
+    tok = json.loads(token_file.read_text("utf-8"))
+    tok.pop("user_id", None)
+    tok.pop("userId", None)
+    if isinstance(tok.get("data"), dict):
+        tok["data"].pop("user_id", None)
+        tok["data"].pop("userId", None)
+    token_file.write_text(json.dumps(tok), encoding="utf-8")
+
+    cloud.on("/tsp/v1/app/vmc/queryList", data=[])
+    cloud.on("/marketing/v1/app/user", {"code": 500, "data": {}}, status=500)
+
+    with pytest.raises(commands.CommandError) as err:
+        commands._mint_taskid(ctx, "0")
+
+    assert err.value.reason == "config"
+    assert "tUserId non disponibile" in str(err.value)
+    assert ctx.lockout.tentativi_falliti == 0
+    assert cloud.count("checkPassword") == 0
+    assert cloud.count("setVecDefault") == 0
+
+
+def test_checkpassword_a00361_con_tuid_login_ritenta_una_volta_con_getTuserId_diverso(core, cloud, ctx, token_file):
+    """Se checkPassword dà A00361 con tuid_source='login', ritenta 1 sola volta se getTuserId è diverso."""
+    import json
+    commands = core["commands"]
+
+    tok = json.loads(token_file.read_text("utf-8"))
+    tok["user_id"] = "u-sec-99"
+    if isinstance(tok.get("data"), dict):
+        tok["data"]["user_id"] = "u-sec-99"
+    token_file.write_text(json.dumps(tok), encoding="utf-8")
+
+    def cp_cb(path, body):
+        if body.get("tUserId") == "111":
+            return {"code": 1, "message": "A00361"}
+        if body.get("tUserId") == "222":
+            return {"code": "000000", "data": {"taskId": FX.TASKID}}
+        return {"code": "A00285"}
+
+    cloud.on("/tsp/v1/app/cpm/checkPassword", cp_cb)
+    cloud.on("/tsp/v1/app/auth/getTuserId", {"code": "000000", "data": {"tUserId": "222"}})
+
+    tid = commands._mint_taskid(ctx, "111")
+    assert tid == FX.TASKID
+    assert cloud.count("checkPassword") == 2
+    assert ctx.lockout.tentativi_falliti == 0
+
+    # Secondo caso: getTuserId restituisce lo stesso "111" -> non ritenta, fallisce subito
+    cloud.reset_calls()
+    cloud.on("/tsp/v1/app/auth/getTuserId", {"code": "000000", "data": {"tUserId": "111"}})
+
+    with pytest.raises(commands.CommandError) as err:
+        commands._mint_taskid(ctx, "111")
+
+    assert err.value.reason == "config"
+    assert cloud.count("checkPassword") == 1
+    assert ctx.lockout.tentativi_falliti == 0
+
+

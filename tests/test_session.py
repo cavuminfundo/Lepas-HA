@@ -396,22 +396,30 @@ async def test_armare_il_monitor_due_volte_e_innocuo(hass, config_entry, cloud, 
 
 
 def test_headers_get_con_params_firma_keys_e_valori_ordinati(core, ctx, monkeypatch):
-    """Verifica che headers_get firmi query params e imposti l'header keys."""
+    """Verifica che headers_get firmi query params e imposti l'header keys con URL normalizzato."""
     lepas_auth = core["lepas_auth"]
     provision = core["provision"]
 
     params = {"channelId": "1", "userId": "u-42"}
     h = lepas_auth.headers_get("/tsp/v1/app/auth/getTuserId", params=params, ctx=ctx)
+    assert h["url"] == "/v1/app/auth/getTuserId"
     assert h["keys"] == "channelId,userId"
     expected_sig = hashlib.sha256(
-        f"{lepas_auth.SIGN_SECRET}{lepas_auth.SIGN_NONCE}/tsp/v1/app/auth/getTuserId{h['timestamp']}[1,u-42]".encode()
+        f"{lepas_auth.SIGN_SECRET}{lepas_auth.SIGN_NONCE}/v1/app/auth/getTuserId{h['timestamp']}[1,u-42]".encode()
     ).hexdigest()
     assert h["signature"] == expected_sig
 
     h_noparams = lepas_auth.headers_get("/tsp/v1/app/auth/getTuserId", ctx=ctx)
+    assert h_noparams["url"] == "/v1/app/auth/getTuserId"
     assert "keys" not in h_noparams
     sig_post, _ = lepas_auth.sign_post("/tsp/v1/app/auth/getTuserId", ts_ms=int(h_noparams["timestamp"]))
     assert h_noparams["signature"] == sig_post
+
+    h_mkt = lepas_auth.headers_get("/marketing/v1/app/user", ctx=ctx)
+    assert h_mkt["url"] == "/v1/app/user"
+
+    h_tok = lepas_auth.headers_post("/auth/oauth2/token", ctx=ctx)
+    assert h_tok["url"] == "/auth/oauth2/token"
 
     sent_get = {}
 
@@ -433,9 +441,10 @@ def test_headers_get_con_params_firma_keys_e_valori_ordinati(core, ctx, monkeypa
 
     sc, _ = provision._bff_call("/tsp/v1/app/auth/getTuserId", params={"channelId": "1"}, method="GET")
     assert sc == 200
+    assert sent_get["headers"]["url"] == "/v1/app/auth/getTuserId"
     assert sent_get["headers"]["keys"] == "channelId"
     expected_prov_sig = hashlib.sha256(
-        f"{lepas_auth.SIGN_SECRET}{lepas_auth.SIGN_NONCE}/tsp/v1/app/auth/getTuserId{sent_get['headers']['timestamp']}[1]".encode()
+        f"{lepas_auth.SIGN_SECRET}{lepas_auth.SIGN_NONCE}/v1/app/auth/getTuserId{sent_get['headers']['timestamp']}[1]".encode()
     ).hexdigest()
     assert sent_get["headers"]["signature"] == expected_prov_sig
 
@@ -453,6 +462,10 @@ def test_bff_login_tuserid_zero_risolve_via_getTuserId(core, cloud, ctx, token_f
     cloud.on(
         "/tsp/v1/app/auth/login",
         {"code": "000000", "data": {"userToken": FX.USER_TOKEN, "tUserId": "0"}},
+    )
+    cloud.on(
+        "/marketing/v1/app/user",
+        {"code": 200, "data": {"id": "u-backfill-1"}},
     )
     cloud.on(
         "/tsp/v1/app/auth/getTuserId",
@@ -532,6 +545,10 @@ async def test_async_check_session_backfill_tuserid(hass, config_entry, cloud, m
         {"code": "000000", "data": {"userToken": FX.USER_TOKEN, "tUserId": "0"}},
     )
     cloud.on(
+        "/marketing/v1/app/user",
+        {"code": 200, "data": {"id": "u-backfill-1"}},
+    )
+    cloud.on(
         "/tsp/v1/app/auth/getTuserId",
         {"code": "000000", "data": {"tUserId": "7766554433"}},
     )
@@ -539,12 +556,138 @@ async def test_async_check_session_backfill_tuserid(hass, config_entry, cloud, m
     monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
 
     coord = LepasCoordinator(hass, config_entry)
-    assert coord.tuserid == "0"
-    assert coord.ctx.tuserid == "0"
+    assert coord.tuserid == ""
+    assert coord.ctx.tuserid == ""
 
     ok, _detail = await coord.async_check_session()
     assert ok is True
     assert coord.tuserid == "7766554433"
     assert coord.ctx.tuserid == "7766554433"
     assert config_entry.data[CONF_TUSERID] == "7766554433"
+
+
+def test_refresh_token_preserva_user_id_esistente(core, cloud, ctx, token_file):
+    """Il rinnovo del token preserva user_id su disco e mantiene i permessi 0o600."""
+    import os
+    wake = core["wake"]
+
+    tok = json.loads(token_file.read_text("utf-8"))
+    tok["user_id"] = 987654
+    if isinstance(tok.get("data"), dict):
+        tok["data"]["user_id"] = 987654
+    token_file.write_text(json.dumps(tok), encoding="utf-8")
+    os.chmod(token_file, 0o600)
+
+    cloud.on(
+        "/auth/oauth2/token",
+        {"access_token": "new-at", "refresh_token": "new-rt", "expires_in": 3600},
+    )
+
+    ok, motivo = wake._refresh_token_detail(ctx)
+    assert ok is True
+    assert motivo == ""
+
+    dopo = json.loads(token_file.read_text("utf-8"))
+    assert dopo.get("user_id") == 987654 or (dopo.get("data") or {}).get("user_id") == 987654
+    at = dopo.get("access_token") or (dopo.get("data") or {}).get("access_token")
+    assert at == "new-at"
+    mode = os.stat(token_file).st_mode & 0o777
+    assert mode == 0o600
+
+
+def test_resolve_tuserid_recupera_user_id_via_userinfo_se_assente(core, cloud, ctx, token_file):
+    """Se user_id è assente, _resolve_tuserid lo recupera via marketing/v1/app/user."""
+    import os
+    wake = core["wake"]
+
+    tok = json.loads(token_file.read_text("utf-8"))
+    tok.pop("user_id", None)
+    tok.pop("userId", None)
+    if isinstance(tok.get("data"), dict):
+        tok["data"].pop("user_id", None)
+        tok["data"].pop("userId", None)
+    token_file.write_text(json.dumps(tok), encoding="utf-8")
+
+    cloud.on(
+        "/marketing/v1/app/user",
+        {"code": 200, "data": {"id": "u-recovered-77"}},
+    )
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": {"tUserId": "55667788"}},
+    )
+
+    tu = wake._resolve_tuserid(ctx, access_token=FX.ACCESS_TOKEN)
+    assert tu == "55667788"
+    assert cloud.count("marketing/v1/app/user") == 1
+    calls = cloud.calls_to("getTuserId")
+    assert len(calls) == 1
+    assert calls[0]["body"] == {"channelId": ctx.channel_id, "userId": "u-recovered-77"}
+
+    dopo = json.loads(token_file.read_text("utf-8"))
+    assert dopo.get("user_id") == "u-recovered-77" or (dopo.get("data") or {}).get("user_id") == "u-recovered-77"
+    mode = os.stat(token_file).st_mode & 0o777
+    assert mode == 0o600
+
+    # Verifica ramo errore userinfo: getTuserId non viene chiamato
+    cloud.reset_calls()
+    tok_clean = json.loads(token_file.read_text("utf-8"))
+    tok_clean.pop("user_id", None)
+    if isinstance(tok_clean.get("data"), dict):
+        tok_clean["data"].pop("user_id", None)
+    token_file.write_text(json.dumps(tok_clean), encoding="utf-8")
+
+    cloud.on("/marketing/v1/app/user", {"code": 500, "data": {}}, status=500)
+    tu_err = wake._resolve_tuserid(ctx, access_token=FX.ACCESS_TOKEN)
+    assert tu_err == ""
+    assert cloud.count("getTuserId") == 0
+
+
+async def test_diagnostics_espone_solo_metadati_non_pii_tuserid_e_token(hass, config_entry, cloud):
+    """La diagnostica espone solo metadati sintetici di tuserid/token senza leak PII."""
+    import os
+
+    from custom_components.lepas.const import DOMAIN
+    from custom_components.lepas.coordinator import LepasCoordinator
+    from custom_components.lepas.diagnostics import async_get_config_entry_diagnostics
+
+    coord = LepasCoordinator(hass, config_entry)
+    hass.data.setdefault(DOMAIN, {})[config_entry.entry_id] = coord
+
+    # Scrive token con user_id e chiavi sensibili
+    token_payload = {
+        "access_token": "secret_access_token_123",
+        "refresh_token": "secret_refresh_token_456",
+        "user_id": "u-secret-789",
+    }
+
+    def _write_tok():
+        with open(coord.token_path, "w", encoding="utf-8") as f:
+            json.dump(token_payload, f)
+
+    def _cleanup_tok():
+        if os.path.exists(coord.token_path):
+            os.remove(coord.token_path)
+
+    await hass.async_add_executor_job(_write_tok)
+
+    try:
+        diag = await async_get_config_entry_diagnostics(hass, config_entry)
+        coord_diag = diag.get("coordinator", {})
+
+        assert coord_diag.get("token_present") is True
+        assert coord_diag.get("token_has_user_id") is True
+        assert coord_diag.get("tuserid_present") is True
+        assert coord_diag.get("tuserid_length") == len(FX.TUSERID)
+
+        raw_dump = json.dumps(diag)
+        assert "secret_access_token_123" not in raw_dump
+        assert "secret_refresh_token_456" not in raw_dump
+        assert "u-secret-789" not in raw_dump
+        assert FX.TUSERID not in raw_dump
+        assert FX.PIN not in raw_dump
+        assert FX.VIN not in raw_dump
+    finally:
+        await hass.async_add_executor_job(_cleanup_tok)
+
 

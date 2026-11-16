@@ -123,6 +123,34 @@ def _refresh_token(ctx) -> bool:
     return ok
 
 
+def _read_token_dict(path: str) -> dict:
+    """Legge il file token come dict in sicurezza, ritorna {} se assente o corrotto."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            tok = json.load(fh)
+        return tok if isinstance(tok, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _write_token_atomic(path: str, payload: dict) -> None:
+    """Scrive payload JSON su path in modo atomico con permessi 0o600."""
+    tmp = path + ".tmp"
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        raise
+
+
 def _refresh_token_detail(ctx) -> tuple[bool, str]:
     """Rinnova l'access_token col grant `refresh_token` (NIENTE OTP) e riscrive token.json.
     Stesso endpoint/headers del login OTP (login_otp.py), che NON è dietro il firewall Aliyun.
@@ -211,15 +239,19 @@ def _refresh_token_detail(ctx) -> tuple[bool, str]:
             except Exception:  # noqa: BLE001
                 pass
             return _esito_refresh(ctx, False, f"rifiutato:{key}", http=http)
-        # scrittura atomica: nuovo token su file temporaneo poi rename (token.json mai corrotto)
+        old_tok = _read_token_dict(ctx.token_path)
+        old_data = old_tok.get("data") if isinstance(old_tok.get("data"), dict) else {}
+        for field in ("user_id", "userId", "username", "phone", "email"):
+            val = old_tok.get(field) or old_data.get(field)
+            if val is not None and str(val).strip() not in ("", "None"):
+                if field not in j or str(j.get(field) or "").strip() in ("", "None"):
+                    j[field] = val
+                if isinstance(j.get("data"), dict):
+                    j_data = j["data"]
+                    if field not in j_data or str(j_data.get(field) or "").strip() in ("", "None"):
+                        j_data[field] = val
         try:
-            path = ctx.token_path
-            tmp = path + ".tmp"
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(j, f, ensure_ascii=False)
-            os.chmod(tmp, 0o600)   # il token è una credenziale: leggibile solo dal proprietario
-            os.replace(tmp, path)
+            _write_token_atomic(ctx.token_path, j)
         except Exception as err:  # noqa: BLE001
             return _esito_refresh(ctx, False, f"scrittura:{type(err).__name__}", http=http)
         return _esito_refresh(ctx, True, "", http=http)
@@ -253,12 +285,8 @@ def _valid_tuserid(val) -> str:
 
 def _user_id(ctx) -> str:
     """Legge user_id/userId da ctx.token_path se disponibile (usato da getTuserId)."""
-    try:
-        with open(ctx.token_path) as fh:
-            tok = json.load(fh)
-    except Exception:  # noqa: BLE001 — token assente o illeggibile
-        return ""
-    if not isinstance(tok, dict):
+    tok = _read_token_dict(ctx.token_path)
+    if not tok:
         return ""
     d = tok.get("data", tok)
     sources = (d, tok) if isinstance(d, dict) else (tok,)
@@ -270,14 +298,67 @@ def _user_id(ctx) -> str:
     return ""
 
 
+def _persist_user_id(ctx, uid: str) -> None:
+    """Persiste user_id nel token su disco con permessi 0o600 sotto lock."""
+    import contextlib
+    lock = getattr(getattr(ctx, "stato", None), "lock_token", None) or contextlib.nullcontext()
+    with lock:
+        tok = _read_token_dict(ctx.token_path)
+        tok["user_id"] = uid
+        if isinstance(tok.get("data"), dict):
+            tok["data"]["user_id"] = uid
+        _write_token_atomic(ctx.token_path, tok)
+
+
+def _fetch_user_id_from_userinfo(ctx, access_token: str | None = None) -> str:
+    """Recupera l'id utente via GET /marketing/v1/app/user (parità APK UserState::getUserInfo)."""
+    tok = access_token or _access_token(ctx)
+    if not tok:
+        return ""
+    path = "/marketing/v1/app/user"
+    try:
+        headers = A.headers_get(path, ctx=ctx, extra={
+            "Authorization": f"Bearer {tok}",
+            "Accept": "application/json, text/plain, */*",
+        })
+        r = requests.get(ctx.bff + path, headers=headers, timeout=15)
+        http = r.status_code
+        j = r.json()
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Lepas getUserInfo fallback fallito (%s)", type(err).__name__)
+        return ""
+    if http != 200 or not isinstance(j, dict):
+        _LOGGER.debug("Lepas getUserInfo risposta non-200 (http=%s is_dict=%s)", http, isinstance(j, dict))
+        return ""
+    code = str(j.get("code") or "").strip()
+    if code not in ("", "0", "200", "000000"):
+        _LOGGER.debug("Lepas getUserInfo code rifiutato (http=%s code=%s)", http, code)
+        return ""
+    data = j.get("data")
+    if not isinstance(data, dict):
+        _LOGGER.debug("Lepas getUserInfo data non dict (http=%s code=%s has_data=%s)", http, code, bool(data))
+        return ""
+    uid = str(data.get("id") or "").strip()
+    if uid and uid not in ("None", "0"):
+        try:
+            _persist_user_id(ctx, uid)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Lepas salvataggio userId fallito (%s)", type(err).__name__)
+        return uid
+    _LOGGER.debug("Lepas getUserInfo id assente o nullo (has_id=%s)", bool(uid))
+    return ""
+
+
 def _resolve_tuserid(ctx, access_token: str | None = None) -> str:
     """Risolve il vero tUserId via GET /tsp/v1/app/auth/getTuserId quando login BFF dà '0'/vuoto."""
     tok = access_token or _access_token(ctx)
     if not tok:
         return ""
-    params = {"channelId": ctx.channel_id}
-    if uid := _user_id(ctx):
-        params["userId"] = uid
+    uid = _user_id(ctx) or _fetch_user_id_from_userinfo(ctx, access_token=tok)
+    if not uid:
+        _LOGGER.debug("Lepas getTuserId saltato: userId assente (has_uid=False)")
+        return ""
+    params = {"channelId": ctx.channel_id, "userId": uid}
     path = "/tsp/v1/app/auth/getTuserId"
     headers = A.headers_get(path, params=params, ctx=ctx, extra={
         "Authorization": f"Bearer {tok}",
@@ -285,18 +366,24 @@ def _resolve_tuserid(ctx, access_token: str | None = None) -> str:
     })
     try:
         r = requests.get(ctx.bff + path, params=params, headers=headers, timeout=15)
+        http = getattr(r, "status_code", 200)
         j = r.json()
     except Exception as err:  # noqa: BLE001 — risoluzione best-effort
         _LOGGER.debug("Lepas getTuserId fallback fallito (%s)", type(err).__name__)
         return ""
-    if getattr(r, "status_code", 200) != 200 or not isinstance(j, dict):
+    if http != 200 or not isinstance(j, dict):
+        _LOGGER.debug("Lepas getTuserId risposta non-200 (http=%s is_dict=%s)", http, isinstance(j, dict))
         return ""
     code = str(j.get("code") or "").strip()
     if code not in ("", "0", "000000"):
+        _LOGGER.debug("Lepas getTuserId code non valido (http=%s code=%s)", http, code)
         return ""
     data = j.get("data")
     raw = data.get("tUserId") if isinstance(data, dict) else data
-    return _valid_tuserid(raw)
+    tuid = _valid_tuserid(raw)
+    _LOGGER.debug("Lepas getTuserId completato (http=%s code=%s has_data=%s tuid_valid=%s)",
+                  http, code, bool(data), bool(tuid))
+    return tuid
 
 
 def _bff_login(ctx, _allow_refresh=True):
@@ -357,9 +444,17 @@ def _bff_login(ctx, _allow_refresh=True):
         if rinnovato:
             return _bff_login(ctx, _allow_refresh=False)
         return None, None
-    tu = _valid_tuserid(d.get("tUserId") if isinstance(d, dict) else None)
-    if not tu:
+    tu_login = _valid_tuserid(d.get("tUserId") if isinstance(d, dict) else None)
+    if tu_login:
+        tu = tu_login
+        used_get_tuserid = False
+    else:
         tu = _resolve_tuserid(ctx, access_token=tok)
+        used_get_tuserid = True
+    _LOGGER.debug(
+        "Lepas login BFF tUserId risolto (tuid_from_login=%s tuid_login_len=%d used_get_tuserid=%s tuid_resolved=%s)",
+        bool(tu_login), len(tu_login), used_get_tuserid, bool(tu),
+    )
     return ut, (tu or None)
 
 def _signed_post(ctx, ut: str, path: str, params: dict):

@@ -437,17 +437,46 @@ def _checkpassword(ctx, tuid, tentativo):
         return j if isinstance(j, dict) else {}
 
     tuid_str = wake._valid_tuserid(tuid)
+    tuid_source = "login" if tuid_str else "none"
+
     ql = bff("/tsp/v1/app/vmc/queryList",
              {"tUserId": tuid_str, "channelId": ctx.channel_id} if tuid_str else {})
+    ql_code = ql.get("code")
+    ql_data = ql.get("data")
+    ql_items: list[dict] = []
+    if isinstance(ql_data, list):
+        ql_items = [x for x in ql_data if isinstance(x, dict)]
+    elif isinstance(ql_data, dict):
+        for v in ql_data.values():
+            if isinstance(v, list):
+                ql_items.extend(x for x in v if isinstance(x, dict))
+    auth_type = None
+    for item in ql_items:
+        if item.get("vin") == ctx.vin:
+            auth_type = item.get("authorizeType") or item.get("authType") or item.get("type")
+            break
+
     ql_tuid = _tuserid_da_querylist(ql, ctx.vin)
     if ql_tuid and (not tuid_str or tuid_str != ql_tuid):
         _LOGGER.debug("[taskId] tUserId allineato da queryList (presente=%s)", bool(tuid_str))
         tuid_str = ql_tuid
+        tuid_source = "querylist"
     if not tuid_str:
         tuid_str = wake._resolve_tuserid(ctx, access_token=access)
+        if tuid_str:
+            tuid_source = "getTuserId"
+
     if not tuid_str:
-        _LOGGER.warning("[taskId] tUserId vuoto prima di checkPassword")
-    bff("/tsp/v1/app/vmc/setVecDefault", {"vin": ctx.vin})
+        raise CommandError(
+            "tUserId non disponibile per l'account — impossibile verificare il PIN comandi "
+            "(esegui riautenticazione o verifica i permessi veicolo)",
+            reason="config",
+        )
+
+    sv = bff("/tsp/v1/app/vmc/setVecDefault", {"vin": ctx.vin})
+    sv_code = sv.get("code")
+    sv_msg = str(sv.get("message") or sv.get("msg") or "").replace(ctx.vin, "***")[:40]
+
     plain = hashlib.md5(ctx.pin.encode()).hexdigest()
     password = A.sm4_code(plain, "padRight32")
     j = bff("/tsp/v1/app/cpm/checkPassword",
@@ -461,14 +490,36 @@ def _checkpassword(ctx, tuid, tentativo):
 
     # nessun taskId: distinguo la CAUSA per instradare il rimedio giusto.
     code = j.get("code")
-    # DIAGNOSTICA (2026-07-06): il codice/messaggio GREZZO di checkPassword è l'UNICO modo per
-    # sapere se è davvero un PIN errato o un'altra causa (permessi veicolo, parametri scene/
-    # channelId, backend). Finora NON veniva loggato → dal log l'anti-lockout diceva solo "PIN
-    # errati", che è la nostra INFERENZA. Ora logghiamo code + message reali (campi non sensibili).
     cp_msg = str(j.get("message") or j.get("msg") or "").strip()
+    code_str = str(code) if code is not None else ""
+    routing_code = cp_msg if (not code_str.startswith("A0") and cp_msg.startswith("A0")) else code
     detail = f"code={code}" + (f" '{cp_msg[:100]}'" if cp_msg else "")
-    _LOGGER.warning("[taskId] checkPassword NON ha restituito un taskId → %s "
-                    "(risposta backend grezza; se non è un PIN errato la causa è qui)", detail)
+
+    if str(routing_code) == "A00361" and tuid_source == "login":
+        alt = wake._resolve_tuserid(ctx, access_token=access)
+        if alt and alt != tuid_str:
+            _LOGGER.debug("[taskId] checkPassword A00361 con tuid da login: ritento con getTuserId diverso")
+            tuid_str = alt
+            tuid_source = "getTuserId_retry"
+            j = bff("/tsp/v1/app/cpm/checkPassword",
+                    {"vin": ctx.vin, "tUserId": tuid_str, "channelId": ctx.channel_id,
+                     "password": password, "needDecode": 0, "scene": 0, "type": 0})
+            data = j.get("data") if isinstance(j.get("data"), dict) else {}
+            tid = data.get("taskId") or j.get("taskId")
+            if tid:
+                tentativo.riuscito()
+                return tid
+            code = j.get("code")
+            cp_msg = str(j.get("message") or j.get("msg") or "").strip()
+            code_str = str(code) if code is not None else ""
+            routing_code = cp_msg if (not code_str.startswith("A0") and cp_msg.startswith("A0")) else code
+            detail = f"code={code}" + (f" '{cp_msg[:100]}'" if cp_msg else "")
+
+    _LOGGER.warning(
+        "[taskId] checkPassword NON ha restituito un taskId → %s "
+        "(tuid_source=%s tuid_len=%d ql_code=%s auth_type=%s sv_code=%s sv_msg=%r scene=0)",
+        detail, tuid_source, len(tuid_str), ql_code, auth_type, sv_code, sv_msg,
+    )
 
     # Alcuni wrapper BFF restituiscono code=1 e il codice applicativo (es. 'A00361') in message.
     code_str = str(code) if code is not None else ""

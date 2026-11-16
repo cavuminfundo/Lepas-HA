@@ -423,7 +423,8 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._pending_password = ""
             raise
         self._data[CONF_VIN] = vin
-        self._data[CONF_TUSERID] = self._tuserid
+        from .core import wake
+        self._data[CONF_TUSERID] = wake._valid_tuserid(self._tuserid)
         ok = await self.hass.async_add_executor_job(_finalize_token, self.hass, vin)
         if not ok:
             await self.hass.async_add_executor_job(_cleanup_pending, self.hass)
@@ -514,7 +515,12 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ok, detail = await self.hass.async_add_executor_job(
                     coordinator._login_with_password, password)
                 if ok:
+                    from .core import wake
+                    await self.hass.async_add_executor_job(coordinator._check_session)
                     new_data = {**entry.data, CONF_LOGIN_METHOD: LOGIN_METHOD_PASSWORD}
+                    tuid_valid = wake._valid_tuserid(getattr(coordinator, "tuserid", ""))
+                    if tuid_valid:
+                        new_data[CONF_TUSERID] = tuid_valid
                     return self.async_update_reload_and_abort(entry, data=new_data)
                 self._reauth_reason = _reason_line(detail)
                 errors["base"] = "password_invalid"

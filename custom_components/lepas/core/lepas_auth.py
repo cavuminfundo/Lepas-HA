@@ -138,17 +138,25 @@ def aes_cbc_password(password: str) -> str:
     return base64.b64encode(c.encrypt(pad(password.encode("utf-8"), AES.block_size))).decode()
 
 # ── Firma app (POST: mappa valori vuota -> niente brackets/keys; GET: [valori] + header keys) ──
+def _normalize_sig_url(url_path: str) -> str:
+    p = "/" + str(url_path or "").lstrip("/")
+    if p.startswith(("/tsp/", "/marketing/")):
+        return "/" + p.split("/", 2)[2]
+    return p
+
+
 def sign_request(url_path: str, params: dict | None = None, ts_ms: int | None = None,
                  secret: str = SIGN_SECRET, nonce: str = SIGN_NONCE) -> tuple[str, int, str]:
     """Calcola (signature, timestamp_ms, keys_header) secondo EncryptUtils::headerSignature."""
     ts = ts_ms if ts_ms is not None else int(time.time() * 1000)
+    sig_url = _normalize_sig_url(url_path)
     if params:
         keys = ",".join(str(k) for k in params)
         vals = ",".join("" if v is None else str(v) for v in params.values())
-        payload = f"{secret}{nonce}{url_path}{ts}[{vals}]"
+        payload = f"{secret}{nonce}{sig_url}{ts}[{vals}]"
     else:
         keys = ""
-        payload = f"{secret}{nonce}{url_path}{ts}"
+        payload = f"{secret}{nonce}{sig_url}{ts}"
     sig = hashlib.sha256(payload.encode()).hexdigest()
     return sig, ts, keys
 
@@ -169,6 +177,7 @@ def _build_headers(url_path: str, params: dict | None = None, secret: str = SIGN
     if dept_id is None:
         dept_id = str(getattr(ctx, "area_code", "") or "") if ctx is not None else ""
         dept_id = dept_id or DEPT_ID
+    sig_url = _normalize_sig_url(url_path)
     sig, ts, keys = sign_request(url_path, params=params, secret=secret, nonce=nonce)
     h = {
         "Accept": "application/json, text/plain, */*",
@@ -188,7 +197,7 @@ def _build_headers(url_path: str, params: dict | None = None, secret: str = SIGN
         "appversion": APP_VERSION,
         "User-Agent": "okhttp/4.9.0",
         # firma
-        "nonce": nonce, "timestamp": str(ts), "url": url_path,
+        "nonce": nonce, "timestamp": str(ts), "url": sig_url,
         "signature": sig,
     }
     if keys:
