@@ -25,6 +25,7 @@ FILES = {
     "strings.json": PKG / "strings.json",
     "translations/en.json": PKG / "translations" / "en.json",
     "translations/it.json": PKG / "translations" / "it.json",
+    "translations/nl.json": PKG / "translations" / "nl.json",
 }
 
 
@@ -57,6 +58,13 @@ def test_ogni_lingua_ha_le_chiavi_di_strings(nome):
         f"{nome} ha {len(in_piu)} chiavi che strings.json non dichiara: o sono rimaste da "
         f"una rimozione, o vanno aggiunte anche lì: {in_piu[:12]}"
     )
+
+
+def test_strings_entity_coincide_con_en_entity():
+    """`strings.json` è la sorgente inglese e deve coincidere con `en.json` per la sezione entity."""
+    strings = json.loads(FILES["strings.json"].read_text(encoding="utf-8"))
+    en = json.loads(FILES["translations/en.json"].read_text(encoding="utf-8"))
+    assert strings["entity"] == en["entity"]
 
 
 # --------------------------------------------------------------------------------------

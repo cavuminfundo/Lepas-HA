@@ -120,6 +120,143 @@ DATA_AIR_DURATIONS = "air_durations"
 # gli entry esistenti rileggono `queryList` una volta sola e poi si fermano di nuovo.
 DATA_CAPS_PROBED = "caps_probed"          # v1.10.0: powerType + range clima
 DATA_CAPS_PROBED_V2 = "caps_probed_v2"    # v1.13.0: estremi LO/HI + durate ammesse
+DATA_CAPS_PROBED_V3 = "caps_probed_v3"    # v1.17.0: optional/permessi da queryVehicleAuthority
+DATA_VEHICLE_FEATURES = "vehicle_features"
+
+# Regole di derivazione feature da permessi (vmc/queryVehicleAuthority).
+# Formato: feature -> (req_cat, any_ids).
+# Se req_cat != None: se presente, 1 -> True, 0 -> any(i == 1 in any_ids); se assente -> fail-open.
+# Se req_cat is None: collect vals = [perms[i] for i in any_ids if i in perms]; se non vuoto -> any(v == 1 for v in vals).
+_FEATURE_RULES: dict[str, tuple[int | None, tuple[int, ...]]] = {
+    "front_windshield_electric": (215, (20416,)),
+    "rear_window_heating": (232, (20411,)),
+    "steering_wheel_heating": (208, ()),
+    "instant_charging": (220, ()),
+    "scheduled_charging": (213, ()),
+    "alarm": (401, ()),
+    "sunroof": (207, ()),
+    "windows": (206, ()),
+    "trunk": (205, ()),
+    "locks": (203, ()),
+    "find_car": (202, ()),
+    "climate": (204, ()),
+    "heat_everything": (209, ()),
+    "cool_everything": (None, (210, 204)),
+    "front_windshield_defog": (None, (2045,)),
+    "air_purification": (None, (2046,)),
+    "driver_seat_heating": (None, (2141, 2047)),
+    "driver_seat_ventilation": (None, (2143, 2049)),
+    "passenger_seat_heating": (None, (2142, 2048)),
+    "passenger_seat_ventilation": (None, (2144, 20410)),
+    "rear_left_seat_heating": (None, (2145, 20412)),
+    "rear_left_seat_ventilation": (None, (2147, 20414)),
+    "rear_right_seat_heating": (None, (2146, 20413)),
+    "rear_right_seat_ventilation": (None, (2148, 20415)),
+    "rear_center_seat": (None, (2145, 2146, 2147, 2148)),
+}
+
+
+def features_from_permissions(perms: dict[int, int] | None) -> dict[str, bool]:
+    """Estrae le feature booleane dai permessi del veicolo (queryVehicleAuthority).
+
+    Regola fail-open: permessi assenti non disabilitano le entità (default True).
+    Solo uno 0 esplicito imposta una feature a False."""
+    out: dict[str, bool] = {}
+    if not isinstance(perms, dict) or not perms:
+        return out
+    for feat, (req_cat, any_ids) in _FEATURE_RULES.items():
+        if req_cat is not None:
+            if req_cat not in perms:
+                continue
+            if perms[req_cat] == 1:
+                out[feat] = True
+            else:
+                out[feat] = any(perms.get(i) == 1 for i in any_ids)
+        else:
+            vals = [perms[i] for i in any_ids if i in perms]
+            if vals:
+                out[feat] = any(v == 1 for v in vals)
+    return out
+
+
+ENTITY_FEATURE_MAP: dict[tuple[str, str], str] = {
+    # steering_wheel_heating
+    ("switch", "steerWheelHeating"): "steering_wheel_heating",
+    # front_windshield_electric
+    ("switch", "frontWindshieldHeat"): "front_windshield_electric",
+    # front_windshield_defog
+    ("switch", "disappannamento_parabrezza"): "front_windshield_defog",
+    ("binary_sensor", "fWinHeatingState"): "front_windshield_defog",
+    # rear_window_heating
+    ("switch", "rWinHeatingState"): "rear_window_heating",
+    # instant_charging
+    ("switch", "ricarica"): "instant_charging",
+    # scheduled_charging
+    ("switch", "ricarica_programmata"): "scheduled_charging",
+    # alarm
+    ("switch", "antifurto"): "alarm",
+    ("button", "cmd_antifurto_on"): "alarm",
+    ("button", "cmd_antifurto_off"): "alarm",
+    # driver_seat_heating
+    ("switch", "dSeatHeatingState"): "driver_seat_heating",
+    # driver_seat_ventilation
+    ("switch", "dSeatVentilateState"): "driver_seat_ventilation",
+    # passenger_seat_heating
+    ("switch", "pSeatHeatingState"): "passenger_seat_heating",
+    # passenger_seat_ventilation
+    ("switch", "pSeatVentilateState"): "passenger_seat_ventilation",
+    # rear_left_seat_heating
+    ("switch", "lSeatHeatingState2"): "rear_left_seat_heating",
+    # rear_left_seat_ventilation
+    ("switch", "lSeatVentilateState2"): "rear_left_seat_ventilation",
+    # rear_right_seat_heating
+    ("switch", "rSeatHeatingState2"): "rear_right_seat_heating",
+    # rear_right_seat_ventilation
+    ("switch", "rSeatVentilateState2"): "rear_right_seat_ventilation",
+    # rear_center_seat
+    ("sensor", "mSeatHeatingState2"): "rear_center_seat",
+    ("sensor", "mSeatVentilateState2"): "rear_center_seat",
+    # sunroof
+    ("cover", "tetto"): "sunroof",
+    ("button", "cmd_tetto_ventila"): "sunroof",
+    ("sensor", "sunroofMoveState"): "sunroof",
+    ("binary_sensor", "sunshadeState"): "sunroof",
+    # windows
+    ("cover", "finestrini"): "windows",
+    ("button", "cmd_finestrini_ventila"): "windows",
+    ("binary_sensor", "frontLeftWindowState"): "windows",
+    ("binary_sensor", "frontRightWindowState"): "windows",
+    ("binary_sensor", "backLeftWindowState"): "windows",
+    ("binary_sensor", "backRightWindowState"): "windows",
+    # trunk
+    ("cover", "baule"): "trunk",
+    ("binary_sensor", "liftgateOperateState"): "trunk",
+    # locks
+    ("lock", "lock"): "locks",
+    # find_car
+    ("button", "cmd_trova_auto"): "find_car",
+    # air_purification
+    ("binary_sensor", "airPurification"): "air_purification",
+    # climate
+    ("climate", "climate"): "climate",
+    ("number", "clima_durata"): "climate",
+    # cool_everything
+    ("switch", "raffredda_tutto"): "cool_everything",
+    ("button", "cmd_clima_raffredda_on"): "cool_everything",
+    ("button", "cmd_clima_raffredda_off"): "cool_everything",
+    # heat_everything
+    ("switch", "riscalda_tutto"): "heat_everything",
+    ("button", "cmd_clima_riscalda_on"): "heat_everything",
+    ("button", "cmd_clima_riscalda_off"): "heat_everything",
+}
+
+
+def entity_allowed(coord, domain: str, suffix: str) -> bool:
+    """True se l'entità (domain, suffix) è consentita dalle capability del veicolo."""
+    feat = ENTITY_FEATURE_MAP.get((domain, suffix))
+    if feat is None:
+        return True
+    return bool(coord.feature_enabled(feat))
 
 # Range clima di ripiego: usati quando il backend non lo dichiara. Erano cablati
 # in climate.py; stanno qui perché ora li legge anche il coordinator.

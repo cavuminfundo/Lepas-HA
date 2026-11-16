@@ -186,13 +186,13 @@
         "name": "Achterdeur links"
       },
       "tailgate_moving": {
-        "name": "Kofferklep in beweging"
+        "name": "Kofferbak beweegt"
       },
       "air_purification": {
         "name": "Luchtzuivering"
       },
       "windshield_heating": {
-        "name": "Voorruitverwarming"
+        "name": "Voorruitontwaseming (status)"
       },
       "session": {
         "name": "Sessie"
@@ -454,7 +454,7 @@
         "name": "Stuurwielverwarming"
       },
       "windshield_defrost": {
-        "name": "Voorruit ontdooiing"
+        "name": "Voorruitverwarming"
       },
       "driver_seat_ventilation": {
         "name": "Bestuurdersstoel ventilatie"

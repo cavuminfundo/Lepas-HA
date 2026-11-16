@@ -123,7 +123,7 @@
   "entity": {
     "binary_sensor": {
       "at_home": {
-        "name": "A casa"
+        "name": "At home"
       },
       "high_voltage_active": {
         "name": "High voltage active"
@@ -186,13 +186,13 @@
         "name": "Rear left door"
       },
       "tailgate_moving": {
-        "name": "Tailgate moving"
+        "name": "Trunk moving"
       },
       "air_purification": {
         "name": "Air purification"
       },
       "windshield_heating": {
-        "name": "Windshield heating"
+        "name": "Windshield defog status"
       },
       "session": {
         "name": "Session"
@@ -314,10 +314,10 @@
         "name": "Car data updated"
       },
       "home_charging_energy": {
-        "name": "Energia ricarica a casa"
+        "name": "Home charging energy"
       },
       "away_charging_energy": {
-        "name": "Energia ricarica fuori casa"
+        "name": "Away charging energy"
       },
       "command_result": {
         "name": "Command result"
@@ -454,7 +454,7 @@
         "name": "Steering wheel heating"
       },
       "windshield_defrost": {
-        "name": "Windshield defrost"
+        "name": "Heated windshield"
       },
       "driver_seat_ventilation": {
         "name": "Driver seat ventilation"

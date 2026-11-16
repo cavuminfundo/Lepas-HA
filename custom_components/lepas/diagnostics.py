@@ -26,7 +26,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import DATA_POWER_TYPE, DOMAIN, CERT_FILES
+from .const import CERT_FILES, DATA_POWER_TYPE, DATA_VEHICLE_FEATURES, DOMAIN
 from .core import mask
 
 # Chiavi da oscurare ovunque compaiano (config entry + eventuali dict annidati).
@@ -211,6 +211,7 @@ async def async_get_config_entry_diagnostics(
         "brand": coordinator.vehicle_brand,
         "model": coordinator.vehicle_model,
         "power_type": entry.data.get(DATA_POWER_TYPE),
+        "vehicle_features": entry.data.get(DATA_VEHICLE_FEATURES),
         "entity_count": len(entita),
         "entities": entita,
     }

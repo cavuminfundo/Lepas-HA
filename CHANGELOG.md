@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.17.0 — 2026-11-16
+
+### 🇬🇧 English
+
+- **Per-VIN Auto-Learning Capabilities (`DATA_CAPS_PROBED_V3`, Fail-Open)**: Added `features_from_permissions`, `ENTITY_FEATURE_MAP`, and `entity_allowed` in `const.py` backed by `POST /tsp/v1/app/vmc/queryVehicleAuthority` (`permessi.leggi()`). During onboarding (`_probe_caps_for_vin`) and one-time backfill (`async_ensure_vehicle_identity`), only features explicitly returned as `0` by the backend are marked `False` in `entry.data["vehicle_features"]` (missing keys or network errors fail open), keeping unsupported entities (e.g. steering wheel heating, electric windshield, instant charging, alarm, rear seats on Lepas L8) out of Home Assistant while removing orphaned registry entries (`async_cleanup_disabled_entities`) and scheduling a single reload on backfill.
+- **Default-Disabled `sunshadeState` & `at_home` Startup Restore**: Set `binary_sensor.lepas_sunroof_blind` (`sunshadeState`) to `entity_registry_enabled_default = False` when `sunroof` is enabled, and added `LepasCoordinator.restore_position()` called from `LepasTracker.async_added_to_hass()` so `binary_sensor.lepas_at_home` and home/away charging energy zones resolve immediately after a restart without waiting for a live GPS fix (without altering `last_pos_fix`).
+- **Residual `unknown` State & Nomenclature Alignment**: `sensor.lepas_remaining_charge_time` now reports `0` min when idle (`chargeState != "1"`), `LepasTextSensor` diagnostic results (`command_result`, `wake_up_result`, `location_probe_result`) and `sensor.lepas_sunroof_movement_state` display `"In attesa"` / `"Waiting"` until the first live event, and `strings.json` plus `translations/{en,it,nl}.json` are aligned with zero entity ID changes.
+
+### 🇮🇹 Italiano
+
+- **Auto-apprendimento Capability per-VIN (`DATA_CAPS_PROBED_V3`, Fail-Open)**: Introdotte `features_from_permissions`, `ENTITY_FEATURE_MAP` ed `entity_allowed` in `const.py` basate su `POST /tsp/v1/app/vmc/queryVehicleAuthority` (`permessi.leggi()`). Durante l'onboarding (`_probe_caps_for_vin`) e il backfill una-tantum (`async_ensure_vehicle_identity`), solo le feature dichiarate esplicitamente `0` dal backend vengono salvate come `False` in `entry.data["vehicle_features"]` (chiavi mancanti o errori di rete restano *fail-open*), evitando di creare entità non supportate dal veicolo (es. volante riscaldato, parabrezza elettrico, ricarica immediata, antifurto, sedili posteriori su Lepas L8), ripulendo gli orfani nel registro (`async_cleanup_disabled_entities`) e schedulando un singolo reload al backfill.
+- **`sunshadeState` Disabilitato di Default & Ripristino `at_home` al Riavvio**: Impostato `entity_registry_enabled_default = False` su `binary_sensor.lepas_sunroof_blind` (`sunshadeState`) e aggiunto `LepasCoordinator.restore_position()` richiamato da `LepasTracker.async_added_to_hass()`, così `binary_sensor.lepas_at_home` e la zona dei contatori ricarica funzionano subito dopo ogni riavvio senza attendere un fix GPS live (preservando `last_pos_fix`).
+- **Fix Stati `unknown` Residui & Allineamento Nomenclature**: `sensor.lepas_remaining_charge_time` mostra ora `0` min a carica ferma (`chargeState != "1"`), i sensori diagnostici `LepasTextSensor` (`command_result`, `wake_up_result`, `location_probe_result`) e `sensor.lepas_sunroof_movement_state` mostrano `"In attesa"` / `"Waiting"` prima del primo evento live, e `strings.json` + `translations/{en,it,nl}.json` sono riallineati mantenendo invariati tutti gli `entity_id`.
+
 ## v1.16.5 — 2026-11-16
 
 ### 🇬🇧 English

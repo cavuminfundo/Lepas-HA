@@ -137,6 +137,48 @@ async def _async_migrate_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> 
         "i riferimenti scritti a mano in automazioni e dashboard vanno aggiornati.", fatti)
 
 
+async def async_cleanup_disabled_entities(hass: HomeAssistant, entry: ConfigEntry) -> int:
+    """Rimuove dal registro entità quelle confermate disabilitate per questo veicolo."""
+    try:
+        from homeassistant.helpers import entity_registry as er
+
+        from .const import CONF_VIN, DATA_VEHICLE_FEATURES, ENTITY_FEATURE_MAP
+        from .naming import ID_PREFIX
+
+        vf = entry.data.get(DATA_VEHICLE_FEATURES) or {}
+        if not isinstance(vf, dict) or not vf:
+            return 0
+        vin = str(entry.data.get(CONF_VIN, "")).strip()
+        if not vin:
+            return 0
+        reg = er.async_get(hass)
+        removed = 0
+        p_vins = (f"{vin}_", f"{vin.upper()}_", f"{vin.lower()}_")
+        p_prefs = (f"{ID_PREFIX}_{vin}_", f"{ID_PREFIX}_{vin.upper()}_", f"{ID_PREFIX}_{vin.lower()}_")
+        for ent in list(er.async_entries_for_config_entry(reg, entry.entry_id)):
+            uid = ent.unique_id
+            suffix = None
+            for p in p_prefs:
+                if uid.startswith(p):
+                    suffix = uid[len(p):]
+                    break
+            if suffix is None:
+                for p in p_vins:
+                    if uid.startswith(p):
+                        suffix = uid[len(p):]
+                        break
+            if suffix is None:
+                continue
+            feat = ENTITY_FEATURE_MAP.get((ent.domain, suffix))
+            if feat and vf.get(feat) is False:
+                reg.async_remove(ent.entity_id)
+                removed += 1
+        return removed
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Lepas: errore cleanup entita' disabilitate: %s", err)
+        return 0
+
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migra i config entry da versioni precedenti allo schema corrente."""
     if config_entry.version > 2:
@@ -177,6 +219,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _async_migrate_entity_ids(hass, entry)
     except Exception as err:
         _LOGGER.warning("Lepas: errore migrazione entita': %s", err)
+
+    try:
+        await async_cleanup_disabled_entities(hass, entry)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Lepas: errore cleanup entita' disabilitate: %s", err)
 
     coordinator = LepasCoordinator(hass, entry)
 

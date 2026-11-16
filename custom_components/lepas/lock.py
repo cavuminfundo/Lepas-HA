@@ -12,12 +12,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, entity_allowed
 from .entity import LepasEntity, LepasOptimisticMixin, field_on
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
-    add([LepasLock(hass.data[DOMAIN][entry.entry_id])])
+    coord = hass.data[DOMAIN][entry.entry_id]
+    if entity_allowed(coord, "lock", "lock"):
+        add([LepasLock(coord)])
 
 
 class LepasLock(LepasOptimisticMixin, LepasEntity, LockEntity, RestoreEntity):

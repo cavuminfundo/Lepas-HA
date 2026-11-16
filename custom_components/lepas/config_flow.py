@@ -174,6 +174,29 @@ def _finalize_token(hass: HomeAssistant, vin: str) -> bool:
         return False
 
 
+def _probe_caps_for_vin(hass: HomeAssistant, data: dict, vin: str) -> dict:
+    """Legge in sola lettura le feature per-VIN dai permessi, via executor."""
+    caps: dict = {}
+    try:
+        from .core import permessi, wake
+        from .const import DATA_CAPS_PROBED_V3, DATA_VEHICLE_FEATURES, features_from_permissions
+        ctx = _ctx_del_flow(hass, data, token_path=hass.config.path(f"{DOMAIN}_{vin}_token.json"))
+        token, tuid_login = wake._bff_login(ctx)
+        tuid = (
+            wake._valid_tuserid(data.get(CONF_TUSERID, ""))
+            or wake._valid_tuserid(tuid_login)
+            or wake._resolve_tuserid(ctx)
+        )
+        if token and tuid:
+            perms = permessi.leggi(ctx, token, tuid)
+            if perms:
+                caps[DATA_CAPS_PROBED_V3] = True
+                caps[DATA_VEHICLE_FEATURES] = features_from_permissions(perms)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Lepas: probing permessi in _probe_caps_for_vin fallito: %s", err)
+    return caps
+
+
 def _cleanup_pending(hass: HomeAssistant) -> None:
     """Rimuove un eventuale *_pending_token.json orfano."""
     pend = _pending_token_path(hass)
@@ -430,6 +453,11 @@ class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.hass.async_add_executor_job(_cleanup_pending, self.hass)
             self._pending_password = ""
             return self.async_abort(reason="token_move_failed")
+        from .const import DATA_CAPS_PROBED_V3
+        if DATA_CAPS_PROBED_V3 not in self._data:
+            caps = await self.hass.async_add_executor_job(_probe_caps_for_vin, self.hass, self._data, vin)
+            if caps:
+                self._data.update(caps)
         self._pending_password = ""
         return self.async_create_entry(title=f"Lepas ({vin})", data=self._data)
 

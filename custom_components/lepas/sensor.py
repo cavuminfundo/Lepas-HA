@@ -36,10 +36,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CHARGE_ENERGY_MAX_GAP, DOMAIN, FIELDS_AS_RICH_ENTITY
+from .const import CHARGE_ENERGY_MAX_GAP, DOMAIN, FIELDS_AS_RICH_ENTITY, entity_allowed
 from .coordinator import SENSORS
 from .entity import LepasEntity, in_zona_casa
-
 
 # ───────────────────────── sensori "realtime" (Round B) ─────────────────────────
 # Campi del canale REST /asr/manager/realtime (in coordinator.data["realtime"]),
@@ -413,12 +412,20 @@ def _rt(coord, field: str | tuple[str, ...]) -> str | None:
     return None
 
 
+def _waiting_text(hass: HomeAssistant | None) -> str:
+    """Restituisce 'In attesa' se la lingua di HA è italiano, altrimenti 'Waiting'."""
+    lang = (getattr(getattr(hass, "config", None), "language", None) or "it").split("-")[0].lower()
+    return "In attesa" if lang == "it" else "Waiting"
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     coord = hass.data[DOMAIN][entry.entry_id]
     ents: list = [
         LepasFieldSensor(coord, s)
         for s in SENSORS
-        if s["comp"] == "sensor" and s["key"] not in FIELDS_AS_RICH_ENTITY
+        if s["comp"] == "sensor"
+        and s["key"] not in FIELDS_AS_RICH_ENTITY
+        and entity_allowed(coord, "sensor", s["key"])
     ]
     ents.append(LepasBattery(coord))
     ents.append(LepasSpeed(coord))
@@ -518,6 +525,13 @@ class LepasFieldSensor(_LepasRestoreSensor):
         if self._kind == "level":
             return f"Livello {v}"
         return str(v)
+
+    @property
+    def native_value(self):
+        val = super().native_value
+        if val is None and self._key == "sunroofMoveState":
+            return _waiting_text(self.hass)
+        return val
 
 
 class LepasBattery(_LepasRestoreSensor):
@@ -718,7 +732,12 @@ class LepasRealtimeSensor(_LepasRestoreSensor):
         # payload) e il valore corretto è "sconosciuto", non l'ultimo letto. Per gli altri
         # sensori vale invece la regola normale del RestoreSensor (tieni l'ultimo noto).
         if self._spec.volatile:
-            return self._live_value()
+            live = self._live_value()
+            if live is not None:
+                return live
+            if (self._spec.field == "remainChargeTime" or self._spec.suffix == "tempo_ricarica") and not _in_ricarica(_rt(self.coordinator, "chargeState")):
+                return 0
+            return None
         return super().native_value
 
     def _live_value(self):
@@ -773,8 +792,9 @@ class LepasTextSensor(_LepasRestoreSensor):
     def native_value(self):
         # [H9] gli esiti diagnostici (comando/sveglia/sonda) NON si ripristinano: un
         # esito vecchio dopo un restart sarebbe fuorviante (sembrerebbe l'ultima azione
-        # appena eseguita). Solo il valore live; in assenza → unknown.
-        return self._live_value()
+        # appena eseguita). Solo il valore live; in assenza → _waiting_text.
+        live = self._live_value()
+        return live if live is not None else _waiting_text(self.hass)
 
 
 class LepasTimestampSensor(_LepasRestoreSensor):

@@ -186,13 +186,13 @@
         "name": "Rear left door"
       },
       "tailgate_moving": {
-        "name": "Tailgate moving"
+        "name": "Trunk moving"
       },
       "air_purification": {
         "name": "Air purification"
       },
       "windshield_heating": {
-        "name": "Windshield heating"
+        "name": "Windshield defog status"
       },
       "session": {
         "name": "Session"
@@ -454,7 +454,7 @@
         "name": "Steering wheel heating"
       },
       "windshield_defrost": {
-        "name": "Windshield defrost"
+        "name": "Heated windshield"
       },
       "driver_seat_ventilation": {
         "name": "Driver seat ventilation"

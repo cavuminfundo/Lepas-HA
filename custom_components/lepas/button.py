@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import COMMANDS_AS_RICH_ENTITY, DOMAIN
+from .const import COMMANDS_AS_RICH_ENTITY, DOMAIN, entity_allowed
 from .entity import LepasEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,13 +23,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         # i comandi che ora hanno un lock/switch/cover dedicato NON diventano pulsanti
         if key in COMMANDS_AS_RICH_ENTITY:
             continue
-        ents.append(LepasCommandButton(coord, key, spec))
-    ents.append(LepasActionButton(coord, "Lepas Sveglia auto", "wake", coord.async_wake))
-    ents.append(LepasActionButton(coord, "Lepas Aggiorna posizione", "refresh_pos", coord.async_probe))
+        suffix = f"cmd_{key}"
+        if entity_allowed(coord, "button", suffix):
+            ents.append(LepasCommandButton(coord, key, spec))
+    if entity_allowed(coord, "button", "wake"):
+        ents.append(LepasActionButton(coord, "Lepas Sveglia auto", "wake", coord.async_wake))
+    if entity_allowed(coord, "button", "refresh_pos"):
+        ents.append(LepasActionButton(coord, "Lepas Aggiorna posizione", "refresh_pos", coord.async_probe))
     # Aggiorna stato completo: forza odometro/batteria/tensione REALI accendendo brevemente il
     # clima (unico modo per accendere l'alta tensione, da cui dipendono i dati freschi).
-    ents.append(LepasActionButton(coord, "Lepas Aggiorna stato completo", "refresh_full",
-                                    coord.async_refresh_full_status))
+    if entity_allowed(coord, "button", "refresh_full"):
+        ents.append(LepasActionButton(coord, "Lepas Aggiorna stato completo", "refresh_full",
+                                        coord.async_refresh_full_status))
     add(ents)
 
 

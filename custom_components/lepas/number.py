@@ -22,7 +22,7 @@ from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, entity_allowed
 from .entity import LepasEntity
 
 # (nome, suffix, attributo sul coordinator, min, max, step, default, unità, icona)
@@ -38,7 +38,7 @@ NUMBERS = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     coord = hass.data[DOMAIN][entry.entry_id]
-    add([LepasConfigNumber(coord, *spec) for spec in NUMBERS])
+    add([LepasConfigNumber(coord, *spec) for spec in NUMBERS if entity_allowed(coord, "number", spec[1])])
 
 
 class LepasConfigNumber(LepasEntity, RestoreNumber):

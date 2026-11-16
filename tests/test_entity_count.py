@@ -33,8 +33,10 @@ from custom_components.lepas.const import (
 # 2026-08-10 → 107: aggiunto `sensor.lepas_scheduled_departure`, lettura del piano di partenza
 # che l'auto ci manda già a ogni sonda (`appointmentTravelSetVOS`) e che finora buttavamo via.
 # Nessuna chiamata nuova verso il cloud: solo un campo che smettevamo di ignorare.
+# 110 -> 109 (107 attive + 1 disabilitata di default): `sunshadeState` nasce con
+# `entity_registry_enabled_default = False` (27 nel registro, 26 attive in `hass.states`).
 ATTESO = {
-    "binary_sensor": 27,
+    "binary_sensor": 26,
     "sensor": 41,
     "button": 13,
     "switch": 18,
@@ -70,7 +72,8 @@ ATTESO = {
 # 110 -> 111 on 2026-10-02: `button.lepas_vent_sunroof` ("Vent sunroof", command
 # `tetto_ventila`, skylightControl controlType 2). A deliberate extra button, the sunroof
 # counterpart of `button.lepas_vent_windows`; the sunroof cover is unchanged.
-TOTALE_ATTESO = 108
+# 2026-11-16: `binary_sensor.lepas_sunroof_blind` disabilitato di default -> 107 attive in `hass.states`.
+TOTALE_ATTESO = 107
 
 
 def test_totale_dichiarato_coerente():

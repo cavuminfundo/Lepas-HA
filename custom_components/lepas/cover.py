@@ -20,22 +20,23 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, entity_allowed
 from .entity import LepasEntity, LepasOptimisticMixin, field_on
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     coord = hass.data[DOMAIN][entry.entry_id]
-    add([
-        LepasCover(coord, "Lepas Baule", "baule", ["trunkDoor"],
-                    "baule_apri", "baule_chiudi", CoverDeviceClass.DOOR, "mdi:car-back"),
-        LepasCover(coord, "Lepas Finestrini", "finestrini",
+    cands = [
+        (LepasCover(coord, "Lepas Baule", "baule", ["trunkDoor"],
+                    "baule_apri", "baule_chiudi", CoverDeviceClass.DOOR, "mdi:car-back"), "baule"),
+        (LepasCover(coord, "Lepas Finestrini", "finestrini",
                     ["frontLeftWindowState", "frontRightWindowState",
                      "backLeftWindowState", "backRightWindowState"],
-                    "finestrini_apri", "finestrini_chiudi", CoverDeviceClass.WINDOW, "mdi:car-door"),
-        LepasCover(coord, "Lepas Tetto", "tetto", ["sunroofState"],
-                    "tetto_apri", "tetto_chiudi", CoverDeviceClass.SHADE, "mdi:car-select"),
-    ])
+                    "finestrini_apri", "finestrini_chiudi", CoverDeviceClass.WINDOW, "mdi:car-door"), "finestrini"),
+        (LepasCover(coord, "Lepas Tetto", "tetto", ["sunroofState"],
+                    "tetto_apri", "tetto_chiudi", CoverDeviceClass.SHADE, "mdi:car-select"), "tetto"),
+    ]
+    add([cov for cov, sfx in cands if entity_allowed(coord, "cover", sfx)])
 
 
 class LepasCover(LepasOptimisticMixin, LepasEntity, CoverEntity, RestoreEntity):

@@ -19,7 +19,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN, FIELDS_AS_RICH_ENTITY
+from .const import DOMAIN, FIELDS_AS_RICH_ENTITY, entity_allowed
 from .coordinator import SENSORS
 from .entity import LepasEntity, car_zone, field_on
 
@@ -29,7 +29,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     ents = [
         LepasBinarySensor(coord, s)
         for s in SENSORS
-        if s["comp"] == "binary_sensor" and s["key"] not in FIELDS_AS_RICH_ENTITY
+        if s["comp"] == "binary_sensor"
+        and s["key"] not in FIELDS_AS_RICH_ENTITY
+        and entity_allowed(coord, "binary_sensor", s["key"])
     ]
     ents.append(LepasOnline(coord))
     ents.append(LepasAwake(coord))
@@ -101,6 +103,8 @@ class LepasBinarySensor(_LepasRestoreBinary):
         self._key = spec["key"]
         dc = spec.get("dclass")
         self._attr_device_class = BinarySensorDeviceClass(dc) if dc else None
+        if self._key == "sunshadeState":
+            self._attr_entity_registry_enabled_default = False
         # campi che l'auto non invia mai da ferma (es. tendina tetto, risc. parabrezza):
         # restano sempre "unknown" → in categoria diagnostica, fuori dai controlli principali.
         if spec.get("diag"):

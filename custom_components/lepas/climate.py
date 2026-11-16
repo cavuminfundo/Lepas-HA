@@ -30,8 +30,15 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import (CAMPO_CLIMA, CLIMA_MAX_DEFAULT, CLIMA_MIN_DEFAULT, CLIMA_STEP_DEFAULT,
-                    DOMAIN, OPT_MAX_S)
+from .const import (
+    CAMPO_CLIMA,
+    CLIMA_MAX_DEFAULT,
+    CLIMA_MIN_DEFAULT,
+    CLIMA_STEP_DEFAULT,
+    DOMAIN,
+    OPT_MAX_S,
+    entity_allowed,
+)
 from .entity import LepasEntity, field_on
 
 # Ripiego di default. Il range VERO della vettura, quando il backend lo dichiara in queryList,
@@ -43,7 +50,8 @@ DEFAULT_TEMP = 21.0
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     coord = hass.data[DOMAIN][entry.entry_id]
-    add([LepasClimate(coord)])
+    if entity_allowed(coord, "climate", "climate"):
+        add([LepasClimate(coord)])
 
 
 class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):

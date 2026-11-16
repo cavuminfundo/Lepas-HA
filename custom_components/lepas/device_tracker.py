@@ -48,6 +48,8 @@ class LepasTracker(LepasEntity, TrackerEntity, RestoreEntity):
         if last is not None:
             self._restored_lat = _f(last.attributes.get("latitude"))
             self._restored_lon = _f(last.attributes.get("longitude"))
+        if self._restored_lat is not None and self._restored_lon is not None:
+            self.coordinator.restore_position(self._restored_lat, self._restored_lon)
 
     @property
     def source_type(self) -> SourceType:

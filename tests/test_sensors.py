@@ -44,13 +44,9 @@ def _entita(hass, entity_id):
 
 
 async def test_tempo_ricarica_sparisce_a_carica_finita(hass, integrazione_avviata):
-    """Il fix: a carica finita il campo non arriva più → il sensore torna a «sconosciuto»,
-    non resta inchiodato ai 120 min dell'ultima carica.
-
-    Il dettaglio che fa la differenza: si imposta `_restored` = 120, cioè lo scenario di
-    PRODUZIONE (HA riavviato mentre l'auto caricava salva 120 come ultimo valore). Senza
-    questo il test passerebbe anche col bug, perché nell'ambiente di test non c'è valore
-    ripristinato ed è proprio quel valore che il difetto teneva inchiodato."""
+    """A carica finita (chargeState='0') il sensore va a 0 min, non all'ultimo valore noto;
+    se invece l'auto è in ricarica (chargeState='1') ma il dato manca transitoriamente,
+    resta unknown per non mostrare un falso 0 min."""
     coord = _coord(hass, integrazione_avviata)
     ent = "sensor.lepas_remaining_charge_time"
     _entita(hass, ent)._restored = 120.0     # come dopo un riavvio in carica
@@ -58,10 +54,21 @@ async def test_tempo_ricarica_sparisce_a_carica_finita(hass, integrazione_avviat
     await _push_realtime(hass, coord, _IN_CARICA)
     assert hass.states.get(ent).state == "120.0"
 
+    # A riposo (chargeState="0") senza remainChargeTime -> 0 min
     await _push_realtime(hass, coord, _A_RIPOSO)
     stato = hass.states.get(ent).state
-    assert stato in ("unknown", "unavailable"), (
-        f"«Tempo di ricarica residuo» è rimasto a {stato} dopo la fine della carica"
+    assert stato in ("0", "0.0"), (
+        f"«Tempo di ricarica residuo» doveva essere 0 min a riposo, invece è {stato}"
+    )
+
+    # In ricarica (chargeState="1") ma remainChargeTime transitoriamente assente -> unknown
+    _IN_CARICA_TRANSITORIO = {
+        "odometer": "4062", "dumpEnergy": "68", "totalVoltage": "350.3", "chargeState": "1"
+    }
+    await _push_realtime(hass, coord, _IN_CARICA_TRANSITORIO)
+    stato_trans = hass.states.get(ent).state
+    assert stato_trans in ("unknown", "unavailable"), (
+        f"«Tempo di ricarica residuo» doveva essere unknown durante ricarica transitoria, invece è {stato_trans}"
     )
 
 

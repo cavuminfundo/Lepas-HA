@@ -25,13 +25,19 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
-
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import (CAMPO_CLIMA, DOMAIN, MACRO_GRAZIA_S, MACRO_WAKE_WAIT,
-                    MACRO_WAKE_WAIT_AWAKE, MACRO_PRESET_S)
+from .const import (
+    CAMPO_CLIMA,
+    DOMAIN,
+    MACRO_GRAZIA_S,
+    MACRO_PRESET_S,
+    MACRO_WAKE_WAIT,
+    MACRO_WAKE_WAIT_AWAKE,
+    entity_allowed,
+)
 from .entity import LepasEntity, LepasOptimisticMixin, field_on
 
 
@@ -106,12 +112,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         "clima_riscalda_on", "clima_riscalda_off", "mdi:heat-wave", generazione)
     raffredda._exclusive = riscalda
     riscalda._exclusive = raffredda
-    antifurto = LepasTheftAlarmSwitch(coord)
     polling = LepasPollingSwitch(coord)
-    add([ricarica, ricarica_prog, parabrezza, disappanna, lunotto, volante,
-         sedile_caldo, sedile_aria, pass_caldo, pass_aria,
-         psx_caldo, psx_aria, pdx_caldo, pdx_aria,
-         raffredda, riscalda, antifurto, polling])
+    cand_switches = [
+        (ricarica, "ricarica"),
+        (ricarica_prog, "ricarica_programmata"),
+        (parabrezza, "frontWindshieldHeat"),
+        (disappanna, "disappannamento_parabrezza"),
+        (lunotto, "rWinHeatingState"),
+        (volante, "steerWheelHeating"),
+        (sedile_caldo, "dSeatHeatingState"),
+        (sedile_aria, "dSeatVentilateState"),
+        (pass_caldo, "pSeatHeatingState"),
+        (pass_aria, "pSeatVentilateState"),
+        (psx_caldo, "lSeatHeatingState2"),
+        (psx_aria, "lSeatVentilateState2"),
+        (pdx_caldo, "rSeatHeatingState2"),
+        (pdx_aria, "rSeatVentilateState2"),
+        (raffredda, "raffredda_tutto"),
+        (riscalda, "riscalda_tutto"),
+        (polling, "polling_auto"),
+    ]
+    switches_to_add = [sw for sw, sfx in cand_switches if entity_allowed(coord, "switch", sfx)]
+    if coord.feature_enabled("alarm"):
+        switches_to_add.append(LepasTheftAlarmSwitch(coord))
+    add(switches_to_add)
 
 
 class LepasComfortSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, RestoreEntity):

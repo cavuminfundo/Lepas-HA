@@ -186,19 +186,19 @@
         "name": "Porta posteriore SX"
       },
       "tailgate_moving": {
-        "name": "Portellone in movimento"
+        "name": "Baule in movimento"
       },
       "air_purification": {
         "name": "Purificazione aria"
       },
       "windshield_heating": {
-        "name": "Riscaldamento parabrezza"
+        "name": "Disappannamento parabrezza (stato)"
       },
       "session": {
         "name": "Sessione"
       },
       "charging_cable": {
-        "name": "Spina ricarica"
+        "name": "Cavo di ricarica"
       },
       "sunroof_blind": {
         "name": "Tendina tetto"
@@ -308,7 +308,7 @@
         "name": "Consumo medio elettrico"
       },
       "hv_battery_current": {
-        "name": "Corrente batteria HV"
+        "name": "Corrente alta tensione"
       },
       "car_data_updated": {
         "name": "Dati auto aggiornati"
@@ -383,7 +383,7 @@
         "name": "Tempo di ricarica residuo"
       },
       "hv_battery_voltage": {
-        "name": "Tensione batteria HV"
+        "name": "Tensione alta tensione"
       },
       "sunroof_movement_state": {
         "name": "Stato movimento tetto"
@@ -454,7 +454,7 @@
         "name": "Riscaldamento volante"
       },
       "windshield_defrost": {
-        "name": "Sbrinamento parabrezza"
+        "name": "Sbrinamento elettrico parabrezza"
       },
       "driver_seat_ventilation": {
         "name": "Ventilazione sedile guida"

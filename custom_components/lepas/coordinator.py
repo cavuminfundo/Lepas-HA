@@ -44,7 +44,8 @@ from .const import (
     CONF_VEHICLE_NAME, DATA_VEHICLE_MODEL, DATA_VEHICLE_BRAND,
     DATA_POWER_TYPE, DATA_CLIMATE_MIN, DATA_CLIMATE_MAX, DATA_CLIMATE_STEP,
     DATA_CLIMATE_LO, DATA_CLIMATE_HI, DATA_AIR_DURATIONS,
-    DATA_CAPS_PROBED, DATA_CAPS_PROBED_V2, capabilities_from_item,
+    DATA_CAPS_PROBED, DATA_CAPS_PROBED_V2, DATA_CAPS_PROBED_V3, DATA_VEHICLE_FEATURES,
+    capabilities_from_item, features_from_permissions,
     CLIMA_MIN_DEFAULT, CLIMA_MAX_DEFAULT, CLIMA_STEP_DEFAULT,
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
 )
@@ -404,6 +405,27 @@ class LepasCoordinator(DataUpdateCoordinator):
         # del taskId, che devono sopravvivere fra un comando e l'altro.
         self._ctx = None
         self._mqtt_up_ts = 0.0   # istante dell'ultima connect MQTT (uptime nel monitor)
+
+    def feature_enabled(self, feature: str) -> bool:
+        """True se la feature è abilitata per questo veicolo (fail-open su chiave assente)."""
+        vf = self.entry.data.get(DATA_VEHICLE_FEATURES) or {}
+        return bool(vf.get(feature, True))
+
+    def restore_position(self, lat: float, lon: float) -> bool:
+        """Ripristina la posizione GPS da RestoreEntity (senza toccare last_pos_fix)."""
+        try:
+            flat, flon = float(lat), float(lon)
+        except (TypeError, ValueError):
+            return False
+        if not (math.isfinite(flat) and math.isfinite(flon) and -90.0 <= flat <= 90.0 and -180.0 <= flon <= 180.0):
+            return False
+        geo = {"lat": flat, "lon": flon}
+        with self._state_lock:
+            if self.position is not None or self.data.get("position") is not None:
+                return False
+            self.position = dict(geo)
+        self._update({"position": geo})
+        return True
 
     # ───────────────── provisioning certificati mutual-TLS (FASE 3c) ─────────────────
     async def async_provision_certs(self) -> tuple[bool, str]:
@@ -1697,15 +1719,16 @@ class LepasCoordinator(DataUpdateCoordinator):
         # rilegge anche quando il nome è già in cache — una volta sola, poi c'è il marcatore.
         override = bool(str((self.entry.options or {}).get(CONF_VEHICLE_NAME) or "").strip())
         nome_in_cache = bool(self.entry.data.get(CONF_VEHICLE_NAME))
-        # Il marcatore è VERSIONATO: chi ha già `caps_probed` (v1.10.0+) ma non `_v2` deve
-        # rileggere una volta sola, altrimenti le capability aggiunte dalla v1.13.0 non
-        # arriverebbero MAI a chi è già installato — la funzionalità nascerebbe morta.
-        caps_da_leggere = not self.entry.data.get(DATA_CAPS_PROBED_V2)
+        # Il marcatore è VERSIONATO: chi ha già `caps_probed` / `_v2` deve rileggere una
+        # volta sola per le capability V3 (queryVehicleAuthority), poi si ferma di nuovo.
+        caps_da_leggere = not self.entry.data.get(DATA_CAPS_PROBED_V3)
         if (override or nome_in_cache) and not caps_da_leggere:
             return  # nulla da chiedere: nome deciso e capability già interrogate
         info = await self.hass.async_add_executor_job(self._fetch_vehicle_identity)
         if not info:
             return
+        if self.entry.entry_id not in self.hass.data.get(DOMAIN, {}):
+            return  # integrazione scaricata durante la chiamata
         # L'identità si scrive SOLO se non c'era: un override manuale (o un nome già in
         # cache) non va mai sovrascritto solo perché siamo passati a leggere le capability.
         if override or nome_in_cache or not info.get(CONF_VEHICLE_NAME):
@@ -1729,6 +1752,14 @@ class LepasCoordinator(DataUpdateCoordinator):
         # vita dell'entry, o l'anti-lockout del PIN si azzererebbe.
         if self._ctx is not None:
             self._ctx.caps = self._caps_correnti()
+            probed_perms = getattr(self, "_probed_permessi", None)
+            if probed_perms is not None:
+                self._ctx.permessi = probed_perms
+        vf = info.get(DATA_VEHICLE_FEATURES) or {}
+        if any(v is False for v in vf.values()):
+            from . import async_cleanup_disabled_entities
+            await async_cleanup_disabled_entities(self.hass, self.entry)
+            self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
 
     def _fetch_vehicle_identity(self) -> dict | None:
         """queryList (sola lettura) → {vehicle_name, vehicle_model, vehicle_brand} per il VIN."""
@@ -1736,8 +1767,9 @@ class LepasCoordinator(DataUpdateCoordinator):
             import requests
             from .core import wake
             from .core import lepas_auth as A
+            from .core import permessi
             ctx = self.ctx
-            wake._bff_login(ctx)
+            token, tuid_login = wake._bff_login(ctx)
             access = wake._access_token(ctx)
             headers = A.headers_post("/tsp/v1/app/vmc/queryList", ctx=ctx, extra={
                 "Authorization": f"Bearer {access}",
@@ -1766,6 +1798,21 @@ class LepasCoordinator(DataUpdateCoordinator):
             # dichiara: «chiesto e non c'è» ≠ «mai chiesto» (altrimenti si richiede a ogni avvio).
             caps: dict = {DATA_CAPS_PROBED: True, DATA_CAPS_PROBED_V2: True,
                           **capabilities_from_item(item)}
+            try:
+                tuid = (
+                    wake._valid_tuserid(getattr(self, "tuserid", ""))
+                    or wake._valid_tuserid(tuid_login)
+                    or wake._resolve_tuserid(ctx)
+                )
+                if token and tuid:
+                    perms = permessi.leggi(ctx, token, tuid)
+                    if perms:
+                        caps[DATA_CAPS_PROBED_V3] = True
+                        caps[DATA_VEHICLE_FEATURES] = features_from_permissions(perms)
+                        self._probed_permessi = perms
+            except Exception as p_err:  # noqa: BLE001
+                _LOGGER.debug("[veicolo] permessi queryVehicleAuthority non recuperati: %s", p_err)
+
             nick = str(item.get("nickname") or "").strip()
             full = str(item.get("fullName") or "").strip()
             name = nick or (full.title() if full else "")
