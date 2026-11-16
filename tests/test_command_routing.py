@@ -78,13 +78,17 @@ def test_il_codice_grezzo_finisce_nel_messaggio(core, cloud, ctx):
 
 def test_checkpassword_code_1_con_a00361_in_message_non_conta_lockout(core, cloud, ctx):
     """Il BFF può avvolgere A00361 in code=1, message='A00361' (User does not exist):
-    non è un errore di PIN e non deve consumare tentativi anti-lockout."""
+    non è un errore di PIN, ritenta con scene=2 e non consuma tentativi anti-lockout."""
     commands = core["commands"]
     cloud.on("/tsp/v1/app/cpm/checkPassword", {"code": 1, "message": "A00361"})
     with pytest.raises(commands.CommandError) as err:
         commands._mint_taskid(ctx, FX.TUSERID)
     assert err.value.reason == "config"
     assert ctx.lockout.tentativi_falliti == 0
+    assert cloud.count("checkPassword") == 2
+    calls = cloud.calls_to("checkPassword")
+    assert calls[0]["body"]["scene"] == 0
+    assert calls[1]["body"]["scene"] == 2
     assert "A00361" in str(err.value)
 
 
@@ -293,7 +297,7 @@ def test_checkpassword_a00361_con_tuid_login_ritenta_una_volta_con_getTuserId_di
     assert cloud.count("checkPassword") == 2
     assert ctx.lockout.tentativi_falliti == 0
 
-    # Secondo caso: getTuserId restituisce lo stesso "111" -> non ritenta, fallisce subito
+    # Secondo caso: getTuserId restituisce lo stesso "111" -> non ritenta con getTuserId, ritenta con scene=2
     cloud.reset_calls()
     cloud.on("/tsp/v1/app/auth/getTuserId", {"code": "000000", "data": {"tUserId": "111"}})
 
@@ -301,7 +305,42 @@ def test_checkpassword_a00361_con_tuid_login_ritenta_una_volta_con_getTuserId_di
         commands._mint_taskid(ctx, "111")
 
     assert err.value.reason == "config"
-    assert cloud.count("checkPassword") == 1
+    assert cloud.count("checkPassword") == 2
+    calls = cloud.calls_to("checkPassword")
+    assert calls[0]["body"]["scene"] == 0
+    assert calls[1]["body"]["scene"] == 2
     assert ctx.lockout.tentativi_falliti == 0
+
+
+def test_checkpassword_a00361_con_scene0_ritenta_con_scene2_apk(core, cloud, ctx, token_file):
+    """Su A00361 con scene=0, ritenta con il default APK scene=2 ed esce con successo se accettato."""
+    import json
+    commands = core["commands"]
+
+    tok = json.loads(token_file.read_text("utf-8"))
+    tok["user_id"] = "u-sec-99"
+    if isinstance(tok.get("data"), dict):
+        tok["data"]["user_id"] = "u-sec-99"
+    token_file.write_text(json.dumps(tok), encoding="utf-8")
+
+    cloud.on("/tsp/v1/app/auth/getTuserId", {"code": "000000", "data": {"tUserId": FX.TUSERID}})
+
+    def cp_cb(path, body):
+        if body.get("scene") == 0:
+            return {"code": 1, "message": "A00361"}
+        if body.get("scene") == 2:
+            return {"code": "000000", "data": {"taskId": FX.TASKID}}
+        return {"code": "A00285"}
+
+    cloud.on("/tsp/v1/app/cpm/checkPassword", cp_cb)
+
+    tid = commands._mint_taskid(ctx, FX.TUSERID)
+    assert tid == FX.TASKID
+    assert cloud.count("checkPassword") == 2
+    calls = cloud.calls_to("checkPassword")
+    assert calls[0]["body"]["scene"] == 0
+    assert calls[1]["body"]["scene"] == 2
+    assert ctx.lockout.tentativi_falliti == 0
+
 
 

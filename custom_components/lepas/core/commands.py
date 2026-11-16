@@ -479,21 +479,25 @@ def _checkpassword(ctx, tuid, tentativo):
 
     plain = hashlib.md5(ctx.pin.encode()).hexdigest()
     password = A.sm4_code(plain, "padRight32")
-    j = bff("/tsp/v1/app/cpm/checkPassword",
-            {"vin": ctx.vin, "tUserId": tuid_str, "channelId": ctx.channel_id,
-             "password": password, "needDecode": 0, "scene": 0, "type": 0})
-    data = j.get("data") if isinstance(j.get("data"), dict) else {}
-    tid = data.get("taskId") or j.get("taskId")
+
+    def _call_checkpassword(tuid_val: str, scene_val: int):
+        res = bff("/tsp/v1/app/cpm/checkPassword",
+                  {"vin": ctx.vin, "tUserId": tuid_val, "channelId": ctx.channel_id,
+                   "password": password, "needDecode": 0, "scene": scene_val, "type": 0})
+        d = res.get("data") if isinstance(res.get("data"), dict) else {}
+        task_id = d.get("taskId") or res.get("taskId")
+        cp_code = res.get("code")
+        cp_msg = str(res.get("message") or res.get("msg") or "").strip()
+        c_str = str(cp_code) if cp_code is not None else ""
+        r_code = cp_msg if (not c_str.startswith("A0") and cp_msg.startswith("A0")) else cp_code
+        det = f"code={cp_code}" + (f" '{cp_msg[:100]}'" if cp_msg else "")
+        return res, task_id, cp_code, cp_msg, r_code, det
+
+    scene_used = 0
+    j, tid, code, cp_msg, routing_code, detail = _call_checkpassword(tuid_str, 0)
     if tid:
         tentativo.riuscito()      # il PIN è corretto → la soglia riparte da zero
         return tid
-
-    # nessun taskId: distinguo la CAUSA per instradare il rimedio giusto.
-    code = j.get("code")
-    cp_msg = str(j.get("message") or j.get("msg") or "").strip()
-    code_str = str(code) if code is not None else ""
-    routing_code = cp_msg if (not code_str.startswith("A0") and cp_msg.startswith("A0")) else code
-    detail = f"code={code}" + (f" '{cp_msg[:100]}'" if cp_msg else "")
 
     if str(routing_code) == "A00361" and tuid_source == "login":
         alt = wake._resolve_tuserid(ctx, access_token=access)
@@ -501,24 +505,23 @@ def _checkpassword(ctx, tuid, tentativo):
             _LOGGER.debug("[taskId] checkPassword A00361 con tuid da login: ritento con getTuserId diverso")
             tuid_str = alt
             tuid_source = "getTuserId_retry"
-            j = bff("/tsp/v1/app/cpm/checkPassword",
-                    {"vin": ctx.vin, "tUserId": tuid_str, "channelId": ctx.channel_id,
-                     "password": password, "needDecode": 0, "scene": 0, "type": 0})
-            data = j.get("data") if isinstance(j.get("data"), dict) else {}
-            tid = data.get("taskId") or j.get("taskId")
+            j, tid, code, cp_msg, routing_code, detail = _call_checkpassword(tuid_str, 0)
             if tid:
                 tentativo.riuscito()
                 return tid
-            code = j.get("code")
-            cp_msg = str(j.get("message") or j.get("msg") or "").strip()
-            code_str = str(code) if code is not None else ""
-            routing_code = cp_msg if (not code_str.startswith("A0") and cp_msg.startswith("A0")) else code
-            detail = f"code={code}" + (f" '{cp_msg[:100]}'" if cp_msg else "")
+
+    if str(routing_code) == "A00361":
+        _LOGGER.debug("[taskId] checkPassword A00361 con scene=0: ritento con default APK scene=2")
+        scene_used = 2
+        j, tid, code, cp_msg, routing_code, detail = _call_checkpassword(tuid_str, 2)
+        if tid:
+            tentativo.riuscito()
+            return tid
 
     _LOGGER.warning(
         "[taskId] checkPassword NON ha restituito un taskId → %s "
-        "(tuid_source=%s tuid_len=%d ql_code=%s auth_type=%s sv_code=%s sv_msg=%r scene=0)",
-        detail, tuid_source, len(tuid_str), ql_code, auth_type, sv_code, sv_msg,
+        "(tuid_source=%s tuid_len=%d ql_code=%s auth_type=%s sv_code=%s sv_msg=%r scene=%d)",
+        detail, tuid_source, len(tuid_str), ql_code, auth_type, sv_code, sv_msg, scene_used,
     )
 
     # Alcuni wrapper BFF restituiscono code=1 e il codice applicativo (es. 'A00361') in message.

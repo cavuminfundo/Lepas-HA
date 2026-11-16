@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.16.4 — 2026-11-16
+
+### 🇬🇧 English
+
+- **Controlled `scene=2` Fallback on `A00361` (APK Parity)**: When `checkPassword` returns `A00361` ("User does not exist") with `scene=0`, Lepas now performs a single controlled retry with `scene=2` (matching the default scene parameter in the official app's `RusApiService::checkPassword`), allowing command authorization for secondary and primary accounts where `scene=0` is rejected by the backend.
+
+### 🇮🇹 Italiano
+
+- **Fallback Controllato `scene=2` su `A00361` (Parità APK)**: Quando `checkPassword` restituisce `A00361` ("User does not exist") con `scene=0`, Lepas esegue ora un singolo retry controllato con `scene=2` (allineato al default dell'app ufficiale in `RusApiService::checkPassword`), abilitando l'autorizzazione dei comandi sugli account dove il backend rifiuta `scene=0`.
+
 ## v1.16.3 — 2026-11-16
 
 ### 🇬🇧 English
