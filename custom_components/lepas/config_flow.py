@@ -124,8 +124,8 @@ def _discover(hass: HomeAssistant, data: dict) -> tuple[bool, str, list[str], st
         from .core import lepas_auth as A
         from .core import wake
         ctx = _ctx_del_flow(hass, data, token_path=_pending_token_path(hass))
-        _ut, tu = wake._bff_login(ctx)
-        if not tu:
+        ut, tu = wake._bff_login(ctx)
+        if not ut:
             return False, "", [], "login backend non riuscito"
         access = wake._access_token(ctx)
         headers = A.headers_post("/tsp/v1/app/vmc/queryList", ctx=ctx, extra={
@@ -136,12 +136,27 @@ def _discover(hass: HomeAssistant, data: dict) -> tuple[bool, str, list[str], st
                           data=json.dumps({}), headers=headers, timeout=25)
         j = r.json()
         lst = j.get("data")
-        vins: list[str] = []
+        cands: list = []
         if isinstance(lst, list):
-            for v in lst:
-                if isinstance(v, dict) and v.get("vin"):
-                    vins.append(str(v["vin"]))
-        return True, str(tu), vins, ("ok" if vins else "nessun veicolo trovato")
+            cands = lst
+        elif isinstance(lst, dict):
+            for k in ("controlCarList", "authorizedControlCarList", "carList", "list", "vehicles"):
+                sub = lst.get(k)
+                if isinstance(sub, list):
+                    cands.extend(sub)
+            if not cands and (lst.get("vin") or lst.get("VIN")):
+                cands = [lst]
+        vins: list[str] = []
+        seen: set[str] = set()
+        for item in cands:
+            if isinstance(item, dict):
+                val = item.get("vin") or item.get("VIN")
+                if val:
+                    s = str(val).strip()
+                    if s and s not in seen:
+                        seen.add(s)
+                        vins.append(s)
+        return True, str(tu or ""), vins, ("ok" if vins else "nessun veicolo trovato")
     except Exception as e:
         return False, "", [], f"errore scoperta veicoli: {type(e).__name__}"
 

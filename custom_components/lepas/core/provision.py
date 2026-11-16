@@ -117,11 +117,12 @@ def _bff_call(path: str, params: dict = None, method: str = "POST"):
     extra = {"Authorization": f"Bearer {access}",
              "Content-Type": "application/json; charset=UTF-8",
              "Accept": "application/json, text/plain, */*"}
-    H = A.headers_post(path, extra=extra, ctx=_ctx())
     url = _ctx().bff + path
     if method.upper() == "GET":
+        H = A.headers_get(path, params=params, extra=extra, ctx=_ctx())
         r = requests.get(url, params=params or {}, headers=H, timeout=25)
     else:
+        H = A.headers_post(path, extra=extra, ctx=_ctx())
         r = requests.post(url, data=json.dumps(params or {}), headers=H, timeout=25)
     try:
         return r.status_code, r.json()

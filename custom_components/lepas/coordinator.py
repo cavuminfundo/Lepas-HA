@@ -1780,6 +1780,10 @@ class LepasCoordinator(DataUpdateCoordinator):
 
     async def async_check_session(self) -> tuple[bool, str]:
         ok, detail, status = await self.hass.async_add_executor_job(self._check_session)
+        if ok and self.tuserid and self.entry.data.get(CONF_TUSERID) != self.tuserid:
+            self.hass.config_entries.async_update_entry(
+                self.entry, data={**self.entry.data, CONF_TUSERID: self.tuserid}
+            )
         self._update({"session_ok": ok, "session_detail": detail})
         # P1-1 (H7): la reauth si decide sul MARCATORE STABILE, non sul testo umano. Prima si
         # faceva `detail.startswith("Sessione scaduta")`: bastava ritoccare il messaggio (o
@@ -1845,6 +1849,17 @@ class LepasCoordinator(DataUpdateCoordinator):
         # la fonte, invece di confrontare alla cieca la costante locale).
         if status == getattr(SESSION, "STATUS_EXPIRED", SESSION_STATUS_EXPIRED):
             status = SESSION_STATUS_EXPIRED
+        if ok:
+            from .core import wake
+            if not wake._valid_tuserid(self.tuserid):
+                try:
+                    resolved = wake._resolve_tuserid(self.ctx)
+                except Exception:  # noqa: BLE001
+                    resolved = ""
+                if wake._valid_tuserid(resolved):
+                    self.tuserid = resolved
+                    if self._ctx is not None:
+                        self._ctx.tuserid = resolved
         return ok, detail, status
 
     def _login_with_password(self, password: str) -> tuple[bool, str]:

@@ -137,41 +137,39 @@ def aes_cbc_password(password: str) -> str:
     c = AES.new(AES_PWD_KEY, AES.MODE_CBC, AES_PWD_KEY)
     return base64.b64encode(c.encrypt(pad(password.encode("utf-8"), AES.block_size))).decode()
 
-# ── Firma app (POST: mappa valori vuota -> niente brackets/keys) ──────────────
-def sign_post(url_path: str, ts_ms: int=None, secret: str=SIGN_SECRET, nonce: str=SIGN_NONCE):
-    ts = ts_ms if ts_ms is not None else int(time.time()*1000)
-    sig = hashlib.sha256(f"{secret}{nonce}{url_path}{ts}".encode("utf-8")).hexdigest()
+# ── Firma app (POST: mappa valori vuota -> niente brackets/keys; GET: [valori] + header keys) ──
+def sign_request(url_path: str, params: dict | None = None, ts_ms: int | None = None,
+                 secret: str = SIGN_SECRET, nonce: str = SIGN_NONCE) -> tuple[str, int, str]:
+    """Calcola (signature, timestamp_ms, keys_header) secondo EncryptUtils::headerSignature."""
+    ts = ts_ms if ts_ms is not None else int(time.time() * 1000)
+    if params:
+        keys = ",".join(str(k) for k in params)
+        vals = ",".join("" if v is None else str(v) for v in params.values())
+        payload = f"{secret}{nonce}{url_path}{ts}[{vals}]"
+    else:
+        keys = ""
+        payload = f"{secret}{nonce}{url_path}{ts}"
+    sig = hashlib.sha256(payload.encode()).hexdigest()
+    return sig, ts, keys
+
+
+def sign_post(url_path: str, ts_ms: int | None = None, secret: str = SIGN_SECRET, nonce: str = SIGN_NONCE):
+    sig, ts, _ = sign_request(url_path, ts_ms=ts_ms, secret=secret, nonce=nonce)
     return sig, ts
 
 DEPT_ID = "39"   # CountryArea.value() per Italia (mappa paese->prefisso, da area_config.dart). Francia=33, Germania=49...
 
-def headers_post(url_path: str, secret: str=SIGN_SECRET, nonce: str=SIGN_NONCE,
-                 dept_id: str=None, extra=None, ctx=None):
-    """Header firmati per una POST. `ctx` (CoreCtx) fornisce i parametri di regione.
 
-    P2-6: senza contesto si ripiega sui default di modulo — serve solo alla diagnostica
-    da riga di comando. Home Assistant passa sempre il contesto del veicolo, così due
-    entry con regioni diverse non si calpestano più a vicenda."""
+def _build_headers(url_path: str, params: dict | None = None, secret: str = SIGN_SECRET,
+                   nonce: str = SIGN_NONCE, dept_id: str | None = None, extra=None, ctx=None) -> dict:
     channel_id = ctx.channel_id if ctx is not None else CHANNEL_ID
     country_id = ctx.country_id if ctx is not None else COUNTRY_ID
     tenant = ctx.tenant_code if ctx is not None else TENANT_CODE
     accept_lang = getattr(ctx, "language", None) or ACCEPT_LANGUAGE if ctx is not None else ACCEPT_LANGUAGE
-    # `DEPT-ID` è, per ammissione della mappa da cui è stato estratto, il PREFISSO del Paese:
-    # Italia 39, Francia 33, Germania 49. Con l'arrivo del login via SMS il prefisso è
-    # diventato un dato che l'utente sceglie, e restava scollegato da qui: a un tedesco si
-    # spediva `DEPT-ID: 39`. Se il gateway lo controlla, il login non poteva riuscire; se lo
-    # ignora, non cambia nulla. Per un account italiano il valore resta identico a prima, e
-    # per gli altri passa da certamente-sbagliato a probabilmente-giusto.
-    # ⚠️ NON verificato dal vivo: servirebbe un account registrato fuori dall'Italia.
-    # `None` = «non specificato dal chiamante» → si guarda il contesto, poi il default. Non si
-    # confronta col default (`dept_id is DEPT_ID`): funzionerebbe per caso, dipendendo
-    # dall'identità degli oggetti stringa.
     if dept_id is None:
         dept_id = str(getattr(ctx, "area_code", "") or "") if ctx is not None else ""
         dept_id = dept_id or DEPT_ID
-    sig, ts = sign_post(url_path, secret=secret, nonce=nonce)
-    # Set header COMPLETO come l'app (http_config.dart headersJson + headerSignature).
-    # Content-Type/Authorization sono override dell'extraHeaderParams del builder token.
+    sig, ts, keys = sign_request(url_path, params=params, secret=secret, nonce=nonce)
     h = {
         "Accept": "application/json, text/plain, */*",
         "Content-Type": "application/x-www-form-urlencoded",
@@ -193,8 +191,25 @@ def headers_post(url_path: str, secret: str=SIGN_SECRET, nonce: str=SIGN_NONCE,
         "nonce": nonce, "timestamp": str(ts), "url": url_path,
         "signature": sig,
     }
-    if extra: h.update(extra)
+    if keys:
+        h["keys"] = keys
+    if extra:
+        h.update(extra)
     return h
+
+
+def headers_post(url_path: str, secret: str = SIGN_SECRET, nonce: str = SIGN_NONCE,
+                 dept_id: str | None = None, extra=None, ctx=None):
+    """Header firmati per una POST. `ctx` (CoreCtx) fornisce i parametri di regione."""
+    return _build_headers(url_path, params=None, secret=secret, nonce=nonce,
+                          dept_id=dept_id, extra=extra, ctx=ctx)
+
+
+def headers_get(url_path: str, params: dict | None = None, secret: str = SIGN_SECRET,
+                nonce: str = SIGN_NONCE, dept_id: str | None = None, extra=None, ctx=None):
+    """Header firmati per una GET con parametri in query string."""
+    return _build_headers(url_path, params=params, secret=secret, nonce=nonce,
+                          dept_id=dept_id, extra=extra, ctx=ctx)
 
 if __name__ == "__main__":
     # self-test SM4 con vettore standard GM/T 0002-2012:

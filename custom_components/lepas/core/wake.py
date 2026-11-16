@@ -244,6 +244,61 @@ def _eta_token(ctx) -> tuple[float, int]:
         durata = 0
     return eta, durata
 
+
+def _valid_tuserid(val) -> str:
+    """Normalizza tUserId rifiutando valori vuoti, 'None' o '0' (account secondari)."""
+    tu = str(val or "").strip()
+    return "" if tu in ("", "None", "0") else tu
+
+
+def _user_id(ctx) -> str:
+    """Legge user_id/userId da ctx.token_path se disponibile (usato da getTuserId)."""
+    try:
+        with open(ctx.token_path) as fh:
+            tok = json.load(fh)
+    except Exception:  # noqa: BLE001 — token assente o illeggibile
+        return ""
+    if not isinstance(tok, dict):
+        return ""
+    d = tok.get("data", tok)
+    sources = (d, tok) if isinstance(d, dict) else (tok,)
+    for src in sources:
+        uid = src.get("user_id") or src.get("userId")
+        uid_str = str(uid or "").strip()
+        if uid_str and uid_str not in ("None", "0"):
+            return uid_str
+    return ""
+
+
+def _resolve_tuserid(ctx, access_token: str | None = None) -> str:
+    """Risolve il vero tUserId via GET /tsp/v1/app/auth/getTuserId quando login BFF dà '0'/vuoto."""
+    tok = access_token or _access_token(ctx)
+    if not tok:
+        return ""
+    params = {"channelId": ctx.channel_id}
+    if uid := _user_id(ctx):
+        params["userId"] = uid
+    path = "/tsp/v1/app/auth/getTuserId"
+    headers = A.headers_get(path, params=params, ctx=ctx, extra={
+        "Authorization": f"Bearer {tok}",
+        "Accept": "application/json, text/plain, */*",
+    })
+    try:
+        r = requests.get(ctx.bff + path, params=params, headers=headers, timeout=15)
+        j = r.json()
+    except Exception as err:  # noqa: BLE001 — risoluzione best-effort
+        _LOGGER.debug("Lepas getTuserId fallback fallito (%s)", type(err).__name__)
+        return ""
+    if getattr(r, "status_code", 200) != 200 or not isinstance(j, dict):
+        return ""
+    code = str(j.get("code") or "").strip()
+    if code not in ("", "0", "000000"):
+        return ""
+    data = j.get("data")
+    raw = data.get("tUserId") if isinstance(data, dict) else data
+    return _valid_tuserid(raw)
+
+
 def _bff_login(ctx, _allow_refresh=True):
     """Ritorna (userToken, tUserId). Solleva su errore di rete; (None,None) se rifiutato.
     Se la sessione è scaduta tenta UN refresh_token automatico (senza OTP) e riprova una volta."""
@@ -302,7 +357,10 @@ def _bff_login(ctx, _allow_refresh=True):
         if rinnovato:
             return _bff_login(ctx, _allow_refresh=False)
         return None, None
-    return ut, d.get("tUserId")
+    tu = _valid_tuserid(d.get("tUserId") if isinstance(d, dict) else None)
+    if not tu:
+        tu = _resolve_tuserid(ctx, access_token=tok)
+    return ut, (tu or None)
 
 def _signed_post(ctx, ut: str, path: str, params: dict):
     ts = int(time.time() * 1000)

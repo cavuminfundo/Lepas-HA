@@ -677,3 +677,26 @@ async def test_custom_region_failure_branches(hass, monkeypatch):
     assert result["errors"]["base"] == "no_vehicle"
     assert "no_vehicle_found" in result["description_placeholders"]["reason"]
     assert flow._pending_password == ""
+
+
+def test_discover_authorized_control_car_list_e_tuserid_zero(hass, cloud):
+    """_discover estrae VIN da authorizedControlCarList e risolve tUserId 0 via getTuserId."""
+    from custom_components.lepas import config_flow as cf
+
+    cloud.on(
+        "/tsp/v1/app/auth/login",
+        {"code": "000000", "data": {"userToken": FX.USER_TOKEN, "tUserId": "0"}},
+    )
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": {"tUserId": "7766554433"}},
+    )
+    cloud.on(
+        "/tsp/v1/app/vmc/queryList",
+        {"code": "000000", "data": {"authorizedControlCarList": [{"vin": FX.VIN}]}},
+    )
+
+    data = {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN}
+    res = cf._discover(hass, data)
+    assert res == (True, "7766554433", [FX.VIN], "ok")
+

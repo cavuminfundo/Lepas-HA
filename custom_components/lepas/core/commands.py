@@ -411,8 +411,8 @@ def _tuserid_da_querylist(ql: dict, vin: str) -> str:
                 items.extend(x for x in v if isinstance(x, dict))
     for item in items:
         if item.get("vin") == vin:
-            tu = str(item.get("tUserId") or "").strip()
-            if tu and tu != "None":
+            tu = wake._valid_tuserid(item.get("tUserId"))
+            if tu:
                 return tu
     return ""
 
@@ -436,15 +436,15 @@ def _checkpassword(ctx, tuid, tentativo):
         # MED: il BFF può restituire un top-level non-dict (stringa) → normalizza a {}
         return j if isinstance(j, dict) else {}
 
-    tuid_str = str(tuid or "").strip()
-    if tuid_str == "None":
-        tuid_str = ""
+    tuid_str = wake._valid_tuserid(tuid)
     ql = bff("/tsp/v1/app/vmc/queryList",
              {"tUserId": tuid_str, "channelId": ctx.channel_id} if tuid_str else {})
     ql_tuid = _tuserid_da_querylist(ql, ctx.vin)
     if ql_tuid and (not tuid_str or tuid_str != ql_tuid):
         _LOGGER.debug("[taskId] tUserId allineato da queryList (presente=%s)", bool(tuid_str))
         tuid_str = ql_tuid
+    if not tuid_str:
+        tuid_str = wake._resolve_tuserid(ctx, access_token=access)
     if not tuid_str:
         _LOGGER.warning("[taskId] tUserId vuoto prima di checkPassword")
     bff("/tsp/v1/app/vmc/setVecDefault", {"vin": ctx.vin})

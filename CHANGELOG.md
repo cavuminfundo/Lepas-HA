@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.16.2 — 2026-11-16
+
+### 🇬🇧 English
+
+- **Secondary Account `tUserId == "0"` Resolution (`A00361`)**: Normalized placeholder `"0"` / `"None"` / `""` values for `tUserId` across BFF login, command PIN minting (`checkPassword`), permission lookup, and config flow discovery, resolving the real `tUserId` via signed `GET /tsp/v1/app/auth/getTuserId` (with `ts` before `[vals]` and the `keys` header, preserving `scene=0`).
+- **Existing `ConfigEntry` Backfill & Discovery Envelope Support**: `LepasCoordinator` now automatically backfills invalid/zero `tuserid` values on startup before MQTT connection, and config flow vehicle discovery supports nested dictionary envelopes such as `authorizedControlCarList`.
+
+### 🇮🇹 Italiano
+
+- **Risoluzione `tUserId == "0"` su Account Secondari (`A00361`)**: Normalizzati i valori fittizi `"0"` / `"None"` / `""` di `tUserId` in login BFF, conio PIN comandi (`checkPassword`), verifica permessi e config flow, risolvendo il `tUserId` reale tramite `GET /tsp/v1/app/auth/getTuserId` firmata con `ts` prima di `[vals]` e header `keys` (preservando `scene=0`).
+- **Backfill Automatico `ConfigEntry` ed Envelope Veicoli**: `LepasCoordinator` esegue ora automaticamente il backfill di `tuserid` mancanti o `"0"` all'avvio prima della connessione MQTT, e la scoperta veicoli nel config flow supporta gli envelope a dizionario come `authorizedControlCarList`.
+
 ## v1.16.1 — 2026-11-15
 
 ### 🇬🇧 English

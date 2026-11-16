@@ -251,7 +251,9 @@ def normalizza(payload) -> dict:
 def leggi(ctx, token, tuid) -> dict:
     """Interroga la lista permessi del veicolo. **Non attua nulla, non usa il PIN, non conia
     taskId.** Qualunque errore (rete, timeout, forma) ⇒ `IGNOTO` ⇒ si spedisce come prima."""
-    if not token or not tuid:
+    from . import wake
+
+    if not token or not wake._valid_tuserid(tuid):
         return IGNOTO
     try:
         import requests

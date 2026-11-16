@@ -11,7 +11,11 @@ inutile a ogni microcaduta della connessione.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pytest
+import requests
 
 import fixtures as FX
 
@@ -389,3 +393,158 @@ async def test_armare_il_monitor_due_volte_e_innocuo(hass, config_entry, cloud, 
     coord._diag = finto
     await coord.async_setup_diag()
     assert coord._diag is finto, "il monitor già armato è stato sostituito"
+
+
+def test_headers_get_con_params_firma_keys_e_valori_ordinati(core, ctx, monkeypatch):
+    """Verifica che headers_get firmi query params e imposti l'header keys."""
+    lepas_auth = core["lepas_auth"]
+    provision = core["provision"]
+
+    params = {"channelId": "1", "userId": "u-42"}
+    h = lepas_auth.headers_get("/tsp/v1/app/auth/getTuserId", params=params, ctx=ctx)
+    assert h["keys"] == "channelId,userId"
+    expected_sig = hashlib.sha256(
+        f"{lepas_auth.SIGN_SECRET}{lepas_auth.SIGN_NONCE}/tsp/v1/app/auth/getTuserId{h['timestamp']}[1,u-42]".encode()
+    ).hexdigest()
+    assert h["signature"] == expected_sig
+
+    h_noparams = lepas_auth.headers_get("/tsp/v1/app/auth/getTuserId", ctx=ctx)
+    assert "keys" not in h_noparams
+    sig_post, _ = lepas_auth.sign_post("/tsp/v1/app/auth/getTuserId", ts_ms=int(h_noparams["timestamp"]))
+    assert h_noparams["signature"] == sig_post
+
+    sent_get = {}
+
+    class DummyResp:
+        status_code = 200
+
+        def json(self):
+            return {"code": "000000"}
+
+    def fake_get(url, params=None, headers=None, **kw):
+        sent_get["url"] = url
+        sent_get["params"] = params
+        sent_get["headers"] = headers
+        return DummyResp()
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(provision, "_ctx", lambda: ctx)
+    monkeypatch.setattr(provision.W, "_access_token", lambda _c: FX.ACCESS_TOKEN)
+
+    sc, _ = provision._bff_call("/tsp/v1/app/auth/getTuserId", params={"channelId": "1"}, method="GET")
+    assert sc == 200
+    assert sent_get["headers"]["keys"] == "channelId"
+    expected_prov_sig = hashlib.sha256(
+        f"{lepas_auth.SIGN_SECRET}{lepas_auth.SIGN_NONCE}/tsp/v1/app/auth/getTuserId{sent_get['headers']['timestamp']}[1]".encode()
+    ).hexdigest()
+    assert sent_get["headers"]["signature"] == expected_prov_sig
+
+
+def test_bff_login_tuserid_zero_risolve_via_getTuserId(core, cloud, ctx, token_file):
+    """Su tUserId 0 il login BFF richiama getTuserId e risolve l'identificativo reale."""
+    wake = core["wake"]
+
+    tok = json.loads(token_file.read_text("utf-8"))
+    tok["user_id"] = "u-sec-99"
+    if isinstance(tok.get("data"), dict):
+        tok["data"]["user_id"] = "u-sec-99"
+    token_file.write_text(json.dumps(tok), encoding="utf-8")
+
+    cloud.on(
+        "/tsp/v1/app/auth/login",
+        {"code": "000000", "data": {"userToken": FX.USER_TOKEN, "tUserId": "0"}},
+    )
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": {"tUserId": "7766554433"}},
+    )
+
+    ut, tu = wake._bff_login(ctx)
+    assert ut == FX.USER_TOKEN
+    assert tu == "7766554433"
+    assert cloud.count("getTuserId") == 1
+    call = cloud.calls_to("getTuserId")[0]
+    assert call["body"] == {"channelId": ctx.channel_id, "userId": "u-sec-99"}
+
+    cloud.reset_calls()
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": "8877665544"},
+    )
+    ut, tu = wake._bff_login(ctx)
+    assert ut == FX.USER_TOKEN
+    assert tu == "8877665544"
+
+    cloud.reset_calls()
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": {"tUserId": "0"}},
+    )
+    ut, tu = wake._bff_login(ctx)
+    assert ut == FX.USER_TOKEN
+    assert tu is None
+
+    cloud.reset_calls()
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "A00101", "data": "invalid token"},
+    )
+    ut, tu = wake._bff_login(ctx)
+    assert ut == FX.USER_TOKEN
+    assert tu is None
+
+    cloud.reset_calls()
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": {"tUserId": "123"}},
+        status=500,
+    )
+    ut, tu = wake._bff_login(ctx)
+    assert ut == FX.USER_TOKEN
+    assert tu is None
+
+
+def test_bff_login_tuserid_valido_non_chiama_getTuserId(core, cloud, ctx):
+    """Quando login BFF fornisce un tUserId valido non viene fatta alcuna chiamata a getTuserId."""
+    wake = core["wake"]
+    cloud.on(
+        "/tsp/v1/app/auth/login",
+        {"code": "000000", "data": {"userToken": FX.USER_TOKEN, "tUserId": FX.TUSERID}},
+    )
+    ut, tu = wake._bff_login(ctx)
+    assert ut == FX.USER_TOKEN
+    assert tu == FX.TUSERID
+    assert cloud.count("getTuserId") == 0
+
+
+async def test_async_check_session_backfill_tuserid(hass, config_entry, cloud, monkeypatch):
+    """Verifica che async_check_session faccia il backfill di tuserid in coord, ctx ed entry."""
+    from custom_components.lepas.const import CONF_TUSERID
+    from custom_components.lepas.coordinator import LepasCoordinator
+
+    hass.config_entries.async_update_entry(
+        config_entry, data={**config_entry.data, CONF_TUSERID: "0"}
+    )
+    assert config_entry.data[CONF_TUSERID] == "0"
+
+    cloud.on(
+        "/tsp/v1/app/auth/login",
+        {"code": "000000", "data": {"userToken": FX.USER_TOKEN, "tUserId": "0"}},
+    )
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": {"tUserId": "7766554433"}},
+    )
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs", lambda self: (True, "cert finti"))
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+
+    coord = LepasCoordinator(hass, config_entry)
+    assert coord.tuserid == "0"
+    assert coord.ctx.tuserid == "0"
+
+    ok, _detail = await coord.async_check_session()
+    assert ok is True
+    assert coord.tuserid == "7766554433"
+    assert coord.ctx.tuserid == "7766554433"
+    assert config_entry.data[CONF_TUSERID] == "7766554433"
+

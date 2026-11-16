@@ -13,3 +13,10 @@
 - **Invariant**: Tutte le `unique_id` devono usare `ID_PREFIX = "lepas"` e i log diagnostici devono oscurare `vin`, `lat`, `lon`, `access_token` e `refresh_token`.
 - **onFailure Mandate**: Filtrare i campi sensibili tramite `async_redact_data` prima di qualsiasi output di diagnostica o log.
 - **Forbidden Regex**: `_LOGGER\.(?:info|warning|error)\([^)]*access_token`
+
+## [AB-LEP-003] Secondary Account `tUserId == "0"` Normalization & GET Query Signing
+- **Target Files**: `custom_components/lepas/core/{lepas_auth,wake,commands,provision,permessi}.py`, `custom_components/lepas/{config_flow,coordinator}.py`
+- **Root Cause**: Sugli account secondari/condivisi `POST /tsp/v1/app/auth/login` restituisce `"tUserId": "0"` (truthy in Python) causando `A00361` in `checkPassword`, mentre le `GET` con query string richiedono firma `sha256(secret + nonce + path + ts + "[" + ",".join(vals) + "]")` e header `"keys"`.
+- **Invariant**: Normalizzare sempre `tUserId` tramite `wake._valid_tuserid()` (rifiutando `""`, `"None"`, `"0"`), risolvere via `GET /tsp/v1/app/auth/getTuserId` con `A.headers_get` mantenendo `scene=0` invariato in `checkPassword`.
+- **onFailure Mandate**: Su fallimento HTTP/JSON/`code` di `_resolve_tuserid`, loggare solo `type(err).__name__` a `DEBUG` (zero PII/token/userId/tUserId) e restituire `""`/`None` senza ciclare o consumare tentativi PIN (`A00361` -> `reason="config"`).
+- **Forbidden Regex**: `if\s+not\s+tuid\s*:|headers_post\([^)]*method\s*=\s*["']GET["']`

@@ -206,3 +206,36 @@ def test_errore_di_rete_non_diventa_un_falso_pin(core, cloud, ctx):
         commands.send(ctx, "blocca")
     assert err.value.reason is None
     assert ctx.lockout.tentativi_falliti == 0
+
+
+def test_checkpassword_ignora_tuid_zero_e_risolve_prima_di_checkpassword(core, cloud, ctx, token_file):
+    """Verifica che tUserId '0' venga ignorato e risolto prima della chiamata a checkPassword."""
+    import json
+
+    commands = core["commands"]
+    permessi = core["permessi"]
+
+    tok = json.loads(token_file.read_text("utf-8"))
+    tok["user_id"] = "u-sec-99"
+    if isinstance(tok.get("data"), dict):
+        tok["data"]["user_id"] = "u-sec-99"
+    token_file.write_text(json.dumps(tok), encoding="utf-8")
+
+    cloud.on("/tsp/v1/app/vmc/queryList", data=[{"vin": FX.VIN, "nickname": "Auto"}])
+    cloud.on(
+        "/tsp/v1/app/auth/getTuserId",
+        {"code": "000000", "data": {"tUserId": "5544332211"}},
+    )
+    cloud.on("/tsp/v1/app/cpm/checkPassword", data={"taskId": FX.TASKID})
+
+    tid = commands._mint_taskid(ctx, "0")
+    assert tid == FX.TASKID
+    cp_call = cloud.calls_to("checkPassword")[0]["body"]
+    assert cp_call["tUserId"] == "5544332211"
+    assert cp_call["scene"] == 0
+
+    p = permessi.leggi(ctx, FX.USER_TOKEN, "0")
+    assert p == permessi.IGNOTO
+    assert cloud.count("queryVehicleAuthority") == 0
+    assert cloud.count("queryPermissions") == 0
+
