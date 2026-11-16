@@ -187,7 +187,7 @@ def _cleanup_pending(hass: HomeAssistant) -> None:
 class LepasConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Gestisce il config flow dell'integrazione Lepas Connect."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}

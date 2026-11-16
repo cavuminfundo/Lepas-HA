@@ -19,5 +19,5 @@
     "paho-mqtt>=2.0",
     "pycryptodome>=3.17"
   ],
-  "version": "1.16.4"
+  "version": "1.16.5"
 }

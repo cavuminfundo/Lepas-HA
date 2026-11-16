@@ -233,7 +233,7 @@ DEFAULTS = {
     CONF_TSP_HOST: "https://tspconsole-eu.cheryinternational.com",
     CONF_CAR_MQTT_HOST: "tspemqx-app-eu.cheryinternational.com",
     CONF_CAR_MQTT_PORT: 8083,
-    CONF_CHANNEL_ID: "1",
+    CONF_CHANNEL_ID: "6",
     CONF_TENANT_CODE: "3000011",
     CONF_COUNTRY_ID: "1",
 }
@@ -254,7 +254,7 @@ PRESETS = {
     PRESET_LEPAS_EU: {
         CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
         CONF_TENANT_CODE: "3000011",
-        CONF_CHANNEL_ID: "1",
+        CONF_CHANNEL_ID: "6",
         CONF_COUNTRY_ID: "1",
     },
     PRESET_CHERY_EU: {

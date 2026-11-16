@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.16.5 — 2026-11-16
+
+### 🇬🇧 English
+
+- **Lepas EU `channelId: "6"` Alignment (`A00361` Root Fix)**: Updated `DEFAULTS[CONF_CHANNEL_ID]`, `PRESETS[PRESET_LEPAS_EU][CONF_CHANNEL_ID]`, `CoreCtx.DEFAULT_CHANNEL_ID`, and fallback `CHANNEL_ID` constants from `"1"` to `"6"` (matching `/tsp/v1/app/env/defaultEnv` used by the official Lepas Android app at startup), resolving `A00361` ("User does not exist") across `cpm/checkPassword`, `vmc/queryVehicleAuthority`, and `vac/queryAuthRemoteList`, as well as aligning the MQTT broker topic (`app/6/{tuserid}/account/msgCenter/msg`).
+- **Automatic `ConfigEntry` Migration (`v1 → v2`)**: Bumped `LepasConfigFlow.VERSION` to `2` and added `async_migrate_entry` to automatically migrate existing Lepas EU `v1` entries (with `channel_id="1"`, empty, `None`, or missing) to `"6"`, while preserving `chery_eu` (`"2"`), custom region settings, and rejecting schema downgrades (`version > 2`).
+- **Non-PII `checkPassword` Diagnostics**: Enriched failure logging in `core/commands.py` with non-PII routing/region metadata (`tuid_source`, `tuid_len`, `ql_code`, `auth_type`, `sv_code`, `scene`, `bff`, `ch`, `tenant`, `country`, `pin_len`, `pin_dig`, `cp_http`, `cp_key`, `ql_keys`).
+
+### 🇮🇹 Italiano
+
+- **Allineamento `channelId: "6"` per Lepas EU (Fix Root Cause `A00361`)**: Aggiornati `DEFAULTS[CONF_CHANNEL_ID]`, `PRESETS[PRESET_LEPAS_EU][CONF_CHANNEL_ID]`, `CoreCtx.DEFAULT_CHANNEL_ID` e le costanti di fallback `CHANNEL_ID` da `"1"` a `"6"` (valore restituito da `/tsp/v1/app/env/defaultEnv` all'avvio dell'app ufficiale Lepas), risolvendo definitivamente `A00361` ("User does not exist") su `cpm/checkPassword`, `vmc/queryVehicleAuthority` e `vac/queryAuthRemoteList` e allineando il topic MQTT (`app/6/{tuserid}/account/msgCenter/msg`).
+- **Migrazione Automatica `ConfigEntry` (`v1 → v2`)**: Incrementata `LepasConfigFlow.VERSION = 2` e introdotta `async_migrate_entry` per migrare automaticamente a `"6"` le configurazioni Lepas EU `v1` esistenti (con `channel_id="1"`, vuoto, `None` o assente), preservando `chery_eu` (`"2"`), le configurazioni custom e bloccando eventuali downgrade (`version > 2`).
+- **Diagnostica Non-PII su `checkPassword`**: Arricchito il log di errore in `core/commands.py` con soli metadati non-PII di regione/routing (`tuid_source`, `tuid_len`, `ql_code`, `auth_type`, `sv_code`, `scene`, `bff`, `ch`, `tenant`, `country`, `pin_len`, `pin_dig`, `cp_http`, `cp_key`, `ql_keys`).
+
 ## v1.16.4 — 2026-11-16
 
 ### 🇬🇧 English

@@ -25,6 +25,7 @@ import hashlib
 import threading
 import urllib.request
 import urllib.error
+import urllib.parse
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -426,9 +427,13 @@ def _checkpassword(ctx, tuid, tentativo):
              "Content-Type": "application/json; charset=UTF-8",
              "Accept": "application/json, text/plain, */*"}
 
+    last_http = 0
+
     def bff(path, body):
+        nonlocal last_http
         H = A.headers_post(path, extra=extra, ctx=ctx)
         r = requests.post(ctx.bff + path, data=json.dumps(body), headers=H, timeout=25)
+        last_http = getattr(r, "status_code", 0)
         try:
             j = r.json()
         except Exception:
@@ -451,10 +456,14 @@ def _checkpassword(ctx, tuid, tentativo):
             if isinstance(v, list):
                 ql_items.extend(x for x in v if isinstance(x, dict))
     auth_type = None
+    matched_item = None
     for item in ql_items:
         if item.get("vin") == ctx.vin:
             auth_type = item.get("authorizeType") or item.get("authType") or item.get("type")
+            matched_item = item
             break
+    if matched_item is None and ql_items:
+        matched_item = ql_items[0]
 
     ql_tuid = _tuserid_da_querylist(ql, ctx.vin)
     if ql_tuid and (not tuid_str or tuid_str != ql_tuid):
@@ -518,10 +527,16 @@ def _checkpassword(ctx, tuid, tentativo):
             tentativo.riuscito()
             return tid
 
+    bff_host = urllib.parse.urlparse(ctx.bff or "").netloc or "?"
+    ql_keys = sorted(matched_item.keys()) if isinstance(matched_item, dict) else []
+    cp_key = str(j.get("key") if isinstance(j, dict) else None)[:60]
     _LOGGER.warning(
         "[taskId] checkPassword NON ha restituito un taskId → %s "
-        "(tuid_source=%s tuid_len=%d ql_code=%s auth_type=%s sv_code=%s sv_msg=%r scene=%d)",
+        "(tuid_source=%s tuid_len=%d ql_code=%s auth_type=%s sv_code=%s sv_msg=%r scene=%d "
+        "bff=%s ch=%s tenant=%s country=%s pin_len=%d pin_dig=%s cp_http=%s cp_key=%r ql_keys=%s)",
         detail, tuid_source, len(tuid_str), ql_code, auth_type, sv_code, sv_msg, scene_used,
+        bff_host, ctx.channel_id, ctx.tenant_code, ctx.country_id,
+        len(ctx.pin or ""), (ctx.pin or "").isdigit(), last_http, cp_key, ql_keys,
     )
 
     # Alcuni wrapper BFF restituiscono code=1 e il codice applicativo (es. 'A00361') in message.

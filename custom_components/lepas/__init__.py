@@ -8,7 +8,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN, PLATFORMS
+from .const import (
+    CONF_BFF,
+    CONF_CHANNEL_ID,
+    CONF_TENANT_CODE,
+    DEFAULTS,
+    DOMAIN,
+    PLATFORMS,
+    PRESET_LEPAS_EU,
+    PRESETS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -126,6 +135,36 @@ async def _async_migrate_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> 
     _LOGGER.info(
         "Lepas: %d entita' rinominate ai nomi inglesi. Storico e statistiche seguono; "
         "i riferimenti scritti a mano in automazioni e dashboard vanno aggiornati.", fatti)
+
+
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migra i config entry da versioni precedenti allo schema corrente."""
+    if config_entry.version > 2:
+        _LOGGER.warning(
+            "Lepas: impossibile migrare config entry da versione futura %s",
+            config_entry.version,
+        )
+        return False
+
+    if config_entry.version == 1:
+        data = dict(config_entry.data)
+        bff = str(data.get(CONF_BFF) or DEFAULTS[CONF_BFF]).rstrip("/")
+        tenant = str(data.get(CONF_TENANT_CODE) or DEFAULTS[CONF_TENANT_CODE])
+        channel = str(data.get(CONF_CHANNEL_ID) or "")
+        is_lepas_eu = (
+            bff == DEFAULTS[CONF_BFF].rstrip("/")
+            and tenant == DEFAULTS[CONF_TENANT_CODE]
+        )
+        if is_lepas_eu and channel in ("", "1"):
+            new_channel = PRESETS[PRESET_LEPAS_EU][CONF_CHANNEL_ID]
+            data[CONF_CHANNEL_ID] = new_channel
+            _LOGGER.info(
+                "Lepas: config entry migrata a v2 (channel_id %s -> %s)",
+                channel or "<default>",
+                new_channel,
+            )
+        hass.config_entries.async_update_entry(config_entry, data=data, version=2)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

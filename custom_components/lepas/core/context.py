@@ -45,7 +45,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Default di REGIONE (Europa Lepas). Non sono segreti: sono endpoint pubblici Lepas/Chery.
 DEFAULT_BFF = "https://eu-lepas.cheryinternational.com/api"
 DEFAULT_TSP_HOST = "https://tspconsole-eu.cheryinternational.com"
-DEFAULT_CHANNEL_ID = "1"
+DEFAULT_CHANNEL_ID = "6"
 DEFAULT_COUNTRY_ID = "1"
 DEFAULT_TENANT_CODE = "3000011"
 

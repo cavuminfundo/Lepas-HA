@@ -343,4 +343,31 @@ def test_checkpassword_a00361_con_scene0_ritenta_con_scene2_apk(core, cloud, ctx
     assert ctx.lockout.tentativi_falliti == 0
 
 
+def test_checkpassword_failure_logs_non_pii_region_diagnostics(core, cloud, ctx, caplog):
+    """Su checkPassword fallito logga solo parametri regione/http/chiavi non-PII, mai PIN/VIN/token."""
+    import logging
+    commands = core["commands"]
+
+    cloud.on("/tsp/v1/app/auth/getTuserId", {"code": "000000", "data": {"tUserId": FX.TUSERID}})
+    cloud.on("/tsp/v1/app/vmc/queryList", {
+        "code": 0,
+        "data": [{"vin": ctx.vin, "authorizeType": 1, "vehicleName": "Lepas L8"}],
+    })
+    cloud.on("/tsp/v1/app/cpm/checkPassword", {"code": 1, "message": "A00361"})
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.lepas.core.commands"):
+        with pytest.raises(commands.CommandError):
+            commands._mint_taskid(ctx, FX.TUSERID)
+
+    warnings = [r.getMessage() for r in caplog.records if "checkPassword NON ha restituito" in r.getMessage()]
+    assert len(warnings) == 1
+    msg = warnings[0]
+    assert f"ch={ctx.channel_id}" in msg
+    assert f"tenant={ctx.tenant_code}" in msg
+    assert f"country={ctx.country_id}" in msg
+    assert f"pin_len={len(ctx.pin)}" in msg
+    assert "cp_http=200" in msg
+    assert "ql_keys=['authorizeType', 'vehicleName', 'vin']" in msg
+    for secret in (ctx.pin, ctx.vin, FX.TUSERID, FX.ACCESS_TOKEN):
+        assert secret not in msg
 

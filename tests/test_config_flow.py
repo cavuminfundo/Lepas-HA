@@ -377,7 +377,7 @@ def test_domain_and_defaults_lepas():
     assert DEFAULT_PRESET == PRESET_LEPAS_EU
     assert DEFAULTS[CONF_BFF] == "https://eu-lepas.cheryinternational.com/api"
     assert DEFAULTS[CONF_TENANT_CODE] == "3000011"
-    assert DEFAULTS[CONF_CHANNEL_ID] == "1"
+    assert DEFAULTS[CONF_CHANNEL_ID] == "6"
     assert DEFAULTS[CONF_COUNTRY_ID] == "1"
 
 
@@ -390,7 +390,7 @@ def test_apply_preset_lepas_eu():
     assert CONF_PRESET not in target
     assert target[CONF_BFF] == "https://eu-lepas.cheryinternational.com/api"
     assert target[CONF_TENANT_CODE] == "3000011"
-    assert target[CONF_CHANNEL_ID] == "1"
+    assert target[CONF_CHANNEL_ID] == "6"
     assert target[CONF_COUNTRY_ID] == "1"
 
 
@@ -403,7 +403,7 @@ def test_apply_preset_default_fallback():
     assert CONF_PRESET not in target
     assert target[CONF_BFF] == "https://eu-lepas.cheryinternational.com/api"
     assert target[CONF_TENANT_CODE] == "3000011"
-    assert target[CONF_CHANNEL_ID] == "1"
+    assert target[CONF_CHANNEL_ID] == "6"
     assert target[CONF_COUNTRY_ID] == "1"
 
 
@@ -703,4 +703,129 @@ def test_discover_authorized_control_car_list_e_tuserid_zero(hass, cloud):
     data = {CONF_EMAIL: FX.EMAIL, CONF_PIN: FX.PIN}
     res = cf._discover(hass, data)
     assert res == (True, "7766554433", [FX.VIN], "ok")
+
+
+async def test_migrate_entry_v1_lepas_eu_aggiorna_channel_a_6(hass):
+    """Entry v1 Lepas EU con channel_id='1' viene migrata a v2 con channel_id='6'."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.lepas import async_migrate_entry
+    from custom_components.lepas.const import (
+        CONF_BFF, CONF_CHANNEL_ID, CONF_COUNTRY_ID, CONF_TENANT_CODE, CONF_VIN, DOMAIN,
+    )
+
+    assert LepasConfigFlow.VERSION == 2
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        unique_id=FX.VIN,
+        data={
+            CONF_VIN: FX.VIN,
+            CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
+            CONF_TENANT_CODE: "3000011",
+            CONF_COUNTRY_ID: "1",
+            CONF_CHANNEL_ID: "1",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    ok = await async_migrate_entry(hass, entry)
+    assert ok is True
+    assert entry.version == 2
+    assert entry.data[CONF_CHANNEL_ID] == "6"
+
+
+async def test_migrate_entry_v1_legacy_senza_campi_regione_imposta_6(hass):
+    """Entry v1 storica senza bff/tenant_code/channel_id o con channel_id=None riceve channel_id='6'."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.lepas import async_migrate_entry
+    from custom_components.lepas.const import CONF_CHANNEL_ID, CONF_VIN, DOMAIN
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        unique_id=FX.VIN,
+        data={CONF_VIN: FX.VIN},
+    )
+    entry_none = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        unique_id="LZZNONECORRECT001",
+        data={CONF_VIN: "LZZNONECORRECT001", CONF_CHANNEL_ID: None},
+    )
+    entry.add_to_hass(hass)
+    entry_none.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+    assert entry.version == 2
+    assert entry.data[CONF_CHANNEL_ID] == "6"
+
+    assert await async_migrate_entry(hass, entry_none) is True
+    assert entry_none.version == 2
+    assert entry_none.data[CONF_CHANNEL_ID] == "6"
+
+
+async def test_migrate_entry_v1_preserva_chery_eu_e_custom(hass):
+    """Entry v1 Chery EU ('2') o custom ('42') mantengono il proprio channel_id avanzando a v2."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.lepas import async_migrate_entry
+    from custom_components.lepas.const import (
+        CONF_BFF, CONF_CHANNEL_ID, CONF_COUNTRY_ID, CONF_TENANT_CODE, CONF_VIN, DOMAIN,
+    )
+
+    chery = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        unique_id="LZZCHERY000000001",
+        data={
+            CONF_VIN: "LZZCHERY000000001",
+            CONF_BFF: "https://eu-chery.cheryinternational.com/api",
+            CONF_TENANT_CODE: "300001",
+            CONF_COUNTRY_ID: "2",
+            CONF_CHANNEL_ID: "2",
+        },
+    )
+    custom = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        unique_id="LZZCUSTOM00000002",
+        data={
+            CONF_VIN: "LZZCUSTOM00000002",
+            CONF_BFF: "https://eu-lepas.cheryinternational.com/api",
+            CONF_TENANT_CODE: "3000011",
+            CONF_CHANNEL_ID: "42",
+        },
+    )
+    chery.add_to_hass(hass)
+    custom.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, chery) is True
+    assert chery.version == 2
+    assert chery.data[CONF_CHANNEL_ID] == "2"
+
+    assert await async_migrate_entry(hass, custom) is True
+    assert custom.version == 2
+    assert custom.data[CONF_CHANNEL_ID] == "42"
+
+
+async def test_migrate_entry_downgrade_rifiutato(hass):
+    """Una entry con version > 2 non viene degradata e ritorna False."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.lepas import async_migrate_entry
+    from custom_components.lepas.const import CONF_CHANNEL_ID, CONF_VIN, DOMAIN
+
+    future = MockConfigEntry(
+        domain=DOMAIN,
+        version=3,
+        unique_id=FX.VIN,
+        data={CONF_VIN: FX.VIN, CONF_CHANNEL_ID: "99"},
+    )
+    future.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, future) is False
+    assert future.version == 3
+    assert future.data[CONF_CHANNEL_ID] == "99"
 

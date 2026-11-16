@@ -33,7 +33,7 @@ APP_VERSION  = "1.1.9"
 # (diagnostica da riga di comando). In Home Assistant il contesto c'è sempre.
 BFF          = os.environ.get("LEPAS_BFF", "https://eu-lepas.cheryinternational.com/api")
 TENANT_CODE  = os.environ.get("LEPAS_TENANT_CODE", "3000011")
-CHANNEL_ID   = os.environ.get("CHANNEL_ID", "1")
+CHANNEL_ID   = os.environ.get("CHANNEL_ID", "6")
 COUNTRY_ID   = os.environ.get("LEPAS_COUNTRY_ID", "1")
 # Lingua delle chiamate (header Accept-Language): decide la lingua di e-mail OTP/SMS/messaggi
 # server. Default it-IT (comportamento storico). Con `ctx` si usa `ctx.language`.

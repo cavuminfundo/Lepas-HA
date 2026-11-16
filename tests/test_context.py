@@ -146,6 +146,36 @@ def test_percorsi_di_ripiego_solo_fuori_da_home_assistant():
     assert ctx.taskid_file.endswith("taskid.txt")
 
 
+def test_default_channel_id_lepas_eu_e_6(hass):
+    """Senza channel_id esplicito nell'entry, CoreCtx e LepasCoordinator usano '6'."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.lepas.const import (
+        CONF_EMAIL, CONF_PIN, CONF_TUSERID, CONF_VIN, DOMAIN,
+    )
+    from custom_components.lepas.coordinator import LepasCoordinator
+    from custom_components.lepas.core import lepas, lepas_auth
+
+    assert CoreCtx().channel_id == "6"
+    assert lepas_auth.CHANNEL_ID == "6"
+    assert lepas.CHANNEL_ID == "6"
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="LZZAAAAAA1B2C3D4E",
+        data={
+            CONF_VIN: "LZZAAAAAA1B2C3D4E",
+            CONF_TUSERID: FX.TUSERID,
+            CONF_EMAIL: FX.EMAIL,
+            CONF_PIN: "123456",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = LepasCoordinator(hass, entry)
+    assert coord.channel_id == "6"
+    assert coord.ctx.channel_id == "6"
+
+
 # ───────────────────────── il monitor non altera il flusso ─────────────────────────
 def test_il_monitor_diagnostico_non_puo_rompere_un_comando():
     """Il monitor osserva, non partecipa: se il registratore esplode, il comando

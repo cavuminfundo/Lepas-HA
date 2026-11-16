@@ -27,3 +27,17 @@
 - **Invariant**: `_refresh_token_detail` deve copiare i metadati identitari (`user_id`, `userId`, `username`, `phone`, `email`) dal `token.json` esistente prima di riscrivere; se assente, recuperare `data.id` via `GET /marketing/v1/app/user` (`UserState::getUserInfo`) e persisterlo sotto `ctx.stato.lock_token` tramite `_write_token_atomic` (`0o600`, cleanup `.tmp`). In `config_flow.py` / `diagnostics.py`, ogni I/O su `token.json` o `_check_session` deve girare via `async_add_executor_job`.
 - **onFailure Mandate**: Su fallimento HTTP/JSON di `getUserInfo`, loggare solo `type(err).__name__`/`http`/`code`/`has_id` a `DEBUG`, non modificare `token.json` e non chiamare `getTuserId` senza `userId`.
 - **Forbidden Regex**: `json\.dump\(j,\s*f`
+
+## [AB-LEP-005] Secondary Account Backend `A00361` Across TSP Microservices (`cpm/vmc/vac`) & HA Module Reload
+- **Target Files**: `custom_components/lepas/core/commands.py`, `custom_components/lepas/core/permessi.py`
+- **Root Cause**: Un account secondario (`authorizeType=1`) può ottenere `tUserId` da `auth/login` e `getTuserId`, `vmc/queryList` (`code=0`) e `vmc/setVecDefault` (`code=0`), ma ricevere comunque `A00361` ("User does not exist") su `cpm/checkPassword` (anche con header 1:1 APK `1.0.4`, `User-Agent: Dart/3.4 (dart:io)`, `scene=0/2` e `userId` alternativo), `vmc/queryVehicleAuthority` e `vac/queryAuthRemoteList`, e `A00120` su `vac/query`. L'app ufficiale (`RusCarCntrolViewModel::_refreshTaskIdIfInvalid`) evita la chiamata finché ha `taskId` in cache; su `eu-lepas`, senza registrazione/attivazione profilo TSP (`auth/register`) o con account diverso dal profilo registrato in CPM/VMC, il backend rifiuta il `tUserId` secondario. Inoltre `homeassistant.reload_config_entry` NON ricarica i moduli già importati in `custom_components/lepas/core/*.py`.
+- **Invariant**: Loggare al fallimento di `checkPassword` solo metadati non-PII (`tuid_source`, `tuid_len`, `ql_code`, `auth_type`, `sv_code`, `scene`, `bff`, `ch`, `tenant`, `country`, `pin_len`, `pin_dig`, `cp_http`, `cp_key`, `ql_keys`) senza mai inventare chiamate HTTP extra né eludere `A00361` come errore PIN. Per test dal vivo su moduli `core/*.py` in HA è obbligatorio `ha_restart`.
+- **onFailure Mandate**: Classificare `A00361` in `routing.py` come `reason="config"` senza incrementare il contatore di lockout PIN; evitare retry non deterministi e rimuovere sempre eventuali sonde prima di chiudere.
+- **Forbidden Regex**: `probe_a|queryAuthRemoteList.*_LOGGER\.warning`
+
+## [AB-LEP-006] Lepas EU `channelId: "6"` Alignment & ConfigEntry v1→v2 Migration
+- **Target Files**: `custom_components/lepas/**/*.py`
+- **Root Cause**: L'app ufficiale Lepas EU include `.env.prod` (`CHANNELID=1`), ma a runtime sovrascrive il canale interrogando `/tsp/v1/app/env/defaultEnv` che ritorna `channelId: 6`. Usare `"1"` provoca `A00361` ("User does not exist") su `cpm/checkPassword`, `vmc/queryVehicleAuthority` e `vac/queryAuthRemoteList`.
+- **Invariant**: `PRESET_LEPAS_EU`, `DEFAULTS[CONF_CHANNEL_ID]`, `DEFAULT_CHANNEL_ID` e `CHANNEL_ID` devono restare `"6"`, con `LepasConfigFlow.VERSION >= 2` e `async_migrate_entry` per aggiornare le entry `v1` Lepas EU preservando `chery_eu` (`"2"`) e `custom`.
+- **onFailure Mandate**: Su ricomparsa di `A00361`, verificare `GET /tsp/v1/app/env/defaultEnv` e `entry.data[CONF_CHANNEL_ID]` prima di toccare il flow PIN/lockout.
+- **Forbidden Regex**: `PRESET_LEPAS_EU[^}]*CONF_CHANNEL_ID:\s*["']1["']`

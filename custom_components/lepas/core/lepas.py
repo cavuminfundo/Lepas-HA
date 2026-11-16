@@ -20,7 +20,7 @@ H5 = os.environ.get("LEPAS_H5", "https://eu-lepas.cheryinternational.com/h5")
 APP_BASIC = "Basic bGVnZW5kQXBwOmxlZ2VuZEFwcA=="
 
 TENANT_CODE = os.environ.get("LEPAS_TENANT_CODE", "3000011")
-CHANNEL_ID = os.environ.get("CHANNEL_ID", "1")
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "6")
 COUNTRY_ID = os.environ.get("LEPAS_COUNTRY_ID", "1")          # 1 = UE
 APP_VERSION = "1.1.9"
 APP_VERSION_CODE = "26060602"
