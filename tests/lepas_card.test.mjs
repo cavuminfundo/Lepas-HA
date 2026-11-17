@@ -881,13 +881,13 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   assert.ok(h, "LepasCard._helpers must be exposed");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.19.1");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.20.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.19.1`
+      `/lepas_card/lepas-hero-${c}.png?v=1.20.0`
     );
   }
 
@@ -906,7 +906,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.19.1`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.20.0`
     );
   }
 
@@ -1093,14 +1093,14 @@ test("Direct 1-tap actions call hass.callService immediately", async () => {
   const startInput = card.shadowRoot.querySelector('[data-entity-input="time.lepas_charge_start_time"]');
   startInput.value = "01:30";
   startInput.dispatchEvent(new Event("change", { bubbles: true }));
-  // Select select_option
-  const daysSelect = card.shadowRoot.querySelector('[data-entity-input="select.lepas_charge_days"]');
-  daysSelect.value = "weekend";
-  daysSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  // Charge days chip toggle -> lepas.set_charging_schedule (apply: false)
+  const daySatChip = card.shadowRoot.querySelector('[data-charge-day="6"]');
+  assert.ok(daySatChip, "Saturday charge-day chip missing");
+  daySatChip.click();
 
   await Promise.resolve();
 
-  const sigs = hass.calls.map((c) => `${c.domain}.${c.service}:${c.data.entity_id}`);
+  const sigs = hass.calls.map((c) => `${c.domain}.${c.service}:${c.data.entity_id || ""}`);
   assert.ok(sigs.includes("lock.lock:lock.lepas_lock"));
   assert.ok(sigs.includes("climate.set_hvac_mode:climate.lepas_climate"));
   assert.ok(sigs.includes("climate.set_temperature:climate.lepas_climate"));
@@ -1109,7 +1109,16 @@ test("Direct 1-tap actions call hass.callService immediately", async () => {
   assert.ok(sigs.includes("switch.turn_on:switch.lepas_quick_departure"));
   assert.ok(sigs.includes("number.set_value:number.lepas_climate_duration"));
   assert.ok(sigs.includes("time.set_value:time.lepas_charge_start_time"));
-  assert.ok(sigs.includes("select.select_option:select.lepas_charge_days"));
+  assert.ok(
+    hass.calls.some(
+      (c) =>
+        c.domain === "lepas" &&
+        c.service === "set_charging_schedule" &&
+        c.data.apply === false &&
+        Array.isArray(c.data.days) &&
+        c.data.days.join(",") === "1,2,3,4,5,6"
+    )
+  );
 });
 
 test("State, focus preservation on set hass(), and rejected callService error banner", async (t) => {
@@ -1260,4 +1269,299 @@ test("Security & Privacy: XSS escaping and ZERO VIN or raw GPS coordinates in DO
   assert.ok(!html.includes("L1234567890SECRET"), "VIN from battery must NEVER appear in DOM");
   assert.ok(!html.includes("45.464211"), "Raw latitude must NEVER appear in DOM");
   assert.ok(!html.includes("9.189982"), "Raw longitude must NEVER appear in DOM");
+});
+
+test("v1.20.0 Hero 2:1 stage, separate .hero-meta with data-device, and heroStateBadge DOM stability", () => {
+  const hass = makeFullHass({}, "it");
+  const card = createCard({ title: "Lepas L8" }, hass);
+  const styleText = card.shadowRoot.querySelector("style")?.textContent || "";
+
+  const heroStage = card.shadowRoot.querySelector(".hero-stage");
+  const heroMeta = card.shadowRoot.querySelector(".hero-meta");
+  assert.ok(heroStage, ".hero-stage must exist");
+  assert.ok(heroMeta, ".hero-meta must exist");
+  assert.ok(styleText.includes("aspect-ratio: 2 / 1"), "Hero stage CSS must declare aspect-ratio: 2 / 1");
+  assert.ok(styleText.includes("object-fit: contain"), "Hero image CSS must declare object-fit: contain");
+
+  const heroTitle = heroMeta.querySelector('[data-bind="heroTitle"]');
+  const heroSub = heroMeta.querySelector('[data-bind="heroSub"]');
+  assert.ok(heroTitle, "heroTitle must reside inside .hero-meta");
+  assert.ok(heroSub, "heroSub must reside inside .hero-meta");
+  assert.equal(heroStage.querySelector('[data-bind="heroTitle"]'), null, "heroTitle must NOT overlay .hero-stage");
+  assert.equal(heroMeta.getAttribute("data-device"), "dev_lepas_1", ".hero-meta must keep data-device");
+
+  const badge = heroMeta.querySelector('[data-bind="heroStateBadge"]');
+  assert.ok(badge, "[data-bind='heroStateBadge'] must always exist in DOM");
+  assert.equal(badge.classList.contains("hidden"), false, "Active charging shows heroStateBadge");
+
+  // Switching charging & climate off hides badge via .hidden without rebuilding .hero-stage
+  const nextHass = makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "Idle"),
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", { temperature: 21 }),
+  }, "it");
+  card.hass = nextHass;
+  assert.equal(card.shadowRoot.querySelector(".hero-stage"), heroStage, "DOM skeleton must NOT rebuild on state change");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="heroStateBadge"]').classList.contains("hidden"), true);
+});
+
+test("v1.20.0 SVG icons on tabs & 4 panels, aria-selected sync, and zero stark white active fills", () => {
+  const hass = makeFullHass({}, "it");
+  const card = createCard({ layout: "compact", default_tab: "overview" }, hass);
+  const styleText = card.shadowRoot.querySelector("style")?.textContent || "";
+
+  assert.ok(!styleText.includes(".tab-btn.is-active { background: var(--lp-text)"), "Tab active must NOT use stark white var(--lp-text) background");
+  assert.ok(!styleText.includes(".day-chip.is-expanded { background: var(--lp-text)"), "Expanded day chip must NOT use stark white var(--lp-text) background");
+  assert.ok(!/background:\s*var\(--lp-text\)/.test(styleText), "No element may use background: var(--lp-text)");
+
+  const tabBtns = card.shadowRoot.querySelectorAll("[data-tab]");
+  assert.equal(tabBtns.length, 4);
+  for (const tb of tabBtns) {
+    assert.ok(tb.querySelector("svg"), `Tab ${tb.getAttribute("data-tab")} must contain inline <svg>`);
+    const expectedSelected = tb.getAttribute("data-tab") === "overview" ? "true" : "false";
+    assert.equal(tb.getAttribute("aria-selected"), expectedSelected);
+  }
+
+  for (const panelName of ["overview", "climate", "charging", "security"]) {
+    const panel = card.shadowRoot.querySelector(`[data-panel="${panelName}"]`);
+    assert.ok(panel, `Panel ${panelName} missing`);
+    assert.ok(panel.querySelector("svg"), `Panel ${panelName} must render inline SVG icons`);
+  }
+
+  // Tab switch updates aria-selected
+  card.shadowRoot.querySelector('[data-tab="charging"]').click();
+  assert.equal(card.shadowRoot.querySelector('[data-tab="overview"]').getAttribute("aria-selected"), "false");
+  assert.equal(card.shadowRoot.querySelector('[data-tab="charging"]').getAttribute("aria-selected"), "true");
+
+  // Dynamic button preserves icon & exact textContent across _applyBindings and confirmation
+  const unlockBtn = card.shadowRoot.querySelector('[data-action-id="unlock"]');
+  assert.ok(unlockBtn.querySelector("svg"), "Dynamic unlock button must keep SVG icon after _applyBindings");
+  assert.equal(unlockBtn.textContent, "Sblocca");
+  unlockBtn.click();
+  assert.ok(unlockBtn.querySelector("svg"), "Dynamic unlock button must keep SVG icon during confirm");
+  assert.equal(unlockBtn.textContent, "Conferma?");
+  card.disconnectedCallback();
+});
+
+test("v1.20.0 formatMetric strips .00 on odometer km even with hass.formatEntityState while preserving bar/kWh decimals", () => {
+  const h = LepasCard._helpers;
+  assert.equal(typeof h.formatMetric, "function");
+
+  assert.equal(h.formatMetric(makeState("sensor.lepas_odometer", "551.0", { unit_of_measurement: "km" }), "it"), "551 km");
+  assert.equal(h.formatMetric(makeState("sensor.lepas_tire_pressure_front_left", "2.55", { unit_of_measurement: "bar" }), "it"), "2.55 bar");
+  assert.equal(h.formatMetric(makeState("sensor.lepas_home_charging_energy", "34.94", { unit_of_measurement: "kWh" }), "it"), "34.94 kWh");
+
+  const hass = makeFullHass({
+    "sensor.lepas_odometer": makeState("sensor.lepas_odometer", "551.0", { unit_of_measurement: "km" }),
+    "sensor.lepas_tire_pressure_front_left": makeState("sensor.lepas_tire_pressure_front_left", "2.55", { unit_of_measurement: "bar" }),
+    "sensor.lepas_home_charging_energy": makeState("sensor.lepas_home_charging_energy", "34.94", { unit_of_measurement: "kWh" }),
+  }, "it");
+  hass.formatEntityState = (stateObj) => {
+    if (stateObj && stateObj.entity_id === "sensor.lepas_odometer") return "551,00 km";
+    return `${stateObj.state} ${stateObj.attributes?.unit_of_measurement || ""}`.trim();
+  };
+
+  const card = createCard({}, hass);
+  const odoVal = card.shadowRoot.querySelector('[data-bind="mOdoVal"]');
+  assert.equal(odoVal.textContent, "551 km");
+  assert.ok(card.shadowRoot.querySelector('[data-bind="heroSub"]').textContent.includes("551 km"));
+  assert.ok(card.shadowRoot.querySelector('[data-tpms="front_left"]').textContent.includes("2.55 bar"));
+  assert.ok(card.shadowRoot.querySelector('[data-bind="homeEnergyBadge"]').textContent.includes("34.94 kWh"));
+});
+
+test("v1.20.0 Scheduled Charging L-D chips, single-day guard, presets, onFailure fallback/error, and manual vs departure mode", async () => {
+  const h = LepasCard._helpers;
+  assert.deepEqual(h.computeToggleDays([3], 3), [3], "computeToggleDays single-day guard must keep [3]");
+  assert.equal(h.presetForDays([6, 7]), "weekend");
+  assert.deepEqual(h.presetDaysForKey("weekdays"), [1, 2, 3, 4, 5]);
+
+  let rejectError = null;
+  const hass = makeFullHass({
+    "switch.lepas_sync_charge_to_departure": makeState("switch.lepas_sync_charge_to_departure", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30", {
+      planned_charge_start: "01:00",
+    }),
+  }, "it");
+  hass.callService = (domain, service, data) => {
+    hass.calls.push({ domain, service, data });
+    if (rejectError && domain === "lepas" && service === "set_charging_schedule") {
+      return Promise.reject(rejectError);
+    }
+    return Promise.resolve();
+  };
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hass);
+  const dayChips = card.shadowRoot.querySelectorAll("[data-charge-day]");
+  assert.equal(dayChips.length, 7);
+  for (let d = 1; d <= 5; d += 1) {
+    assert.equal(card.shadowRoot.querySelector(`[data-charge-day="${d}"]`).classList.contains("is-active"), true);
+  }
+  assert.equal(card.shadowRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), false);
+  assert.equal(card.shadowRoot.querySelector('[data-charge-day="7"]').classList.contains("is-active"), false);
+
+  const heroStageBefore = card.shadowRoot.querySelector(".hero-stage");
+
+  // Tap day 6 -> optimistic update + lepas.set_charging_schedule(apply=false) without DOM rebuild or tab reset
+  card.shadowRoot.querySelector('[data-charge-day="6"]').click();
+  await Promise.resolve();
+  assert.equal(card.shadowRoot.querySelector(".hero-stage"), heroStageBefore);
+  assert.equal(card.shadowRoot.querySelector('[data-tab="charging"]').classList.contains("is-active"), true);
+  assert.equal(card.shadowRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), true);
+  assert.deepEqual(hass.calls[0], {
+    domain: "lepas",
+    service: "set_charging_schedule",
+    data: { days: [1, 2, 3, 4, 5, 6], apply: false },
+  });
+
+  // Preset weekend
+  card.shadowRoot.querySelector('[data-charge-preset="weekend"]').click();
+  await Promise.resolve();
+  assert.deepEqual(hass.calls[1], {
+    domain: "lepas",
+    service: "set_charging_schedule",
+    data: { days: [6, 7], apply: false },
+  });
+
+  // Fallback when set_charging_schedule fails with "service not found" and days match preset "weekend"
+  rejectError = new Error("Service lepas.set_charging_schedule not found");
+  const cardFb = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
+  cardFb._hass.callService = (domain, service, data) => {
+    cardFb._hass.calls.push({ domain, service, data });
+    if (domain === "lepas" && service === "set_charging_schedule") {
+      return Promise.reject(rejectError);
+    }
+    return Promise.resolve();
+  };
+  cardFb.shadowRoot.querySelector('[data-charge-preset="weekend"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(
+    cardFb._hass.calls.some(
+      (c) =>
+        c.domain === "select" &&
+        c.service === "select_option" &&
+        c.data.entity_id === "select.lepas_charge_days" &&
+        c.data.option === "weekend"
+    ),
+    "Must fallback to select.select_option when set_charging_schedule service not found"
+  );
+
+  // Generic error clears optimistic days back to entity state and shows error banner
+  const cardErr = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
+  cardErr._hass.callService = (domain, service, data) => {
+    cardErr._hass.calls.push({ domain, service, data });
+    if (domain === "lepas") return Promise.reject(new Error("Gateway busy"));
+    return Promise.resolve();
+  };
+  cardErr.shadowRoot.querySelector('[data-charge-day="6"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(cardErr.shadowRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), false);
+  const errEl = cardErr.shadowRoot.querySelector('[role="alert"].error-banner');
+  assert.equal(errEl.classList.contains("hidden"), false);
+  assert.ok(errEl.textContent.includes("Gateway busy"));
+
+  // Single-day guard in DOM: tapping the sole active day [3] never sends days: []
+  const singleHass = makeFullHass({
+    "select.lepas_charge_days": makeState("select.lepas_charge_days", "custom", {
+      options: ["all_days", "weekdays", "weekend", "mon_wed_fri", "tue_thu_sat", "custom"],
+      days: [3],
+    }),
+  }, "it");
+  const singleCard = createCard({ default_tab: "charging" }, singleHass);
+  singleCard.shadowRoot.querySelector('[data-charge-day="3"]').click();
+  await Promise.resolve();
+  assert.equal(singleCard.shadowRoot.querySelector('[data-charge-day="3"]').classList.contains("is-active"), true);
+  assert.equal(
+    singleHass.calls.some((c) => Array.isArray(c.data && c.data.days) && c.data.days.length === 0),
+    false,
+    "Must NEVER send days: []"
+  );
+
+  // Segmented mode: manual vs departure
+  const manualBox = card.shadowRoot.querySelector(".manual-charge-box");
+  const depBox = card.shadowRoot.querySelector(".departure-charge-box");
+  assert.ok(manualBox && depBox);
+  assert.equal(manualBox.classList.contains("hidden"), false);
+  assert.equal(depBox.classList.contains("hidden"), true);
+
+  // Tapping manual when already off is a no-op
+  const beforeManualCalls = hass.calls.length;
+  card.shadowRoot.querySelector('[data-charge-mode="manual"]').click();
+  assert.equal(hass.calls.length, beforeManualCalls);
+
+  // Tapping departure when off calls switch.turn_on
+  card.shadowRoot.querySelector('[data-charge-mode="departure"]').click();
+  await Promise.resolve();
+  assert.deepEqual(hass.calls[beforeManualCalls], {
+    domain: "switch",
+    service: "turn_on",
+    data: { entity_id: "switch.lepas_sync_charge_to_departure" },
+  });
+
+  // When sync_charge_to_departure is ON, .departure-charge-box is visible and shows planned_charge_start "01:00"
+  const depHass = makeFullHass({
+    "switch.lepas_sync_charge_to_departure": makeState("switch.lepas_sync_charge_to_departure", "on"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30", {
+      planned_charge_start: "01:00",
+    }),
+  }, "it");
+  card.hass = depHass;
+  assert.equal(card.shadowRoot.querySelector(".manual-charge-box").classList.contains("hidden"), true);
+  assert.equal(card.shadowRoot.querySelector(".departure-charge-box").classList.contains("hidden"), false);
+  assert.ok(card.shadowRoot.querySelector(".departure-charge-box").textContent.includes("01:00"));
+
+  // Tapping manual when on calls switch.turn_off
+  card.shadowRoot.querySelector('[data-charge-mode="manual"]').click();
+  await Promise.resolve();
+  assert.deepEqual(depHass.calls[0], {
+    domain: "switch",
+    service: "turn_off",
+    data: { entity_id: "switch.lepas_sync_charge_to_departure" },
+  });
+});
+
+test("v1.20.0 Translated departure_climate_mode options in it, en, nl", () => {
+  const h = LepasCard._helpers;
+  assert.equal(h.translateOption("departure_climate_mode", "at_home", "it"), "Solo a casa");
+  assert.equal(h.translateOption("departure_climate_mode", "anywhere", "it"), "Ovunque");
+  assert.equal(h.translateOption("departure_climate_mode", "off", "it"), "Disattivato");
+  assert.equal(h.translateOption("departure_climate_mode", "at_home", "en"), "Home only");
+  assert.equal(h.translateOption("departure_climate_mode", "at_home", "nl"), "Alleen thuis");
+
+  for (const [lang, expected] of [
+    ["it", ["Solo a casa", "Ovunque", "Disattivato"]],
+    ["en", ["Home only", "Anywhere", "Off"]],
+    ["nl", ["Alleen thuis", "Overal", "Uitgeschakeld"]],
+  ]) {
+    const card = createCard({ default_tab: "charging" }, makeFullHass({}, lang));
+    const sel = card.shadowRoot.querySelector('[data-entity-input="select.lepas_departure_climate_mode"]');
+    assert.ok(sel, `departure_climate_mode select missing for ${lang}`);
+    const optionTexts = sel.querySelectorAll("option").map((o) => o.textContent.trim());
+    assert.deepEqual(optionTexts, expected);
+    assert.equal(optionTexts.includes("at_home"), false);
+  }
+});
+
+test("v1.20.0 TPMS localized wheel labels and grouped security/closures buttons", () => {
+  const cardIt = createCard({ default_tab: "security" }, makeFullHass({}, "it"));
+  assert.ok(cardIt.shadowRoot.querySelector('[data-tpms="front_left"]').textContent.includes("ANT SX"));
+  assert.ok(cardIt.shadowRoot.querySelector('[data-tpms="front_right"]').textContent.includes("ANT DX"));
+  assert.ok(cardIt.shadowRoot.querySelector('[data-tpms="rear_left"]').textContent.includes("POST SX"));
+  assert.ok(cardIt.shadowRoot.querySelector('[data-tpms="rear_right"]').textContent.includes("POST DX"));
+
+  const cardEn = createCard({ default_tab: "security" }, makeFullHass({}, "en"));
+  assert.ok(cardEn.shadowRoot.querySelector('[data-tpms="front_left"]').textContent.includes("FL"));
+  assert.ok(cardEn.shadowRoot.querySelector('[data-tpms="front_right"]').textContent.includes("FR"));
+  assert.ok(cardEn.shadowRoot.querySelector('[data-tpms="rear_left"]').textContent.includes("RL"));
+  assert.ok(cardEn.shadowRoot.querySelector('[data-tpms="rear_right"]').textContent.includes("RR"));
+
+  const closuresGrp = cardIt.shadowRoot.querySelector('[data-security-group="closures"]');
+  const securityGrp = cardIt.shadowRoot.querySelector('[data-security-group="security"]');
+  assert.ok(closuresGrp, "Closures group missing");
+  assert.ok(securityGrp, "Security group missing");
+  assert.ok(closuresGrp.querySelector('[data-action-id="unlock"]'));
+  assert.ok(closuresGrp.querySelector('[data-action-id="trunk_open"]'));
+  assert.ok(securityGrp.querySelector('[data-action-id="alarm_toggle"]'));
+  assert.ok(securityGrp.querySelector('[data-action-id="locate_gps"]'));
 });

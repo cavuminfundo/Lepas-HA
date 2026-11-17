@@ -16,6 +16,22 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.20.0 — 2026-11-17
+
+### 🇬🇧 English
+
+- **Uncropped `2:1` Lepas L8 Hero Stage & Separated Meta Bar**: Updated the `custom:lepas-card` hero stage to a full `2:1` aspect ratio with `object-fit: contain` so the Lepas L8 studio render is never cropped, moving the vehicle identity, live connection/location status, SoC ring, and lock summary into a dedicated meta bar directly beneath the vehicle stage, with asset cache-busting bumped to `?v=1.20.0`.
+- **Inline SVG Icons, WCAG 1.4.1 Tab Bar & Integer Metric Formatting**: Replaced generic icons with a crisp inline SVG icon system and restrained OEM micro-animations across all four tabs (`Overview`, `Climate`, `Charging`, `Security`), styled the active tab with a WCAG 1.4.1-compliant indicator underline without blinding white fills, and formatted integer distance and duration readouts cleanly (e.g., `551 km` instead of `551,00 km`).
+- **Live Charging Telemetry, Interactive `Mon–Sun` Chips & Mode Selector**: Added a live Charging telemetry grid with a direct Start/Stop charging toggle and an animated energy flow bar, and redesigned Scheduled Charging with interactive `Mon–Sun` (`L–D`) weekday chips plus quick presets wired to `lepas.set_charging_schedule` (`apply: false`) alongside a prominent *Manual time* vs *Follow departure* (`switch.lepas_sync_charge_to_departure`) mode selector.
+- **Localized `departure_climate_mode` / TPMS Labels, Animated SUV Blueprint & Grouped Closures**: Translated `departure_climate_mode` selector options across EN/IT/NL (`Home only` / `Anywhere` / `Off`, `Solo a casa` / `Ovunque` / `Disattivato`, `Alleen thuis` / `Overal` / `Uitgeschakeld`), added localized TPMS corner labels (`ANT SX` / `ANT DX` / `POST SX` / `POST DX` in IT, `FL` / `FR` / `RL` / `RR` in EN), refined the animated top-down SUV SVG blueprint, and organized Security & Closures controls into clean functional groups.
+
+### 🇮🇹 Italiano
+
+- **Hero Stage `2:1` Senza Ritagli & Barra Meta Separata**: Aggiornato il riquadro hero di `custom:lepas-card` al formato pieno `2:1` con `object-fit: contain` per mostrare il render studio della Lepas L8 senza alcun ritaglio, spostando identità del veicolo, stato connessione/posizione, anello SoC e riepilogo serrature in una barra meta dedicata sotto l'immagine, con query anti-cache degli asset aggiornata a `?v=1.20.0`.
+- **Icone SVG Inline, Tab WCAG 1.4.1 & Formattazione Intera dei Metrici**: Introdotto un sistema nitido di icone SVG inline con micro-animazioni OEM sobrie in tutte e 4 le schede (`Plancia`, `Clima`, `Ricarica`, `Sicurezza`), sottolineatura attiva conforme a WCAG 1.4.1 priva di riempimenti bianchi abbaglianti e formattazione pulita dei valori interi di distanza e durata (es. `551 km` invece di `551,00 km`).
+- **Telemetria Ricarica Live, Chip `L–D` Interattivi & Selettore Modalità**: Aggiunta la griglia di telemetria Ricarica live con toggle diretto Avvia/Ferma e barra animata del flusso energetico, e riprogettata la Ricarica Programmata con chip interattivi dei giorni `L–D` (`Mon–Sun`) + preset rapidi collegati a `lepas.set_charging_schedule` (`apply: false`) insieme a un selettore chiaro tra *Orario manuale* e *Segui partenza* (`switch.lepas_sync_charge_to_departure`).
+- **Etichette `departure_climate_mode` / TPMS Tradotte, Blueprint SUV Animato & Controlli Raggruppati**: Tradotte le opzioni di `departure_climate_mode` in IT/EN/NL (`Solo a casa` / `Ovunque` / `Disattivato`, `Home only` / `Anywhere` / `Off`, `Alleen thuis` / `Overal` / `Uitgeschakeld`), localizzate le etichette ruote TPMS (`ANT SX` / `ANT DX` / `POST SX` / `POST DX` in IT, `FL` / `FR` / `RL` / `RR` in EN), perfezionato il blueprint SVG animato del SUV e raggruppati in modo ordinato i comandi di Sicurezza e Aperture.
+
 ## v1.19.1 — 2026-11-17
 
 ### 🇬🇧 English

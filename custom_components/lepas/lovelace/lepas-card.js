@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.19.1).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.20.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,12 +11,19 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.19.1";
+  var CARD_VERSION = "1.20.0";
   var CONFIRM_MS = 4000;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
   var DAY_SLUGS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+  var CHARGE_DAY_PRESETS = {
+    all_days: [1, 2, 3, 4, 5, 6, 7],
+    weekdays: [1, 2, 3, 4, 5],
+    weekend: [6, 7],
+    mon_wed_fri: [1, 3, 5],
+    tue_thu_sat: [2, 4, 6],
+  };
 
   var COLOR_ALIASES = {
     grey: "grey",
@@ -46,13 +53,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.19.1",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.19.1",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.19.1",
-    black: "/lepas_card/lepas-hero-black.png?v=1.19.1",
-    white: "/lepas_card/lepas-hero-white.png?v=1.19.1",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.20.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.20.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.20.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.20.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.20.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.19.1";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.20.0";
 
   var SENSITIVE_ACTIONS = {
     unlock: true,
@@ -180,6 +187,29 @@
       current: "Corrente",
       remaining: "Residuo",
       fastPort: "Presa rapida",
+      startCharging: "Avvia ricarica",
+      stopCharging: "Ferma ricarica",
+      chargeModeManual: "Orario manuale",
+      chargeModeDeparture: "Segui partenza",
+      presetAll: "Tutti",
+      presetWeekdays: "Lun–Ven",
+      presetWeekend: "Weekend",
+      followDepartureTitle: "Avvio automatico per partenza",
+      noDeparturePlanned: "Nessuna partenza attiva: abilita un giorno sotto.",
+      closuresGroup: "Aperture e accessi",
+      securityGroup: "Sicurezza e posizione",
+      tpmsLabels: { front_left: "ANT SX", front_right: "ANT DX", rear_left: "POST SX", rear_right: "POST DX" },
+      options: {
+        departure_climate_mode: { at_home: "Solo a casa", anywhere: "Ovunque", off: "Disattivato" },
+        charge_days: {
+          all_days: "Tutti i giorni",
+          weekdays: "Lun–Ven",
+          weekend: "Weekend",
+          mon_wed_fri: "Lun / Mer / Ven",
+          tue_thu_sat: "Mar / Gio / Sab",
+          custom: "Personalizzato",
+        },
+      },
     },
     en: {
       tabs: { overview: "Overview", climate: "Climate", charging: "Charging", security: "Security" },
@@ -293,6 +323,29 @@
       current: "Current",
       remaining: "Remaining",
       fastPort: "Fast port",
+      startCharging: "Start charging",
+      stopCharging: "Stop charging",
+      chargeModeManual: "Manual time",
+      chargeModeDeparture: "Follow departure",
+      presetAll: "All",
+      presetWeekdays: "Mon–Fri",
+      presetWeekend: "Weekend",
+      followDepartureTitle: "Auto-start before departure",
+      noDeparturePlanned: "No active departure: enable a day below.",
+      closuresGroup: "Closures and access",
+      securityGroup: "Security and location",
+      tpmsLabels: { front_left: "FL", front_right: "FR", rear_left: "RL", rear_right: "RR" },
+      options: {
+        departure_climate_mode: { at_home: "Home only", anywhere: "Anywhere", off: "Off" },
+        charge_days: {
+          all_days: "Every day",
+          weekdays: "Mon–Fri",
+          weekend: "Weekend",
+          mon_wed_fri: "Mon / Wed / Fri",
+          tue_thu_sat: "Tue / Thu / Sat",
+          custom: "Custom",
+        },
+      },
     },
     nl: {
       tabs: { overview: "Overzicht", climate: "Klimaat", charging: "Laden", security: "Beveiliging" },
@@ -406,6 +459,29 @@
       current: "Stroom",
       remaining: "Resterend",
       fastPort: "Snellaadpoort",
+      startCharging: "Laden starten",
+      stopCharging: "Laden stoppen",
+      chargeModeManual: "Handmatige tijd",
+      chargeModeDeparture: "Volg vertrek",
+      presetAll: "Alle",
+      presetWeekdays: "Ma–Vr",
+      presetWeekend: "Weekend",
+      followDepartureTitle: "Automatische start voor vertrek",
+      noDeparturePlanned: "Geen actief vertrek: schakel hieronder een dag in.",
+      closuresGroup: "Sluitingen en toegang",
+      securityGroup: "Beveiliging en locatie",
+      tpmsLabels: { front_left: "LV", front_right: "RV", rear_left: "LA", rear_right: "RA" },
+      options: {
+        departure_climate_mode: { at_home: "Alleen thuis", anywhere: "Overal", off: "Uitgeschakeld" },
+        charge_days: {
+          all_days: "Elke dag",
+          weekdays: "Ma–Vr",
+          weekend: "Weekend",
+          mon_wed_fri: "Ma / Wo / Vr",
+          tue_thu_sat: "Di / Do / Za",
+          custom: "Aangepast",
+        },
+      },
     },
   };
 
@@ -497,6 +573,144 @@
     }
   }
 
+  var SVG_PATHS = {
+    overview: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+    climate: '<path d="M12 12c0-3 2.5-5 5-5 1.8 0 3 1.2 3 3 0 2.2-2 3.5-5 3.5"/><path d="M12 12c3 0 5 2.5 5 5 0 1.8-1.2 3-3 3-2.2 0-3.5-2-3.5-5"/><path d="M12 12c0 3-2.5 5-5 5-1.8 0-3-1.2-3-3 0-2.2 2-3.5 5-3.5"/><path d="M12 12c-3 0-5-2.5-5-5 0-1.8 1.2-3 3-3 2.2 0 3.5 2 3.5 5"/><circle cx="12" cy="12" r="1.5"/>',
+    charging: '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"/>',
+    security: '<path d="M12 21s7-3.6 7-9.5V5.5L12 3 5 5.5v6C5 17.4 12 21 12 21z"/><path d="M9.5 12l1.8 1.8L15 10"/>',
+    battery: '<rect x="2" y="7" width="17" height="10" rx="2"/><line x1="22" y1="10" x2="22" y2="14"/><polygon points="11 9.5 8 12.5 10.5 12.5 9.5 15 13 11.5 10.5 11.5 11 9.5"/>',
+    bolt: '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"/>',
+    route: '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H14a3 3 0 0 0 0-6H10a3 3 0 0 1 0-6h5.5"/>',
+    gauge: '<path d="M4.5 17.5A9 9 0 1 1 19.5 17.5"/><line x1="12" y1="13" x2="16" y2="9"/><circle cx="12" cy="13" r="1.5"/>',
+    plug: '<path d="M9 3v4"/><path d="M15 3v4"/><path d="M7 7h10v4a5 5 0 0 1-10 0V7z"/><path d="M12 16v5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>',
+    volt: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/>',
+    current: '<polyline points="3 12 7 12 10 5 14 19 17 12 21 12"/>',
+    home: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-5.5h5V20"/>',
+    pin: '<path d="M12 21s-6-5.2-6-10.5a6 6 0 1 1 12 0C18 15.8 12 21 12 21z"/><circle cx="12" cy="10.5" r="2"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.7"/>',
+    fan: '<path d="M12 12c0-3 2.5-5 5-5 1.8 0 3 1.2 3 3 0 2.2-2 3.5-5 3.5"/><path d="M12 12c3 0 5 2.5 5 5 0 1.8-1.2 3-3 3-2.2 0-3.5-2-3.5-5"/><path d="M12 12c0 3-2.5 5-5 5-1.8 0-3-1.2-3-3 0-2.2 2-3.5 5-3.5"/><path d="M12 12c-3 0-5-2.5-5-5 0-1.8 1.2-3 3-3 2.2 0 3.5 2 3.5 5"/><circle cx="12" cy="12" r="1.5"/>',
+    snow: '<line x1="12" y1="3" x2="12" y2="21"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5"/><line x1="19.8" y1="7.5" x2="4.2" y2="16.5"/>',
+    flame: '<path d="M12 3c2.5 3 5 5.8 5 9.5a5 5 0 1 1-10 0c0-2.4 1.3-4.6 3-6.5.2 1.8 1.2 2.8 2 3.2.2-2.2 0-4.2 0-6.2z"/>',
+    trunk: '<path d="M3 16h14l2-4.5L15 8H6L3 12v4z"/><circle cx="7" cy="17.5" r="2"/><circle cx="16.5" cy="17.5" r="2"/><path d="M17 9.5L21 6"/>',
+    lights: '<path d="M9 7h4a5 5 0 0 1 0 10H9V7z"/><line x1="3" y1="9" x2="6" y2="9"/><line x1="3" y1="12" x2="6" y2="12"/><line x1="3" y1="15" x2="6" y2="15"/>',
+    wake: '<path d="M12 3v7"/><path d="M7.1 5.6a8 8 0 1 0 9.8 0"/>',
+    refresh: '<polyline points="20 5 20 10 15 10"/><path d="M19.5 14a7.5 7.5 0 1 1-1.8-6.4L20 10"/>',
+    gps: '<circle cx="12" cy="12" r="6"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>',
+    shield: '<path d="M12 21s7-3.6 7-9.5V5.5L12 3 5 5.5v6C5 17.4 12 21 12 21z"/>',
+    seat: '<path d="M7 4l2 10h8l2 5"/><path d="M6 17h9"/><circle cx="7" cy="4" r="1"/>',
+    windshield: '<path d="M4 16L7 7h10l3 9H4z"/><path d="M9 19c.8-.9.8-2.1 0-3"/><path d="M15 19c.8-.9.8-2.1 0-3"/>',
+    rear_defrost: '<rect x="4" y="6" width="16" height="10" rx="2"/><path d="M8.5 19c.8-.9.8-2.1 0-3"/><path d="M12 19c.8-.9.8-2.1 0-3"/><path d="M15.5 19c.8-.9.8-2.1 0-3"/>',
+    steering: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><line x1="4.5" y1="10" x2="10" y2="11.5"/><line x1="19.5" y1="10" x2="14" y2="11.5"/><line x1="12" y1="14" x2="12" y2="20"/>',
+    window: '<rect x="4" y="5" width="16" height="14" rx="2"/><line x1="4" y1="12" x2="20" y2="12"/>',
+    sunroof: '<path d="M4 15h16"/><path d="M6 15l3-6h8l1 3"/>',
+    tire: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/><line x1="12" y1="3.5" x2="12" y2="8.8"/><line x1="12" y1="15.2" x2="12" y2="20.5"/><line x1="3.5" y1="12" x2="8.8" y2="12"/><line x1="15.2" y1="12" x2="20.5" y2="12"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>',
+    check: '<polyline points="4 12.5 9.5 18 20 6"/>',
+    alert: '<path d="M12 3L2.5 19.5h19L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r="0.8"/>',
+    thermometer: '<path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a3.5 3.5 0 1 0 4 0z"/>',
+    minus: '<line x1="5" y1="12" x2="19" y2="12"/>',
+    plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  };
+
+  function svgIcon(name, cls) {
+    var body = SVG_PATHS[String(name || "")] || '<circle cx="12" cy="12" r="4"/>';
+    var clsAttr = "lp-ico" + (cls ? " " + escapeHtml(cls) : "");
+    return '<svg class="' + clsAttr + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + "</svg>";
+  }
+
+  function formatMetric(s, lang) {
+    if (!s || s.state == null) return "—";
+    var rawStr = String(s.state).trim();
+    if (!rawStr || rawStr === "unavailable" || rawStr === "unknown") return "—";
+    var u = (s.attributes && s.attributes.unit_of_measurement) ? String(s.attributes.unit_of_measurement) : "";
+    var n = Number(rawStr);
+    if (isNaN(n) || !isFinite(n)) return u ? rawStr + " " + u : rawStr;
+
+    var dp = (s.attributes && typeof s.attributes.suggested_display_precision === "number")
+      ? s.attributes.suggested_display_precision
+      : null;
+    var v;
+    if (dp !== null && dp >= 0 && !(dp === 0 && (u === "km" || u === "mi" || u === "min" || u === "%" || u === "W"))) {
+      v = n.toFixed(dp);
+    } else if (u === "km" || u === "mi" || u === "min" || u === "%" || u === "W") {
+      v = String(Math.round(n));
+    } else if (u === "bar") {
+      v = n.toFixed(2);
+    } else if (u === "kWh" || u === "Wh" || u === "MWh") {
+      v = String(Math.round(n * 100) / 100);
+    } else if (u === "°C" || u === "°F" || u === "A" || u === "kW") {
+      v = String(Math.round(n * 10) / 10);
+    } else if (Number.isInteger(n)) {
+      v = String(n);
+    } else {
+      v = String(Math.round(n * 100) / 100);
+    }
+    return u ? v + " " + u : v;
+  }
+
+  function translateOption(kind, val, lang) {
+    var code = String(lang || "en").slice(0, 2).toLowerCase();
+    var dict = I18N[code] || I18N.en;
+    var key = String(val == null ? "" : val);
+    if (dict && dict.options && dict.options[kind] && Object.prototype.hasOwnProperty.call(dict.options[kind], key)) {
+      return dict.options[kind][key];
+    }
+    if (I18N.en && I18N.en.options && I18N.en.options[kind] && Object.prototype.hasOwnProperty.call(I18N.en.options[kind], key)) {
+      return I18N.en.options[kind][key];
+    }
+    return key;
+  }
+
+  function normalizeDaysList(raw) {
+    if (!Array.isArray(raw)) return null;
+    var seen = Object.create(null);
+    var out = [];
+    for (var i = 0; i < raw.length; i += 1) {
+      var n = parseInt(raw[i], 10);
+      if (n >= 1 && n <= 7 && !seen[n]) {
+        seen[n] = true;
+        out.push(n);
+      }
+    }
+    out.sort(function (a, b) { return a - b; });
+    return out.length ? out : null;
+  }
+
+  function presetDaysForKey(key) {
+    var k = String(key || "");
+    if (!Object.prototype.hasOwnProperty.call(CHARGE_DAY_PRESETS, k)) return null;
+    return CHARGE_DAY_PRESETS[k].slice();
+  }
+
+  function presetForDays(days) {
+    var norm = normalizeDaysList(days);
+    if (!norm) return "custom";
+    var keys = Object.keys(CHARGE_DAY_PRESETS);
+    for (var i = 0; i < keys.length; i += 1) {
+      var preset = CHARGE_DAY_PRESETS[keys[i]];
+      if (preset.length === norm.length && preset.join(",") === norm.join(",")) {
+        return keys[i];
+      }
+    }
+    return "custom";
+  }
+
+  function computeToggleDays(days, dayNum) {
+    var cur = normalizeDaysList(days) || [];
+    var d = parseInt(dayNum, 10);
+    if (!(d >= 1 && d <= 7)) {
+      return cur.length ? cur : [1, 2, 3, 4, 5, 6, 7];
+    }
+    var idx = cur.indexOf(d);
+    if (idx >= 0) {
+      if (cur.length <= 1) return cur.slice();
+      return cur.filter(function (x) { return x !== d; });
+    }
+    return cur.concat([d]).sort(function (a, b) { return a - b; });
+  }
+
   function buildStyles() {
     return [
       ":host {",
@@ -522,88 +736,130 @@
       ".sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }",
       ".hidden { display: none !important; }",
       ".num { font-variant-numeric: tabular-nums; }",
+      ".lp-ico { width: 16px; height: 16px; flex-shrink: 0; display: block; }",
+      ".tab-ico { width: 18px; height: 18px; }",
+      ".kpi-ico, .sec-ico, .stat-ico, .meta-ico, .tpms-ico { width: 14px; height: 14px; color: var(--lp-text-secondary); }",
+      ".btn-ico { width: 16px; height: 16px; }",
       "ha-card { display: block; width: 100%; background: var(--lp-canvas); border: 1px solid var(--lp-border); border-radius: 16px; overflow: hidden; color: var(--lp-text); box-shadow: none; }",
       ".cockpit-grid { display: flex; flex-direction: column; gap: 10px; padding: 10px; }",
       ".hero-region { display: flex; flex-direction: column; gap: 8px; }",
-      ".hero-card { position: relative; min-height: 196px; border-radius: 12px; overflow: hidden; background: var(--lp-surface); border: 1px solid var(--lp-border); display: flex; flex-direction: column; justify-content: space-between; }",
-      ".hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 56%; pointer-events: none; }",
-      ".hero-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(17, 19, 23, 0.62) 0%, rgba(17, 19, 23, 0.12) 45%, rgba(24, 27, 32, 0.88) 84%, #181B20 100%); pointer-events: none; }",
-      ".hero-inner { position: relative; z-index: 1; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 196px; gap: 12px; }",
-      ".hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }",
-      ".status-pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; min-height: 30px; border-radius: 999px; background: rgba(17, 19, 23, 0.78); border: 1px solid var(--lp-border); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); font-size: 0.74rem; font-weight: 600; color: var(--lp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72%; }",
+      ".hero-card { border-radius: 12px; overflow: hidden; background: var(--lp-surface); border: 1px solid var(--lp-border); display: flex; flex-direction: column; }",
+      ".hero-stage { position: relative; aspect-ratio: 2 / 1; width: 100%; background: #14171D; overflow: hidden; }",
+      ".hero-img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }",
+      ".hero-overlay-top { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; pointer-events: none; z-index: 1; }",
+      ".hero-overlay-top .status-pill, .hero-overlay-top .soc-btn { pointer-events: auto; }",
+      ".status-pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; min-height: 30px; border-radius: 999px; background: rgba(17, 19, 23, 0.82); border: 1px solid var(--lp-border); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); font-size: 0.74rem; font-weight: 600; color: var(--lp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72%; }",
       ".status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--lp-text-muted); }",
       ".status-dot.is-online { background: var(--lp-emerald); }",
       ".status-dot.is-offline { background: var(--lp-coral); }",
-      ".soc-btn { position: relative; width: 54px; height: 54px; padding: 0; border-radius: 999px; border: 1px solid var(--lp-border); background: rgba(17, 19, 23, 0.82); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }",
-      ".soc-btn svg { position: absolute; inset: 2px; width: 48px; height: 48px; transform: rotate(-90deg); }",
+      ".soc-btn { position: relative; width: 54px; height: 54px; padding: 0; border-radius: 999px; border: 1px solid var(--lp-border); background: rgba(17, 19, 23, 0.84); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }",
+      ".soc-btn.is-charging { border-color: rgba(52, 211, 153, 0.48); }",
+      ".soc-btn svg.soc-svg { position: absolute; inset: 2px; width: 48px; height: 48px; transform: rotate(-90deg); }",
       ".soc-ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 3.2; }",
       ".soc-ring-fg { fill: none; stroke: var(--lp-emerald); stroke-width: 3.2; stroke-linecap: round; }",
       ".soc-ring-fg.is-warn { stroke: var(--lp-amber); }",
       ".soc-ring-fg.is-low { stroke: var(--lp-coral); }",
       ".soc-val { position: relative; font-size: 0.78rem; font-weight: 700; color: var(--lp-text); line-height: 1; }",
-      ".hero-bottom { margin-top: auto; cursor: pointer; border-radius: 8px; padding: 2px 0; }",
-      ".hero-title { font-size: 1.28rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; color: var(--lp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
-      ".hero-sub { font-size: 0.8rem; color: var(--lp-text-secondary); margin-top: 3px; min-height: 1.2em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+      ".soc-chg-ico { position: absolute; bottom: 4px; display: inline-flex; color: var(--lp-emerald); pointer-events: none; }",
+      ".soc-chg-ico .lp-ico { width: 10px; height: 10px; }",
+      ".hero-meta { padding: 12px 14px; border-top: 1px solid var(--lp-border); background: var(--lp-surface); display: flex; flex-direction: column; gap: 3px; }",
+      ".hero-meta[data-device] { cursor: pointer; }",
+      ".hero-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }",
+      ".hero-title { font-size: 1.24rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; color: var(--lp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+      ".hero-sub { font-size: 0.8rem; color: var(--lp-text-secondary); min-height: 1.2em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
       ".warns-row { display: flex; flex-wrap: wrap; gap: 6px; }",
       ".warn-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; min-height: 34px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.32); color: #FCA5A5; font-size: 0.78rem; font-weight: 600; cursor: pointer; }",
       ".warn-chip.is-amber { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.32); color: #FCD34D; }",
       ".error-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 10px; background: rgba(239, 68, 68, 0.16); border: 1px solid rgba(239, 68, 68, 0.4); color: #FECACA; font-size: 0.82rem; }",
       ".error-dismiss { background: transparent; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; min-width: 32px; min-height: 32px; padding: 2px 8px; cursor: pointer; }",
       ".tabs-bar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; }",
-      ".tab-btn { min-height: 44px; min-width: 44px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--lp-text-secondary); font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 6px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+      ".tab-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 50px; min-width: 44px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--lp-text-secondary); font-size: 0.74rem; font-weight: 600; cursor: pointer; padding: 6px 4px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
       ".tab-btn:hover { color: var(--lp-text); background: rgba(255, 255, 255, 0.04); }",
-      ".tab-btn.is-active { background: var(--lp-text); color: var(--lp-canvas); font-weight: 700; }",
+      ".tab-btn.is-active, .tab-btn[aria-selected=\"true\"] { background: #262B34; color: var(--lp-text); border-color: rgba(255, 255, 255, 0.16); font-weight: 700; }",
+      ".tab-btn.is-active::after, .tab-btn[aria-selected=\"true\"]::after { content: \"\"; position: absolute; left: 22%; right: 22%; bottom: 3px; height: 2.5px; border-radius: 999px; background: #E5E7EB; }",
+      ".tab-lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }",
       ".panel { display: none; flex-direction: column; gap: 10px; }",
       ".panel.is-active { display: flex; }",
       ".surface { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }",
       ".sec-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.76rem; font-weight: 600; color: var(--lp-text-muted); letter-spacing: 0.02em; }",
+      ".sec-hdr-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }",
+      ".sec-subhdr { font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); display: flex; align-items: center; gap: 6px; padding-top: 2px; }",
       ".metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
-      ".metric-card { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; padding: 11px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 70px; }",
+      ".metric-card { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; padding: 11px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 72px; }",
       ".metric-card:hover { background: var(--lp-elevated); border-color: var(--lp-border-strong); }",
-      ".metric-lbl { font-size: 0.74rem; color: var(--lp-text-secondary); }",
+      ".metric-hdr { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }",
+      ".metric-lbl { font-size: 0.74rem; color: var(--lp-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
       ".metric-val { font-size: 1.08rem; font-weight: 700; color: var(--lp-text); line-height: 1.25; }",
       ".metric-bar { height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 2px; }",
       ".metric-bar-fill { height: 100%; background: var(--lp-emerald); border-radius: 999px; }",
       ".btn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
+      ".btn-triple { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }",
       ".btn-row { display: flex; flex-wrap: wrap; gap: 8px; }",
       ".ctrl-btn { position: relative; overflow: hidden; min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 10px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }",
       ".ctrl-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
       ".ctrl-btn:disabled, .ctrl-btn.is-pending { opacity: 0.58; cursor: wait; }",
-      ".ctrl-btn.is-primary { background: var(--lp-text); color: var(--lp-canvas); border-color: var(--lp-text); }",
+      ".ctrl-btn.is-primary { background: #262B34; color: var(--lp-text); border-color: rgba(52, 211, 153, 0.55); }",
+      ".ctrl-btn.is-primary:hover { background: #2A313D; border-color: var(--lp-emerald); }",
       ".ctrl-btn.is-emerald { border-color: rgba(52, 211, 153, 0.45); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.12); }",
       ".ctrl-btn.is-glacier { border-color: rgba(96, 165, 250, 0.45); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.12); }",
       ".ctrl-btn.is-amber { border-color: rgba(245, 158, 11, 0.45); color: var(--lp-amber); background: rgba(245, 158, 11, 0.12); }",
       ".ctrl-btn.is-confirming { border-color: rgba(239, 68, 68, 0.72); color: #FECACA; background: rgba(239, 68, 68, 0.24); }",
+      ".btn-compact { min-height: 40px; padding: 7px 8px; font-size: 0.76rem; }",
       ".confirm-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--lp-coral); transform-origin: left center; pointer-events: none; }",
       ".stepper { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 4px; }",
       ".step-val { font-size: 1.15rem; font-weight: 700; color: var(--lp-text); }",
       ".chip-row { display: flex; flex-wrap: wrap; gap: 6px; }",
-      ".chip-btn { min-height: 44px; min-width: 44px; padding: 6px 11px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); font-size: 0.8rem; font-weight: 600; color: var(--lp-text-secondary); cursor: pointer; }",
-      ".chip-btn.is-active { background: var(--lp-text); color: var(--lp-canvas); border-color: var(--lp-text); }",
+      ".chip-btn { min-height: 44px; min-width: 44px; padding: 6px 11px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); font-size: 0.8rem; font-weight: 600; color: var(--lp-text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }",
+      ".chip-btn:hover { background: var(--lp-elevated-hover); color: var(--lp-text); }",
+      ".chip-btn.is-active { background: #2A313D; color: var(--lp-text); border-color: rgba(243, 244, 246, 0.55); }",
       ".seat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
       ".seat-card { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }",
       ".seat-name { font-size: 0.76rem; font-weight: 600; color: var(--lp-text-secondary); }",
       ".seat-btns { display: flex; gap: 6px; }",
       ".seat-btns .ctrl-btn { flex: 1; padding: 6px; font-size: 0.76rem; }",
       ".seat-readonly { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem; color: var(--lp-text-secondary); }",
+      ".flow-track { position: relative; height: 4px; border-radius: 999px; background: rgba(52, 211, 153, 0.14); overflow: hidden; }",
+      ".flow-bar { position: absolute; top: 0; bottom: 0; width: 42%; border-radius: 999px; background: linear-gradient(90deg, transparent, var(--lp-emerald), transparent); }",
+      ".chg-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
+      ".chg-stat { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-height: 54px; }",
+      ".chg-stat-lbl { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; color: var(--lp-text-secondary); }",
+      ".chg-stat-val { font-size: 0.88rem; font-weight: 700; color: var(--lp-text); }",
+      ".seg-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--lp-canvas); border: 1px solid var(--lp-border); }",
+      ".seg-btn { min-height: 40px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--lp-text-secondary); font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 8px; }",
+      ".seg-btn:hover { color: var(--lp-text); }",
+      ".seg-btn.is-active { background: #262B34; color: var(--lp-text); border-color: rgba(255, 255, 255, 0.16); font-weight: 700; }",
+      ".manual-charge-box { display: flex; flex-direction: column; gap: 10px; }",
+      ".departure-charge-box { background: var(--lp-elevated); border: 1px solid rgba(52, 211, 153, 0.34); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }",
+      ".dep-charge-title { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; color: var(--lp-emerald); }",
+      ".dep-charge-val { font-size: 0.84rem; color: var(--lp-text); font-weight: 600; }",
       ".timeline-track { position: relative; height: 14px; border-radius: 7px; background: var(--lp-elevated); border: 1px solid var(--lp-border); overflow: hidden; }",
       ".timeline-seg { position: absolute; top: 0; bottom: 0; background: var(--lp-emerald); opacity: 0.85; border-radius: 4px; }",
       ".timeline-axis { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--lp-text-muted); margin-top: 3px; }",
       ".field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }",
       ".field-lbl { font-size: 0.82rem; color: var(--lp-text-secondary); }",
       ".ctrl-input, .ctrl-select { min-height: 44px; padding: 6px 10px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.84rem; }",
+      ".charge-days-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }",
+      ".charge-day-chip { min-height: 44px; min-width: 0; padding: 4px 2px; border-radius: 9px; font-size: 0.78rem; font-weight: 700; }",
+      ".charge-day-chip.is-active { background: #2A313D; color: var(--lp-emerald); border-color: rgba(52, 211, 153, 0.55); }",
+      ".preset-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }",
+      ".preset-btn { min-height: 38px; padding: 4px 8px; font-size: 0.76rem; }",
+      ".preset-btn.is-active { background: #262B34; color: var(--lp-text); border-color: rgba(255, 255, 255, 0.24); }",
       ".days-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }",
-      ".day-chip { min-height: 44px; min-width: 36px; border-radius: 9px; border: 1px solid var(--lp-border); background: var(--lp-elevated); color: var(--lp-text-secondary); font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 2px; }",
+      ".day-chip { min-height: 52px; min-width: 36px; border-radius: 9px; border: 1px solid var(--lp-border); background: var(--lp-elevated); color: var(--lp-text-secondary); font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; }",
       ".day-chip.is-enabled { border-color: rgba(52, 211, 153, 0.48); color: var(--lp-text); }",
-      ".day-chip.is-expanded { background: var(--lp-text); color: var(--lp-canvas); border-color: var(--lp-text); }",
+      ".day-chip.is-expanded { background: #2A313D; color: var(--lp-text); border-color: rgba(243, 244, 246, 0.65); }",
       ".day-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--lp-text-muted); }",
       ".day-chip.is-enabled .day-dot { background: var(--lp-emerald); }",
+      ".day-time { font-size: 0.62rem; font-weight: 600; color: var(--lp-text-secondary); line-height: 1; min-height: 0.75em; }",
+      ".day-chip.is-enabled .day-time { color: var(--lp-emerald); }",
       ".day-editor { background: var(--lp-elevated); border: 1px solid var(--lp-border-strong); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }",
-      ".bp-stage { display: grid; grid-template-columns: minmax(82px, 1fr) minmax(112px, 130px) minmax(82px, 1fr); gap: 8px; align-items: center; }",
-      ".tpms-col { display: flex; flex-direction: column; justify-content: space-between; gap: 28px; }",
-      ".tpms-box { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 7px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 48px; }",
+      ".bp-stage { display: grid; grid-template-columns: minmax(88px, 1fr) minmax(108px, 124px) minmax(88px, 1fr); gap: 8px; align-items: center; }",
+      ".tpms-col { display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }",
+      ".tpms-box { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 7px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 54px; }",
       ".tpms-box.is-ok { border-color: rgba(52, 211, 153, 0.35); }",
       ".tpms-box.is-alert { border-color: rgba(239, 68, 68, 0.72); background: rgba(239, 68, 68, 0.14); color: #FECACA; }",
+      ".tpms-hdr { display: inline-flex; align-items: center; gap: 4px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em; white-space: nowrap; color: var(--lp-text-secondary); }",
+      ".tpms-box.is-alert .tpms-hdr { color: #FECACA; }",
       ".tpms-press { font-size: 0.82rem; font-weight: 700; color: var(--lp-text); }",
       ".tpms-temp { font-size: 0.72rem; color: var(--lp-text-secondary); }",
       ".bp-svg { width: 100%; max-width: 130px; height: auto; display: block; margin: 0 auto; }",
@@ -613,11 +869,16 @@
       ".bp-part.is-open { fill: rgba(245, 158, 11, 0.35); stroke: var(--lp-amber); }",
       ".bp-part.is-window-open { fill: rgba(96, 165, 250, 0.35); stroke: var(--lp-glacier); }",
       ".bp-part.is-moving { fill: rgba(96, 165, 250, 0.45); stroke: var(--lp-glacier); }",
+      ".bp-headlights { fill: rgba(243, 244, 246, 0.14); stroke: rgba(243, 244, 246, 0.35); stroke-width: 1; }",
+      ".bp-headlights.is-on { fill: rgba(245, 158, 11, 0.65); stroke: var(--lp-amber); }",
+      ".bp-lock-badge { fill: rgba(17, 19, 23, 0.9); stroke: var(--lp-emerald); stroke-width: 1.3; }",
+      ".bp-lock-badge.is-unlocked { stroke: var(--lp-amber); }",
       ".bp-door-fl.is-open { transform: translate(-6px, 0) rotate(-18deg); transform-origin: 48px 98px; }",
       ".bp-door-fr.is-open { transform: translate(6px, 0) rotate(18deg); transform-origin: 112px 98px; }",
       ".bp-door-rl.is-open { transform: translate(-6px, 0) rotate(-18deg); transform-origin: 48px 148px; }",
       ".bp-door-rr.is-open { transform: translate(6px, 0) rotate(18deg); transform-origin: 112px 148px; }",
       ".footer-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.76rem; color: var(--lp-text-secondary); }",
+      ".meta-inline { display: inline-flex; align-items: center; gap: 6px; }",
       ".badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); }",
       ".badge.is-emerald { border-color: rgba(52, 211, 153, 0.4); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.1); }",
       ".badge.is-glacier { border-color: rgba(96, 165, 250, 0.4); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.1); }",
@@ -667,14 +928,19 @@
       "  .panel.is-active { animation: lp-fade 0.18s ease-out; }",
       "  .confirm-bar { animation: lp-drain 4s linear forwards; }",
       "  .bp-part.is-moving { animation: lp-pulse-soft 1.2s ease-in-out infinite alternate; }",
+      "  .soc-btn.is-charging .soc-ring-fg { animation: lp-pulse-soft 1.8s ease-in-out infinite alternate; }",
+      "  .ctrl-btn.is-spinning .lp-ico { animation: lp-spin 2.4s linear infinite; }",
+      "  .flow-bar { animation: lp-flow 1.4s linear infinite; }",
       "}",
       "@media (prefers-reduced-motion: reduce) {",
       "  *, *::before, *::after { animation: none !important; transition: none !important; }",
       "}",
-      "button:focus-visible, input:focus-visible, select:focus-visible, [role=\"button\"]:focus-visible { outline: 2px solid #F3F4F6; outline-offset: 2px; }",
+      "button:focus-visible, input:focus-visible, select:focus-visible, [role=\"button\"]:focus-visible { outline: 2px solid rgba(243, 244, 246, 0.72); outline-offset: -2px; }",
       "@keyframes lp-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }",
       "@keyframes lp-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }",
       "@keyframes lp-pulse-soft { from { opacity: 0.45; } to { opacity: 0.95; } }",
+      "@keyframes lp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
+      "@keyframes lp-flow { from { transform: translateX(-100%); } to { transform: translateX(250%); } }",
     ].join("\n");
   }
 
@@ -818,7 +1084,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.19.1">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.20.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -858,6 +1124,11 @@
       this._lastDefaultTab = "overview";
       this._listenersBound = false;
       this._latestActions = Object.create(null);
+      this._optimisticChargeDays = null;
+      this._currentChargeDays = [1, 2, 3, 4, 5, 6, 7];
+      this._currentChargeDaysBaseSig = "";
+      this._chargeDaysEntityId = null;
+      this._syncChargeState = null;
       this._onClick = this._handleClick.bind(this);
       this._onChange = this._handleChange.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
@@ -920,26 +1191,19 @@
     }
 
     _disp(s) {
-      if (!s) return "—";
+      if (!s || s.state == null) return "—";
+      var rawStr = String(s.state).trim();
+      if (!rawStr || rawStr === "unavailable" || rawStr === "unknown") return "—";
+      var lang = getLang(this._hass);
+      var n = Number(rawStr);
+      if (!isNaN(n) && isFinite(n)) {
+        return formatMetric(s, lang);
+      }
       var h = this._hass;
-      if (h && typeof h.formatEntityState === "function") {
+      if (h && typeof h.formatEntityState === "function" && !(s.attributes && s.attributes.unit_of_measurement)) {
         try { return h.formatEntityState(s); } catch (e) { /* fall through */ }
       }
-      var n = parseFloat(s.state);
-      var u = s.attributes && s.attributes.unit_of_measurement;
-      if (isNaN(n)) return u ? s.state + " " + u : s.state;
-      var dp = s.attributes && s.attributes.suggested_display_precision;
-      var v;
-      if (typeof dp === "number") {
-        v = n.toFixed(dp);
-      } else if (Number.isInteger(n)) {
-        v = String(n);
-      } else if (u === "bar") {
-        v = n.toFixed(2);
-      } else {
-        v = String(Math.round(n * 100) / 100);
-      }
-      return u ? v + " " + u : v;
+      return formatMetric(s, lang);
     }
 
     _h(s) {
@@ -1070,6 +1334,36 @@
         return;
       }
 
+      var chgDayEl = target.closest("[data-charge-day]");
+      if (chgDayEl) {
+        var dayNum = parseInt(chgDayEl.getAttribute("data-charge-day"), 10);
+        var nextDays = computeToggleDays(this._currentChargeDays || [1, 2, 3, 4, 5, 6, 7], dayNum);
+        this._handleChargeDaysSelect(nextDays);
+        return;
+      }
+
+      var chgPresetEl = target.closest("[data-charge-preset]");
+      if (chgPresetEl) {
+        var presetKey = chgPresetEl.getAttribute("data-charge-preset");
+        var presetDays = presetDaysForKey(presetKey);
+        if (presetDays) this._handleChargeDaysSelect(presetDays);
+        return;
+      }
+
+      var chgModeEl = target.closest("[data-charge-mode]");
+      if (chgModeEl) {
+        var mode = chgModeEl.getAttribute("data-charge-mode");
+        var sc = this._syncChargeState;
+        if (sc && sc.id) {
+          if (mode === "departure" && !sc.on) {
+            this._callService("switch", "turn_on", { entity_id: sc.id }, "sync_charge_toggle");
+          } else if (mode === "manual" && sc.on) {
+            this._callService("switch", "turn_off", { entity_id: sc.id }, "sync_charge_toggle");
+          }
+        }
+        return;
+      }
+
       var actionEl = target.closest("[data-action-id]");
       if (actionEl) {
         ev.stopPropagation();
@@ -1189,6 +1483,53 @@
         this._pendingKeys.delete(pendingKey);
         this._errorMsg = (syncErr && syncErr.message) ? String(syncErr.message) : t.commandFailed;
         this._render(this._hass);
+      }
+    }
+
+    _handleChargeDaysSelect(nextDays) {
+      if (!this._hass || !Array.isArray(nextDays) || !nextDays.length) return;
+      var curDays = this._currentChargeDays || [1, 2, 3, 4, 5, 6, 7];
+      if (nextDays.join(",") === curDays.join(",")) return;
+      var baseSig = this._currentChargeDaysBaseSig || curDays.join(",");
+      var pendingKey = "charge_days_select";
+      var self = this;
+      var lang = getLang(this._hass);
+      var t = getTexts(lang);
+
+      this._errorMsg = null;
+      this._optimisticChargeDays = { days: nextDays.slice(), baseSig: baseSig };
+      this._pendingKeys.add(pendingKey);
+      this._render(this._hass);
+
+      var finishFail = function (err) {
+        self._pendingKeys.delete(pendingKey);
+        var msg = (err && err.message) ? String(err.message) : t.commandFailed;
+        var isServiceMissing = ((/service|action/i.test(msg) && /not\s*found|unknown/i.test(msg)) || /not_found/i.test(msg));
+        var fallbackPreset = presetForDays(nextDays);
+        var selectId = self._chargeDaysEntityId;
+        if (isServiceMissing && selectId && fallbackPreset && fallbackPreset !== "custom") {
+          self._optimisticChargeDays = { days: nextDays.slice(), baseSig: baseSig };
+          self._callService("select", "select_option", { entity_id: selectId, option: fallbackPreset }, pendingKey);
+          return;
+        }
+        self._optimisticChargeDays = null;
+        self._errorMsg = msg;
+        if (self._hass) self._render(self._hass);
+      };
+
+      try {
+        Promise.resolve(this._hass.callService("lepas", "set_charging_schedule", {
+          days: nextDays.slice(),
+          apply: false,
+        })).then(
+          function () {
+            self._pendingKeys.delete(pendingKey);
+            if (self._hass) self._render(self._hass);
+          },
+          finishFail
+        );
+      } catch (syncErr) {
+        finishFail(syncErr);
       }
     }
 
@@ -1663,18 +2004,20 @@
         : "";
 
       var tabsHtml = '<div class="tabs-bar" role="tablist">' + VALID_TABS.map(function (tb) {
-        return '<button type="button" class="tab-btn" role="tab" data-tab="' + tb + '" data-uid="tab:' + tb + '">' +
-          self._h(t.tabs[tb]) + "</button>";
+        return '<button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="' + tb + '" data-uid="tab:' + tb + '">' +
+          svgIcon(tb, "tab-ico") +
+          '<span class="tab-lbl">' + self._h(t.tabs[tb]) + "</span></button>";
       }).join("") + "</div>";
 
-      // Hero region
+      // Hero region (2:1 full-car stage + dedicated meta bar below)
       var socRingHtml = ctx.bat ? (
-        '<div class="soc-btn" role="button" tabindex="0" data-e="' + self._h(ctx.bat.id) + '">' +
-          '<svg viewBox="0 0 52 52" aria-hidden="true">' +
+        '<div class="soc-btn" data-bind="socBtn" role="button" tabindex="0" data-e="' + self._h(ctx.bat.id) + '">' +
+          '<svg class="soc-svg" viewBox="0 0 52 52" aria-hidden="true">' +
             '<circle class="soc-ring-bg" cx="26" cy="26" r="21"/>' +
             '<circle class="soc-ring-fg" data-soc-ring cx="26" cy="26" r="21" stroke-dasharray="131.95" stroke-dashoffset="131.95"/>' +
           "</svg>" +
           '<span class="soc-val num" data-bind="socText">—</span>' +
+          '<span class="soc-chg-ico hidden" data-bind="socChgIco">' + svgIcon("bolt", "soc-bolt") + "</span>" +
           '<progress class="sr-only" data-bind="socProgress" max="100" value="0"></progress>' +
         "</div>"
       ) : "";
@@ -1682,20 +2025,22 @@
       var heroHtml =
         '<div class="hero-region">' +
           '<div class="hero-card">' +
-            '<img class="hero-img" data-bind="heroImg" alt="" decoding="async" fetchpriority="high">' +
-            '<div class="hero-scrim"></div>' +
-            '<div class="hero-inner">' +
-              '<div class="hero-top">' +
+            '<div class="hero-stage">' +
+              '<img class="hero-img" data-bind="heroImg" alt="" decoding="async" fetchpriority="high">' +
+              '<div class="hero-overlay-top">' +
                 '<div class="status-pill">' +
                   '<span class="status-dot" data-bind="connDot"></span>' +
                   '<span data-bind="statusText"></span>' +
                 "</div>" +
                 socRingHtml +
               "</div>" +
-              '<div class="hero-bottom" ' + (ctx.deviceId ? 'role="button" tabindex="0" data-device="' + self._h(ctx.deviceId) + '"' : "") + ">" +
+            "</div>" +
+            '<div class="hero-meta" ' + (ctx.deviceId ? 'role="button" tabindex="0" data-device="' + self._h(ctx.deviceId) + '"' : "") + ">" +
+              '<div class="hero-meta-row">' +
                 '<div class="hero-title" data-bind="heroTitle"></div>' +
-                '<div class="hero-sub" data-bind="heroSub"></div>' +
+                '<span class="badge hidden" data-bind="heroStateBadge"></span>' +
               "</div>" +
+              '<div class="hero-sub" data-bind="heroSub"></div>' +
             "</div>" +
           "</div>" +
           warnsHtml +
@@ -1706,12 +2051,13 @@
         "</div>";
 
       // Panel 1: Overview
-      var quickDockBtns = [];
-      if (ctx.lock) quickDockBtns.push('<button type="button" class="ctrl-btn" data-bind="quickLockBtn" data-action-id="quick_unlock"></button>');
-      if (ctx.climate) quickDockBtns.push('<button type="button" class="ctrl-btn" data-bind="quickClimateBtn" data-action-id="climate_quick"></button>');
-      if (ctx.trunk) quickDockBtns.push('<button type="button" class="ctrl-btn" data-bind="quickTrunkBtn" data-action-id="quick_trunk_open"></button>');
-      if (ctx.flashBtn) quickDockBtns.push('<button type="button" class="ctrl-btn" data-action-id="flash_lights" data-confirm-key="flash_lights">' + self._h(t.flashLights) + "</button>");
-      if (ctx.wakeBtn) quickDockBtns.push('<button type="button" class="ctrl-btn" data-action-id="wake_car" data-confirm-key="wake_car">' + self._h(t.wakeCar) + "</button>");
+      var quickPrimaryBtns = [];
+      if (ctx.lock) quickPrimaryBtns.push('<button type="button" class="ctrl-btn" data-bind="quickLockBtn" data-action-id="quick_unlock"></button>');
+      if (ctx.climate) quickPrimaryBtns.push('<button type="button" class="ctrl-btn" data-bind="quickClimateBtn" data-action-id="climate_quick"></button>');
+      var quickSecondaryBtns = [];
+      if (ctx.trunk) quickSecondaryBtns.push('<button type="button" class="ctrl-btn btn-compact" data-bind="quickTrunkBtn" data-action-id="quick_trunk_open"></button>');
+      if (ctx.flashBtn) quickSecondaryBtns.push('<button type="button" class="ctrl-btn btn-compact" data-action-id="flash_lights" data-confirm-key="flash_lights">' + svgIcon("lights", "btn-ico") + "<span>" + self._h(t.flashLights) + "</span></button>");
+      if (ctx.wakeBtn) quickSecondaryBtns.push('<button type="button" class="ctrl-btn btn-compact" data-action-id="wake_car" data-confirm-key="wake_car">' + svgIcon("wake", "btn-ico") + "<span>" + self._h(t.wakeCar) + "</span></button>");
 
       var extraRowsHtml = "";
       if (Array.isArray(cfg.entities) && cfg.entities.length) {
@@ -1743,33 +2089,38 @@
         '<section class="panel" data-panel="overview">' +
           '<div class="metrics-grid">' +
             '<div class="metric-card" data-bind="mEvCard">' +
-              '<span class="metric-lbl">' + self._h(t.evRange) + "</span>" +
+              '<span class="metric-hdr">' + svgIcon("battery", "kpi-ico") + '<span class="metric-lbl">' + self._h(t.evRange) + "</span></span>" +
               '<span class="metric-val num" data-bind="mEvVal">—</span>' +
               '<div class="metric-bar hidden" data-bind="mEvBarWrap"><div class="metric-bar-fill" data-bind="mEvBar"></div></div>' +
             "</div>" +
             '<div class="metric-card" data-bind="mFuelCard">' +
-              '<span class="metric-lbl" data-bind="mFuelLbl">' + self._h(t.totalRange) + "</span>" +
+              '<span class="metric-hdr">' + svgIcon("route", "kpi-ico") + '<span class="metric-lbl" data-bind="mFuelLbl">' + self._h(t.totalRange) + "</span></span>" +
               '<span class="metric-val num" data-bind="mFuelVal">—</span>' +
             "</div>" +
             '<div class="metric-card" data-bind="mChgCard">' +
-              '<span class="metric-lbl">' + self._h(t.chargingLbl) + "</span>" +
+              '<span class="metric-hdr">' + svgIcon("bolt", "kpi-ico") + '<span class="metric-lbl">' + self._h(t.chargingLbl) + "</span></span>" +
               '<span class="metric-val num" data-bind="mChgVal">—</span>' +
             "</div>" +
             '<div class="metric-card" data-bind="mOdoCard">' +
-              '<span class="metric-lbl" data-bind="mOdoLbl">' + self._h(t.odometer) + "</span>" +
+              '<span class="metric-hdr">' + svgIcon("gauge", "kpi-ico") + '<span class="metric-lbl" data-bind="mOdoLbl">' + self._h(t.odometer) + "</span></span>" +
               '<span class="metric-val num" data-bind="mOdoVal">—</span>' +
             "</div>" +
           "</div>" +
-          (quickDockBtns.length ? '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.quickActions) + '</span></div><div class="btn-grid">' + quickDockBtns.join("") + "</div></div>" : "") +
+          ((quickPrimaryBtns.length || quickSecondaryBtns.length)
+            ? '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.quickActions) + "</span></div>" +
+                (quickPrimaryBtns.length ? '<div class="btn-grid">' + quickPrimaryBtns.join("") + "</div>" : "") +
+                (quickSecondaryBtns.length ? '<div class="btn-triple">' + quickSecondaryBtns.join("") + "</div>" : "") +
+              "</div>"
+            : "") +
           '<div class="surface">' +
             '<div class="footer-bar">' +
-              '<span data-bind="freshnessText"></span>' +
+              '<span class="meta-inline">' + svgIcon("clock", "meta-ico") + '<span data-bind="freshnessText"></span></span>' +
               '<span class="badge hidden" data-bind="cmdResultBadge"></span>' +
             "</div>" +
             ((ctx.refreshLocBtn || ctx.refreshFullBtn)
               ? '<div class="btn-row">' +
-                  (ctx.refreshLocBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_location" data-confirm-key="refresh_location">' + self._h(t.refreshLoc) + "</button>" : "") +
-                  (ctx.refreshFullBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_full" data-confirm-key="refresh_full">' + self._h(t.refreshFull) + "</button>" : "") +
+                  (ctx.refreshLocBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_location" data-confirm-key="refresh_location">' + svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.refreshLoc) + "</span></button>" : "") +
+                  (ctx.refreshFullBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_full" data-confirm-key="refresh_full">' + svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.refreshFull) + "</span></button>" : "") +
                 "</div>"
               : "") +
           "</div>" +
@@ -1792,14 +2143,14 @@
 
       var climateHubHtml = ctx.climate ? (
         '<div class="surface">' +
-          '<div class="sec-hdr"><span>' + self._h(t.climateHub) + '</span><span class="badge hidden" data-bind="airPurifBadge">' + self._h(t.airPurification) + "</span></div>" +
+          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("fan", "sec-ico") + "<span>" + self._h(t.climateHub) + '</span></span><span class="badge hidden" data-bind="airPurifBadge">' + self._h(t.airPurification) + "</span></div>" +
           '<div class="btn-row">' +
             '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="climate_toggle" data-confirm-key="climate_toggle" data-bind="climateToggleBtn"></button>' +
           "</div>" +
           '<div class="stepper">' +
-            '<button type="button" class="ctrl-btn" data-action-id="temp_down" aria-label="-">−</button>' +
+            '<button type="button" class="ctrl-btn" data-action-id="temp_down" aria-label="-">' + svgIcon("minus", "btn-ico") + "</button>" +
             '<span class="step-val num" data-bind="targetTempText">—</span>' +
-            '<button type="button" class="ctrl-btn" data-action-id="temp_up" aria-label="+">+</button>' +
+            '<button type="button" class="ctrl-btn" data-action-id="temp_up" aria-label="+">' + svgIcon("plus", "btn-ico") + "</button>" +
           "</div>" +
           ((ctx.setTempL || ctx.setTempR)
             ? '<div class="footer-bar">' +
@@ -1813,16 +2164,23 @@
 
       var macrosHtml = (ctx.coolSwitch || ctx.heatSwitch) ? (
         '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.macros) + '</span></div><div class="btn-grid">' +
-          (ctx.coolSwitch ? '<button type="button" class="ctrl-btn" data-action-id="cool_everything" data-confirm-key="cool_everything" data-bind="coolAllBtn">' + self._h(t.coolAll) + "</button>" : "") +
-          (ctx.heatSwitch ? '<button type="button" class="ctrl-btn" data-action-id="heat_everything" data-confirm-key="heat_everything" data-bind="heatAllBtn">' + self._h(t.heatAll) + "</button>" : "") +
+          (ctx.coolSwitch ? '<button type="button" class="ctrl-btn" data-action-id="cool_everything" data-confirm-key="cool_everything" data-bind="coolAllBtn">' + svgIcon("snow", "btn-ico") + "<span>" + self._h(t.coolAll) + "</span></button>" : "") +
+          (ctx.heatSwitch ? '<button type="button" class="ctrl-btn" data-action-id="heat_everything" data-confirm-key="heat_everything" data-bind="heatAllBtn">' + svgIcon("flame", "btn-ico") + "<span>" + self._h(t.heatAll) + "</span></button>" : "") +
         "</div></div>"
       ) : "";
 
+      var defrostIconMap = {
+        windshield_defrost: "windshield",
+        windshield_defog: "windshield",
+        rear_window_heating: "rear_defrost",
+        steering_wheel_heating: "steering",
+      };
       var defrostHtml = ctx.defrostEntities.length ? (
         '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.defrosts) + '</span></div><div class="btn-grid">' +
           ctx.defrostEntities.map(function (d) {
             return '<button type="button" class="ctrl-btn" data-action-id="' + d.key + '" data-confirm-key="' + d.key + '" data-defrost-btn="' + d.key + '">' +
-              self._h(d.label) + "</button>";
+              svgIcon(defrostIconMap[d.key] || "windshield", "btn-ico") +
+              "<span>" + self._h(d.label) + "</span></button>";
           }).join("") +
         "</div></div>"
       ) : "";
@@ -1835,14 +2193,14 @@
       ) : "";
 
       var seatsHtml = (ctx.seatDefs.length || rearCenterHtml) ? (
-        '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.seats) + '</span></div>' +
+        '<div class="surface"><div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("seat", "sec-ico") + "<span>" + self._h(t.seats) + "</span></span></div>" +
           '<div class="seat-grid">' +
             ctx.seatDefs.map(function (sd) {
               return '<div class="seat-card">' +
                 '<div class="seat-name">' + self._h(sd.label) + "</div>" +
                 '<div class="seat-btns">' +
-                  (sd.heat ? '<button type="button" class="ctrl-btn" data-action-id="seat_' + sd.slug + '_heat" data-seat-btn="' + sd.slug + '_heat">' + self._h(t.heat) + "</button>" : "") +
-                  (sd.vent ? '<button type="button" class="ctrl-btn" data-action-id="seat_' + sd.slug + '_vent" data-seat-btn="' + sd.slug + '_vent">' + self._h(t.vent) + "</button>" : "") +
+                  (sd.heat ? '<button type="button" class="ctrl-btn" data-action-id="seat_' + sd.slug + '_heat" data-seat-btn="' + sd.slug + '_heat">' + svgIcon("flame", "btn-ico") + "<span>" + self._h(t.heat) + "</span></button>" : "") +
+                  (sd.vent ? '<button type="button" class="ctrl-btn" data-action-id="seat_' + sd.slug + '_vent" data-seat-btn="' + sd.slug + '_vent">' + svgIcon("fan", "btn-ico") + "<span>" + self._h(t.vent) + "</span></button>" : "") +
                 "</div>" +
               "</div>";
             }).join("") +
@@ -1854,18 +2212,25 @@
       var climateHtml = '<section class="panel" data-panel="climate">' + climateHubHtml + macrosHtml + defrostHtml + seatsHtml + "</section>";
 
       // Panel 3: Charging & Departures
+      var chgStatHtml = function (bind, iconName, label) {
+        return '<div class="chg-stat hidden" data-bind="' + bind + '">' +
+          '<span class="chg-stat-lbl">' + svgIcon(iconName, "stat-ico") + "<span>" + self._h(label) + "</span></span>" +
+          '<span class="chg-stat-val num" data-stat-val="' + bind + '">—</span>' +
+        "</div>";
+      };
       var liveChgHtml = (ctx.chgSwitch || ctx.plug || ctx.chgPower || ctx.remTime || ctx.hvVolt || ctx.hvCurr) ? (
         '<div class="surface">' +
-          '<div class="sec-hdr"><span>' + self._h(t.liveCharging) + '</span><span class="badge" data-bind="cableBadge"></span></div>' +
+          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("bolt", "sec-ico") + "<span>" + self._h(t.liveCharging) + '</span></span><span class="badge" data-bind="cableBadge"></span></div>' +
           (ctx.chgSwitch ? '<button type="button" class="ctrl-btn" data-action-id="charging_toggle" data-confirm-key="charging_toggle" data-bind="chgToggleBtn"></button>' : "") +
-          '<div class="chip-row" data-bind="chgStatsRow">' +
-            (ctx.chgPower ? '<span class="badge num" data-bind="chgPowerBadge"></span>' : "") +
-            (ctx.remTime ? '<span class="badge num" data-bind="remTimeBadge"></span>' : "") +
-            (ctx.hvVolt ? '<span class="badge num" data-bind="hvVoltBadge"></span>' : "") +
-            (ctx.hvCurr ? '<span class="badge num" data-bind="hvCurrBadge"></span>' : "") +
-            (ctx.homeEnergy ? '<span class="badge num" data-bind="homeEnergyBadge"></span>' : "") +
-            (ctx.awayEnergy ? '<span class="badge num" data-bind="awayEnergyBadge"></span>' : "") +
-            (ctx.fastPort ? '<span class="badge" data-bind="fastPortBadge"></span>' : "") +
+          '<div class="flow-track hidden" data-bind="chgFlowTrack"><div class="flow-bar"></div></div>' +
+          '<div class="chg-stats-grid" data-bind="chgStatsRow">' +
+            (ctx.chgPower ? chgStatHtml("chgPowerBadge", "bolt", t.chargingLbl) : "") +
+            (ctx.remTime ? chgStatHtml("remTimeBadge", "clock", t.remaining) : "") +
+            (ctx.hvVolt ? chgStatHtml("hvVoltBadge", "volt", t.voltage) : "") +
+            (ctx.hvCurr ? chgStatHtml("hvCurrBadge", "current", t.current) : "") +
+            (ctx.homeEnergy ? chgStatHtml("homeEnergyBadge", "home", t.homeEnergy) : "") +
+            (ctx.awayEnergy ? chgStatHtml("awayEnergyBadge", "pin", t.awayEnergy) : "") +
+            (ctx.fastPort ? chgStatHtml("fastPortBadge", "plug", t.fastPort) : "") +
           "</div>" +
         "</div>"
       ) : "";
@@ -1877,26 +2242,44 @@
         "</div>"
       ) : "";
 
-      var chgDaysOptsHtml = "";
-      if (ctx.chgDays) {
-        var opts = (ctx.chgDays.s && ctx.chgDays.s.attributes && Array.isArray(ctx.chgDays.s.attributes.options))
-          ? ctx.chgDays.s.attributes.options
-          : ["all_days", "weekdays", "weekend", "mon_wed_fri", "tue_thu_sat", "custom"];
-        chgDaysOptsHtml = opts.map(function (o) {
-          return '<option value="' + self._h(o) + '">' + self._h(o) + "</option>";
-        }).join("");
-      }
+      var chargeDaysStripHtml = (ctx.chgDays || ctx.schedWindow) ? (
+        '<div class="field-row"><span class="field-lbl">' + self._h(t.chargeDays) + '</span><span class="badge" data-bind="chgDaysPresetLbl"></span></div>' +
+        '<div class="charge-days-strip" role="group">' + t.weekdays.map(function (letter, idx) {
+          var dayNum = idx + 1;
+          return '<button type="button" class="chip-btn charge-day-chip" data-charge-day="' + dayNum + '" data-uid="chgday:' + dayNum + '">' +
+            "<span>" + self._h(letter) + "</span></button>";
+        }).join("") + "</div>" +
+        '<div class="preset-row" role="group">' +
+          '<button type="button" class="chip-btn preset-btn" data-charge-preset="all_days" data-uid="chgpreset:all_days">' + self._h(t.presetAll) + "</button>" +
+          '<button type="button" class="chip-btn preset-btn" data-charge-preset="weekdays" data-uid="chgpreset:weekdays">' + self._h(t.presetWeekdays) + "</button>" +
+          '<button type="button" class="chip-btn preset-btn" data-charge-preset="weekend" data-uid="chgpreset:weekend">' + self._h(t.presetWeekend) + "</button>" +
+        "</div>"
+      ) : "";
+
+      var chargeModeSwitchHtml = ctx.syncCharge ? (
+        '<div class="seg-switch" role="group">' +
+          '<button type="button" class="seg-btn" data-charge-mode="manual" data-uid="chgmode:manual" aria-pressed="true">' + svgIcon("clock", "btn-ico") + "<span>" + self._h(t.chargeModeManual) + "</span></button>" +
+          '<button type="button" class="seg-btn" data-charge-mode="departure" data-uid="chgmode:departure" aria-pressed="false">' + svgIcon("calendar", "btn-ico") + "<span>" + self._h(t.chargeModeDeparture) + "</span></button>" +
+        "</div>"
+      ) : "";
 
       var schedChgHtml = (ctx.schedSwitch || ctx.schedWindow || ctx.chgStartTime || ctx.chgDur || ctx.chgDays || ctx.applySchedBtn) ? (
         '<div class="surface">' +
-          '<div class="sec-hdr"><span>' + self._h(t.scheduledCharging) + '</span><span class="badge hidden" data-bind="schedSyncBadge"></span></div>' +
+          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.scheduledCharging) + '</span></span><span class="badge hidden" data-bind="schedSyncBadge"></span></div>' +
           (ctx.schedSwitch ? '<button type="button" class="ctrl-btn" data-action-id="scheduled_charging_toggle" data-confirm-key="scheduled_charging_toggle" data-bind="schedToggleBtn"></button>' : "") +
+          chargeModeSwitchHtml +
           timelineHtml +
-          (ctx.chgStartTime ? '<div class="field-row"><label class="field-lbl">' + self._h(t.startTime) + '</label><input type="time" class="ctrl-input num" data-entity-input="' + self._h(ctx.chgStartTime.id) + '" data-uid="input:' + self._h(ctx.chgStartTime.id) + '"></div>' : "") +
-          (ctx.chgDur ? '<div class="field-row"><span class="field-lbl">' + self._h(t.chargeDuration) + '</span><div class="stepper" style="min-width:150px"><button type="button" class="ctrl-btn" data-action-id="charge_dur_down">−</button><span class="num" data-bind="chgDurText">—</span><button type="button" class="ctrl-btn" data-action-id="charge_dur_up">+</button></div></div>' : "") +
-          (ctx.chgDays ? '<div class="field-row"><label class="field-lbl">' + self._h(t.chargeDays) + '</label><select class="ctrl-select" data-entity-input="' + self._h(ctx.chgDays.id) + '" data-uid="input:' + self._h(ctx.chgDays.id) + '">' + chgDaysOptsHtml + "</select></div>" : "") +
+          '<div class="manual-charge-box" data-bind="manualChargeBox">' +
+            (ctx.chgStartTime ? '<div class="field-row"><label class="field-lbl">' + self._h(t.startTime) + '</label><input type="time" class="ctrl-input num" data-entity-input="' + self._h(ctx.chgStartTime.id) + '" data-uid="input:' + self._h(ctx.chgStartTime.id) + '"></div>' : "") +
+            (ctx.chgDur ? '<div class="field-row"><span class="field-lbl">' + self._h(t.chargeDuration) + '</span><div class="stepper" style="min-width:150px"><button type="button" class="ctrl-btn" data-action-id="charge_dur_down" aria-label="-">' + svgIcon("minus", "btn-ico") + '</button><span class="num" data-bind="chgDurText">—</span><button type="button" class="ctrl-btn" data-action-id="charge_dur_up" aria-label="+">' + svgIcon("plus", "btn-ico") + "</button></div></div>" : "") +
+            chargeDaysStripHtml +
+          "</div>" +
+          '<div class="departure-charge-box hidden" data-bind="departureChargeBox">' +
+            '<div class="dep-charge-title">' + svgIcon("clock", "stat-ico") + "<span>" + self._h(t.followDepartureTitle) + "</span></div>" +
+            '<div class="dep-charge-val num" data-bind="depChargeStartText"></div>' +
+          "</div>" +
           '<span class="badge is-amber hidden" data-bind="fallback2131Badge">' + self._h(t.daysFallback2131) + "</span>" +
-          (ctx.applySchedBtn ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_charging_schedule" data-confirm-key="apply_charging_schedule">' + self._h(t.applySchedule) + "</button>" : "") +
+          (ctx.applySchedBtn ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_charging_schedule" data-confirm-key="apply_charging_schedule">' + svgIcon("check", "btn-ico") + "<span>" + self._h(t.applySchedule) + "</span></button>" : "") +
         "</div>"
       ) : "";
 
@@ -1905,7 +2288,7 @@
         var dOpts = (ctx.depCliMode.s && ctx.depCliMode.s.attributes && Array.isArray(ctx.depCliMode.s.attributes.options))
           ? ctx.depCliMode.s.attributes.options : ["at_home", "anywhere", "off"];
         depModeOptsHtml = dOpts.map(function (o) {
-          return '<option value="' + self._h(o) + '">' + self._h(o) + "</option>";
+          return '<option value="' + self._h(o) + '">' + self._h(translateOption("departure_climate_mode", o, ctx.lang)) + "</option>";
         }).join("");
       }
 
@@ -1923,20 +2306,19 @@
 
       var depHtml = (ctx.nextDep || ctx.quickDep || hasWeekDays) ? (
         '<div class="surface">' +
-          '<div class="sec-hdr"><span>' + self._h(t.departures) + '</span><span class="badge hidden num" data-bind="depChargeHint"></span></div>' +
-          (ctx.nextDep ? '<div class="info-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span>' + self._h(t.nextDeparture) + '</span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
+          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.departures) + '</span></span><span class="badge hidden num" data-bind="depChargeHint"></span></div>' +
+          (ctx.nextDep ? '<div class="info-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.nextDeparture) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
           ((ctx.quickDep || ctx.quickDepTime)
             ? '<div class="btn-row">' +
                 (ctx.quickDep ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="quick_departure_toggle" data-confirm-key="quick_departure_toggle" data-bind="quickDepBtn"></button>' : "") +
                 (ctx.quickDepTime ? '<input type="time" class="ctrl-input num" data-entity-input="' + self._h(ctx.quickDepTime.id) + '" data-uid="input:' + self._h(ctx.quickDepTime.id) + '">' : "") +
               "</div>"
             : "") +
-          (ctx.syncCharge ? '<button type="button" class="ctrl-btn" data-action-id="sync_charge_toggle" data-confirm-key="sync_charge_toggle" data-bind="syncChargeBtn"></button>' : "") +
           (ctx.depCliMode ? '<div class="field-row"><label class="field-lbl">' + self._h(t.depClimateMode) + '</label><select class="ctrl-select" data-entity-input="' + self._h(ctx.depCliMode.id) + '" data-uid="input:' + self._h(ctx.depCliMode.id) + '">' + depModeOptsHtml + "</select></div>" : "") +
           (hasWeekDays
             ? '<div class="days-strip">' + ctx.weekDays.map(function (wd) {
                 return '<button type="button" class="day-chip" data-day-chip="' + wd.slug + '" data-uid="day:' + wd.slug + '">' +
-                  "<span>" + self._h(wd.letter) + '</span><span class="day-dot"></span></button>';
+                  "<span>" + self._h(wd.letter) + '</span><span class="day-dot"></span><span class="day-time num" data-day-time="' + wd.slug + '"></span></button>';
               }).join("") + "</div>" + dayEditorHtml
             : "") +
         "</div>"
@@ -1946,9 +2328,12 @@
 
       // Panel 4: Security & Blueprint
       var tpmsCard = function (c) {
-        if (!c.p && !c.temp && !c.w) return '<div class="tpms-box" data-tpms="' + c.pos + '"><span class="tpms-press num">—</span></div>';
+        var tpLabel = (t.tpmsLabels && t.tpmsLabels[c.pos]) ? t.tpmsLabels[c.pos] : c.label;
+        var hdrHtml = '<span class="tpms-hdr">' + svgIcon("tire", "tpms-ico") + "<span>" + self._h(tpLabel) + "</span></span>";
+        if (!c.p && !c.temp && !c.w) return '<div class="tpms-box" data-tpms="' + c.pos + '">' + hdrHtml + '<span class="tpms-press num">—</span></div>';
         var entRef = c.p ? c.p.id : (c.w ? c.w.id : c.temp.id);
         return '<div class="tpms-box" role="button" tabindex="0" data-e="' + self._h(entRef) + '" data-tpms="' + c.pos + '">' +
+          hdrHtml +
           '<span class="tpms-press num" data-tpms-press="' + c.pos + '">—</span>' +
           '<span class="tpms-temp num" data-tpms-temp="' + c.pos + '"></span>' +
         "</div>";
@@ -1956,6 +2341,7 @@
 
       var blueprintSvg =
         '<svg class="bp-svg" viewBox="0 0 160 250" aria-label="Vehicle blueprint">' +
+          '<path class="bp-headlights" data-bp-part="headlights" d="M 46 21 Q 54 14 63 18 L 60 24 L 47 26 Z M 114 21 Q 106 14 97 18 L 100 24 L 113 26 Z"/>' +
           '<rect class="bp-body" x="42" y="16" width="76" height="218" rx="22"/>' +
           '<path class="bp-part" data-bp-part="hood" d="M 48 26 Q 80 18 112 26 L 108 68 L 52 68 Z"/>' +
           '<path class="bp-glass" d="M 52 72 L 108 72 L 104 94 L 56 94 Z"/>' +
@@ -1969,11 +2355,12 @@
           '<path class="bp-glass" d="M 56 184 L 104 184 L 108 202 L 52 202 Z"/>' +
           '<path class="bp-part" data-bp-part="trunk" d="M 52 206 L 108 206 L 112 226 Q 80 234 48 226 Z"/>' +
           '<rect class="bp-part" data-bp-part="tailgate_moving" x="62" y="226" width="36" height="5" rx="2"/>' +
+          '<circle class="bp-lock-badge" data-bp-lock cx="80" cy="124" r="6"/>' +
         "</svg>";
 
       var blueprintHtml =
         '<div class="surface">' +
-          '<div class="sec-hdr"><span>' + self._h(t.blueprintTitle) + "</span></div>" +
+          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("tire", "sec-ico") + "<span>" + self._h(t.blueprintTitle) + "</span></span></div>" +
           '<div class="bp-stage">' +
             '<div class="tpms-col">' + tpmsCard(ctx.tpmsCorners[0]) + tpmsCard(ctx.tpmsCorners[2]) + "</div>" +
             blueprintSvg +
@@ -1981,23 +2368,36 @@
           "</div>" +
         "</div>";
 
-      var secBtns = [];
-      if (ctx.lock) secBtns.push('<button type="button" class="ctrl-btn" data-bind="secLockBtn" data-action-id="unlock"></button>');
-      if (ctx.trunk) secBtns.push('<button type="button" class="ctrl-btn" data-bind="secTrunkBtn" data-action-id="trunk_open"></button>');
-      if (ctx.windowsCov) secBtns.push('<button type="button" class="ctrl-btn" data-bind="secWindowsBtn" data-action-id="windows_open"></button>');
-      if (ctx.ventWinBtn) secBtns.push('<button type="button" class="ctrl-btn" data-action-id="vent_windows" data-confirm-key="vent_windows" data-bind="ventWinBtn">' + self._h(t.ventWindows) + "</button>");
-      if (ctx.sunroofCov) secBtns.push('<button type="button" class="ctrl-btn" data-bind="secSunroofBtn" data-action-id="sunroof_open"></button>');
-      if (ctx.ventSunBtn) secBtns.push('<button type="button" class="ctrl-btn" data-action-id="vent_sunroof" data-confirm-key="vent_sunroof" data-bind="ventSunBtn">' + self._h(t.ventSunroof) + "</button>");
-      if (ctx.alarmSw) secBtns.push('<button type="button" class="ctrl-btn" data-action-id="alarm_toggle" data-confirm-key="alarm_toggle" data-bind="alarmBtn"></button>');
-      if (ctx.remoteStartBtn) secBtns.push('<button type="button" class="ctrl-btn" data-action-id="remote_start" data-confirm-key="remote_start" data-bind="remoteStartBtn">' + self._h(t.remoteStart) + "</button>");
-      if (ctx.locateBtn) secBtns.push('<button type="button" class="ctrl-btn" data-action-id="locate_gps" data-confirm-key="locate_gps">' + self._h(t.locateGps) + "</button>");
-      if (ctx.flashBtn) secBtns.push('<button type="button" class="ctrl-btn" data-action-id="sec_flash_lights" data-confirm-key="flash_lights">' + self._h(t.flashLights) + "</button>");
+      var closureBtns = [];
+      if (ctx.lock) closureBtns.push('<button type="button" class="ctrl-btn" data-bind="secLockBtn" data-action-id="unlock"></button>');
+      if (ctx.trunk) closureBtns.push('<button type="button" class="ctrl-btn" data-bind="secTrunkBtn" data-action-id="trunk_open"></button>');
+      if (ctx.windowsCov) closureBtns.push('<button type="button" class="ctrl-btn" data-bind="secWindowsBtn" data-action-id="windows_open"></button>');
+      if (ctx.ventWinBtn) closureBtns.push('<button type="button" class="ctrl-btn" data-action-id="vent_windows" data-confirm-key="vent_windows" data-bind="ventWinBtn"></button>');
+      if (ctx.sunroofCov) closureBtns.push('<button type="button" class="ctrl-btn" data-bind="secSunroofBtn" data-action-id="sunroof_open"></button>');
+      if (ctx.ventSunBtn) closureBtns.push('<button type="button" class="ctrl-btn" data-action-id="vent_sunroof" data-confirm-key="vent_sunroof" data-bind="ventSunBtn"></button>');
 
-      var secCtrlHtml = (secBtns.length || ctx.tracker) ? (
+      var secActionBtns = [];
+      if (ctx.alarmSw) secActionBtns.push('<button type="button" class="ctrl-btn" data-action-id="alarm_toggle" data-confirm-key="alarm_toggle" data-bind="alarmBtn"></button>');
+      if (ctx.remoteStartBtn) secActionBtns.push('<button type="button" class="ctrl-btn" data-action-id="remote_start" data-confirm-key="remote_start" data-bind="remoteStartBtn"></button>');
+      if (ctx.locateBtn) secActionBtns.push('<button type="button" class="ctrl-btn" data-action-id="locate_gps" data-confirm-key="locate_gps">' + svgIcon("gps", "btn-ico") + "<span>" + self._h(t.locateGps) + "</span></button>");
+      if (ctx.flashBtn) secActionBtns.push('<button type="button" class="ctrl-btn" data-action-id="sec_flash_lights" data-confirm-key="flash_lights">' + svgIcon("lights", "btn-ico") + "<span>" + self._h(t.flashLights) + "</span></button>");
+
+      var secCtrlHtml = (closureBtns.length || secActionBtns.length || ctx.tracker) ? (
         '<div class="surface">' +
           '<div class="sec-hdr"><span>' + self._h(t.securityControls) + "</span></div>" +
-          (secBtns.length ? '<div class="btn-grid">' + secBtns.join("") + "</div>" : "") +
-          (ctx.tracker ? '<div class="info-row" role="button" tabindex="0" data-e="' + self._h(ctx.tracker.id) + '"><span>' + self._h(t.position) + '</span><span class="info-val" data-bind="trackerText"></span></div>' : "") +
+          (closureBtns.length
+            ? '<div class="sec-group" data-security-group="closures">' +
+                '<div class="sec-subhdr">' + svgIcon("lock", "sec-ico") + "<span>" + self._h(t.closuresGroup) + "</span></div>" +
+                '<div class="btn-grid" style="margin-top:6px">' + closureBtns.join("") + "</div>" +
+              "</div>"
+            : "") +
+          ((secActionBtns.length || ctx.tracker)
+            ? '<div class="sec-group" data-security-group="security">' +
+                '<div class="sec-subhdr">' + svgIcon("shield", "sec-ico") + "<span>" + self._h(t.securityGroup) + "</span></div>" +
+                (secActionBtns.length ? '<div class="btn-grid" style="margin-top:6px">' + secActionBtns.join("") + "</div>" : "") +
+                (ctx.tracker ? '<div class="info-row" style="margin-top:8px" role="button" tabindex="0" data-e="' + self._h(ctx.tracker.id) + '"><span class="meta-inline">' + svgIcon("pin", "meta-ico") + "<span>" + self._h(t.position) + '</span></span><span class="info-val" data-bind="trackerText"></span></div>' : "") +
+              "</div>"
+            : "") +
         "</div>"
       ) : "";
 
@@ -2016,10 +2416,12 @@
         "</ha-card>";
     }
 
-    _applyBtnState(btn, label, actionId, confirmKey, variantClass, t) {
+    _applyBtnState(btn, label, actionId, confirmKey, variantClass, t, iconName) {
       if (!btn) return;
       btn.setAttribute("data-action-id", actionId);
       btn.setAttribute("data-confirm-key", confirmKey);
+      var ico = iconName || (btn.getAttribute ? btn.getAttribute("data-icon") : "") || "";
+      if (iconName) btn.setAttribute("data-icon", iconName);
       var isConfirming = Boolean(this._confirmState && this._confirmState.key === confirmKey);
       var isPending = this._pendingKeys.has(confirmKey);
 
@@ -2028,13 +2430,22 @@
       if (isPending) btn.classList.add("is-pending");
       btn.disabled = isPending;
 
+      var sig;
       if (isConfirming) {
         btn.setAttribute("data-confirming", "true");
         btn.classList.add("is-confirming");
-        btn.innerHTML = this._h(t.confirm) + '<span class="confirm-bar"></span>';
+        sig = ico + "|" + t.confirm + "|1";
+        if (btn.getAttribute("data-btn-sig") !== sig) {
+          btn.setAttribute("data-btn-sig", sig);
+          btn.innerHTML = (ico ? svgIcon(ico, "btn-ico") : "") + "<span>" + this._h(t.confirm) + '</span><span class="confirm-bar"></span>';
+        }
       } else {
         btn.removeAttribute("data-confirming");
-        btn.textContent = label;
+        sig = ico + "|" + label + "|0";
+        if (btn.getAttribute("data-btn-sig") !== sig) {
+          btn.setAttribute("data-btn-sig", sig);
+          btn.innerHTML = (ico ? svgIcon(ico, "btn-ico") : "") + "<span>" + this._h(label) + "</span>";
+        }
       }
     }
 
@@ -2053,7 +2464,10 @@
         var tabBtn = root.querySelector('[data-tab="' + tb + '"]');
         var panelEl = root.querySelector('[data-panel="' + tb + '"]');
         var active = tb === this._activeTab;
-        if (tabBtn) tabBtn.classList.toggle("is-active", active);
+        if (tabBtn) {
+          tabBtn.classList.toggle("is-active", active);
+          tabBtn.setAttribute("aria-selected", active ? "true" : "false");
+        }
         if (panelEl) panelEl.classList.toggle("is-active", active);
       }
 
@@ -2068,6 +2482,26 @@
 
       var isCharging = this._isOn(vm.chgSwitch) ||
         (vm.chgStatus && vm.chgStatus.s && /charg/i.test(vm.chgStatus.s.state) && !/not/i.test(vm.chgStatus.s.state));
+      var cliActive = Boolean(vm.climate && !this._dead(vm.climate.s) && vm.climate.s.state !== "off");
+      var heroBadge = root.querySelector('[data-bind="heroStateBadge"]');
+      if (heroBadge) {
+        if (isCharging) {
+          heroBadge.classList.remove("hidden", "is-glacier");
+          heroBadge.classList.add("is-emerald");
+          heroBadge.textContent = (vm.chgPower && !this._dead(vm.chgPower.s) && this._num(vm.chgPower.s) > 0)
+            ? t.charging + " · " + this._disp(vm.chgPower.s)
+            : t.charging;
+        } else if (cliActive) {
+          heroBadge.classList.remove("hidden", "is-emerald");
+          heroBadge.classList.add("is-glacier");
+          heroBadge.textContent = t.climateOn;
+        } else {
+          heroBadge.classList.add("hidden");
+          heroBadge.classList.remove("is-emerald", "is-glacier");
+          heroBadge.textContent = "";
+        }
+      }
+
       var online = !vm.conn || (vm.conn.s && vm.conn.s.state === "on");
       var connDot = root.querySelector('[data-bind="connDot"]');
       if (connDot) {
@@ -2085,6 +2519,10 @@
       if (statusText) statusText.textContent = statusParts.join(" · ");
 
       // SoC ring & accessible <progress>
+      var socBtn = root.querySelector('[data-bind="socBtn"]');
+      if (socBtn) socBtn.classList.toggle("is-charging", Boolean(isCharging));
+      var socChgIco = root.querySelector('[data-bind="socChgIco"]');
+      if (socChgIco) socChgIco.classList.toggle("hidden", !isCharging);
       if (vm.bat) {
         var batNum = this._num(vm.bat.s);
         var pct = batNum === null ? 0 : Math.max(0, Math.min(100, batNum));
@@ -2205,7 +2643,8 @@
           isLocked ? "quick_unlock" : "quick_lock_now",
           isLocked ? "unlock" : "lock_now",
           isLocked ? "" : "is-emerald",
-          t
+          t,
+          isLocked ? "unlock" : "lock"
         );
         this._applyBtnState(
           root.querySelector('[data-bind="secLockBtn"]'),
@@ -2213,27 +2652,33 @@
           isLocked ? "unlock" : "lock_now",
           isLocked ? "unlock" : "lock_now",
           isLocked ? "" : "is-emerald",
-          t
+          t,
+          isLocked ? "unlock" : "lock"
         );
       }
       if (vm.climate) {
-        var cliActive = !this._dead(vm.climate.s) && vm.climate.s.state !== "off";
+        var qCliBtn = root.querySelector('[data-bind="quickClimateBtn"]');
+        var cTogBtn = root.querySelector('[data-bind="climateToggleBtn"]');
         this._applyBtnState(
-          root.querySelector('[data-bind="quickClimateBtn"]'),
+          qCliBtn,
           cliActive ? t.climateOn : t.climateOff,
           "climate_quick",
           "climate_toggle",
           cliActive ? "is-glacier" : "",
-          t
+          t,
+          "fan"
         );
         this._applyBtnState(
-          root.querySelector('[data-bind="climateToggleBtn"]'),
+          cTogBtn,
           cliActive ? t.climateOn : t.climateOff,
           "climate_toggle",
           "climate_toggle",
           cliActive ? "is-glacier" : "",
-          t
+          t,
+          "fan"
         );
+        if (qCliBtn) qCliBtn.classList.toggle("is-spinning", cliActive);
+        if (cTogBtn) cTogBtn.classList.toggle("is-spinning", cliActive);
       }
       if (vm.trunk) {
         var trunkClosed = vm.trunk.s && vm.trunk.s.state === "closed";
@@ -2243,7 +2688,8 @@
           trunkClosed ? "quick_trunk_open" : "quick_trunk_close",
           trunkClosed ? "trunk_open" : "trunk_close",
           trunkClosed ? "" : "is-amber",
-          t
+          t,
+          "trunk"
         );
         this._applyBtnState(
           root.querySelector('[data-bind="secTrunkBtn"]'),
@@ -2251,7 +2697,8 @@
           trunkClosed ? "trunk_open" : "trunk_close",
           trunkClosed ? "trunk_open" : "trunk_close",
           trunkClosed ? "" : "is-amber",
-          t
+          t,
+          "trunk"
         );
       }
       if (vm.windowsCov) {
@@ -2262,7 +2709,8 @@
           winClosed ? "windows_open" : "windows_close",
           winClosed ? "windows_open" : "windows_close",
           winClosed ? "" : "is-glacier",
-          t
+          t,
+          "window"
         );
       }
       if (vm.sunroofCov) {
@@ -2273,12 +2721,13 @@
           sunClosed ? "sunroof_open" : "sunroof_close",
           sunClosed ? "sunroof_open" : "sunroof_close",
           sunClosed ? "" : "is-glacier",
-          t
+          t,
+          "sunroof"
         );
       }
-      this._applyBtnState(root.querySelector('[data-bind="ventWinBtn"]'), t.ventWindows, "vent_windows", "vent_windows", "", t);
-      this._applyBtnState(root.querySelector('[data-bind="ventSunBtn"]'), t.ventSunroof, "vent_sunroof", "vent_sunroof", "", t);
-      this._applyBtnState(root.querySelector('[data-bind="remoteStartBtn"]'), t.remoteStart, "remote_start", "remote_start", "", t);
+      this._applyBtnState(root.querySelector('[data-bind="ventWinBtn"]'), t.ventWindows, "vent_windows", "vent_windows", "", t, "window");
+      this._applyBtnState(root.querySelector('[data-bind="ventSunBtn"]'), t.ventSunroof, "vent_sunroof", "vent_sunroof", "", t, "sunroof");
+      this._applyBtnState(root.querySelector('[data-bind="remoteStartBtn"]'), t.remoteStart, "remote_start", "remote_start", "", t, "bolt");
       if (vm.alarmSw) {
         var alarmOn = this._isOn(vm.alarmSw);
         this._applyBtnState(
@@ -2287,7 +2736,8 @@
           "alarm_toggle",
           "alarm_toggle",
           alarmOn ? "is-emerald" : "",
-          t
+          t,
+          "shield"
         );
       }
 
@@ -2382,31 +2832,35 @@
       var chgToggleBtn = root.querySelector('[data-bind="chgToggleBtn"]');
       if (chgToggleBtn && vm.chgSwitch) {
         var chgSwOn = this._isOn(vm.chgSwitch);
-        this._applyBtnState(chgToggleBtn, t.chargingLbl + ": " + (chgSwOn ? t.on : t.off), "charging_toggle", "charging_toggle", chgSwOn ? "is-emerald" : "", t);
+        this._applyBtnState(chgToggleBtn, chgSwOn ? t.stopCharging : t.startCharging, "charging_toggle", "charging_toggle", chgSwOn ? "is-emerald" : "", t, "bolt");
       }
+      var flowTrack = root.querySelector('[data-bind="chgFlowTrack"]');
+      if (flowTrack) flowTrack.classList.toggle("hidden", !isCharging);
 
-      var setBadge = function (bind, label, ent) {
+      var setStat = function (bind, ent) {
         var el = root.querySelector('[data-bind="' + bind + '"]');
         if (!el) return;
+        var valEl = el.querySelector('[data-stat-val="' + bind + '"]');
         if (ent && !self._dead(ent.s)) {
           el.classList.remove("hidden");
-          el.textContent = label + ": " + self._disp(ent.s);
+          if (valEl) valEl.textContent = self._disp(ent.s);
         } else {
           el.classList.add("hidden");
+          if (valEl) valEl.textContent = "—";
         }
       };
-      setBadge("chgPowerBadge", t.chargingLbl, vm.chgPower);
-      setBadge("remTimeBadge", t.remaining, vm.remTime);
-      setBadge("hvVoltBadge", t.voltage, vm.hvVolt);
-      setBadge("hvCurrBadge", t.current, vm.hvCurr);
-      setBadge("homeEnergyBadge", t.homeEnergy, vm.homeEnergy);
-      setBadge("awayEnergyBadge", t.awayEnergy, vm.awayEnergy);
-      setBadge("fastPortBadge", t.fastPort, vm.fastPort);
+      setStat("chgPowerBadge", vm.chgPower);
+      setStat("remTimeBadge", vm.remTime);
+      setStat("hvVoltBadge", vm.hvVolt);
+      setStat("hvCurrBadge", vm.hvCurr);
+      setStat("homeEnergyBadge", vm.homeEnergy);
+      setStat("awayEnergyBadge", vm.awayEnergy);
+      setStat("fastPortBadge", vm.fastPort);
 
       var schedToggleBtn = root.querySelector('[data-bind="schedToggleBtn"]');
       if (schedToggleBtn && vm.schedSwitch) {
         var scOn = this._isOn(vm.schedSwitch);
-        this._applyBtnState(schedToggleBtn, t.scheduledCharging + ": " + (scOn ? t.on : t.off), "scheduled_charging_toggle", "scheduled_charging_toggle", scOn ? "is-emerald" : "", t);
+        this._applyBtnState(schedToggleBtn, t.scheduledCharging + ": " + (scOn ? t.on : t.off), "scheduled_charging_toggle", "scheduled_charging_toggle", scOn ? "is-emerald" : "", t, "calendar");
       }
 
       if (vm.schedWindow && vm.schedWindow.s) {
@@ -2459,6 +2913,78 @@
         }
       }
 
+      // Segmented mode: Orario manuale vs Segui partenza
+      this._syncChargeState = vm.syncCharge ? { id: vm.syncCharge.id, on: this._isOn(vm.syncCharge) } : null;
+      var isDepMode = Boolean(this._syncChargeState && this._syncChargeState.on);
+      var modeManualBtn = root.querySelector('[data-charge-mode="manual"]');
+      var modeDepBtn = root.querySelector('[data-charge-mode="departure"]');
+      if (modeManualBtn) {
+        modeManualBtn.classList.toggle("is-active", !isDepMode);
+        modeManualBtn.setAttribute("aria-pressed", !isDepMode ? "true" : "false");
+      }
+      if (modeDepBtn) {
+        modeDepBtn.classList.toggle("is-active", isDepMode);
+        modeDepBtn.setAttribute("aria-pressed", isDepMode ? "true" : "false");
+      }
+      var manualBox = root.querySelector('[data-bind="manualChargeBox"]');
+      var depBox = root.querySelector('[data-bind="departureChargeBox"]');
+      if (manualBox) manualBox.classList.toggle("hidden", isDepMode);
+      if (depBox) depBox.classList.toggle("hidden", !isDepMode);
+      var depChargeStartEl = root.querySelector('[data-bind="depChargeStartText"]');
+      if (depChargeStartEl) {
+        var pStartChg = vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes && vm.nextDep.s.attributes.planned_charge_start;
+        if (pStartChg) {
+          var nextDepState = (vm.nextDep && !this._dead(vm.nextDep.s)) ? (" · " + vm.nextDep.s.state) : "";
+          depChargeStartEl.textContent = t.chargeStartHint + ": " + pStartChg + nextDepState;
+        } else {
+          depChargeStartEl.textContent = t.noDeparturePlanned;
+        }
+      }
+
+      // L-D charge days + quick presets + optimistic reconciliation
+      this._chargeDaysEntityId = vm.chgDays ? vm.chgDays.id : null;
+      var entityDays = (vm.chgDays && vm.chgDays.s && vm.chgDays.s.attributes && normalizeDaysList(vm.chgDays.s.attributes.days)) ||
+        (vm.chgDays && vm.chgDays.s && presetDaysForKey(vm.chgDays.s.state)) ||
+        (vm.schedWindow && vm.schedWindow.s && vm.schedWindow.s.attributes && normalizeDaysList(vm.schedWindow.s.attributes.days)) ||
+        [1, 2, 3, 4, 5, 6, 7];
+      var entityDaysSig = entityDays.join(",");
+      var activeChargeDays = entityDays;
+      if (this._optimisticChargeDays) {
+        if (this._optimisticChargeDays.baseSig === entityDaysSig) {
+          activeChargeDays = this._optimisticChargeDays.days;
+        } else {
+          this._optimisticChargeDays = null;
+        }
+      }
+      this._currentChargeDays = activeChargeDays.slice();
+      this._currentChargeDaysBaseSig = entityDaysSig;
+
+      var activeDaySet = Object.create(null);
+      for (var adi = 0; adi < activeChargeDays.length; adi += 1) {
+        activeDaySet[activeChargeDays[adi]] = true;
+      }
+      var isDaysPending = this._pendingKeys.has("charge_days_select");
+      var chgDayChips = root.querySelectorAll("[data-charge-day]");
+      for (var cdi = 0; cdi < chgDayChips.length; cdi += 1) {
+        var chipDay = parseInt(chgDayChips[cdi].getAttribute("data-charge-day"), 10);
+        var dayOn = Boolean(activeDaySet[chipDay]);
+        chgDayChips[cdi].classList.toggle("is-active", dayOn);
+        chgDayChips[cdi].classList.toggle("is-pending", isDaysPending);
+        chgDayChips[cdi].setAttribute("aria-pressed", dayOn ? "true" : "false");
+      }
+      var matchedPreset = presetForDays(activeChargeDays);
+      var chgPresets = root.querySelectorAll("[data-charge-preset]");
+      for (var cpi = 0; cpi < chgPresets.length; cpi += 1) {
+        var pKey = chgPresets[cpi].getAttribute("data-charge-preset");
+        var pOn = pKey === matchedPreset;
+        chgPresets[cpi].classList.toggle("is-active", pOn);
+        chgPresets[cpi].setAttribute("aria-pressed", pOn ? "true" : "false");
+      }
+      var presetLblEl = root.querySelector('[data-bind="chgDaysPresetLbl"]');
+      if (presetLblEl) {
+        presetLblEl.textContent = translateOption("charge_days", matchedPreset, vm.lang);
+      }
+
       var syncInputVal = function (ent, slice5) {
         if (!ent || !ent.s) return;
         var el = root.querySelector('[data-entity-input="' + ent.id + '"]');
@@ -2467,7 +2993,6 @@
         if (!self._dead(ent.s)) el.value = nextV;
       };
       syncInputVal(vm.chgStartTime, true);
-      syncInputVal(vm.chgDays, false);
       syncInputVal(vm.quickDepTime, true);
       syncInputVal(vm.depCliMode, false);
 
@@ -2491,25 +3016,26 @@
       var qDepBtn = root.querySelector('[data-bind="quickDepBtn"]');
       if (qDepBtn && vm.quickDep) {
         var qOn = this._isOn(vm.quickDep);
-        this._applyBtnState(qDepBtn, t.quickDeparture + ": " + (qOn ? t.on : t.off), "quick_departure_toggle", "quick_departure_toggle", qOn ? "is-emerald" : "", t);
-      }
-      var syncBtn = root.querySelector('[data-bind="syncChargeBtn"]');
-      if (syncBtn && vm.syncCharge) {
-        var sOn = this._isOn(vm.syncCharge);
-        this._applyBtnState(syncBtn, t.syncCharge + ": " + (sOn ? t.on : t.off), "sync_charge_toggle", "sync_charge_toggle", sOn ? "is-emerald" : "", t);
+        this._applyBtnState(qDepBtn, t.quickDeparture + ": " + (qOn ? t.on : t.off), "quick_departure_toggle", "quick_departure_toggle", qOn ? "is-emerald" : "", t, "clock");
       }
       for (var wi = 0; wi < vm.weekDays.length; wi += 1) {
         var wd = vm.weekDays[wi];
         var dChip = root.querySelector('[data-day-chip="' + wd.slug + '"]');
+        var dEnabled = this._isOn(wd.sw);
         if (dChip) {
-          dChip.classList.toggle("is-enabled", this._isOn(wd.sw));
+          dChip.classList.toggle("is-enabled", dEnabled);
           dChip.classList.toggle("is-expanded", this._expandedDay === wd.slug);
+        }
+        var dTimeEl = root.querySelector('[data-day-time="' + wd.slug + '"]');
+        if (dTimeEl) {
+          var rawTm = (dEnabled && wd.tm && !this._dead(wd.tm.s)) ? String(wd.tm.s.state || "").slice(0, 5) : "";
+          dTimeEl.textContent = rawTm;
         }
         if (this._expandedDay === wd.slug) {
           var expBtn = root.querySelector('[data-bind="expandedDayToggle"]');
           if (expBtn && wd.sw) {
             var dOn = this._isOn(wd.sw);
-            this._applyBtnState(expBtn, t.enableDay + ": " + (dOn ? t.on : t.off), "day_toggle_" + wd.slug, "day_toggle_" + wd.slug, dOn ? "is-emerald" : "", t);
+            this._applyBtnState(expBtn, t.enableDay + ": " + (dOn ? t.on : t.off), "day_toggle_" + wd.slug, "day_toggle_" + wd.slug, dOn ? "is-emerald" : "", t, "calendar");
           }
           syncInputVal(wd.tm, true);
         }
@@ -2528,6 +3054,12 @@
       setBp("trunk", "is-open", vm.trunk && vm.trunk.s && vm.trunk.s.state === "open");
       setBp("tailgate_moving", "is-moving", this._isOn(vm.tailMoving));
       setBp("sunroof_blind", "is-open", this._isOn(vm.sunroofBlind));
+      setBp("headlights", "is-on", Boolean(this._pendingKeys.has("flash_lights")));
+
+      var bpLock = root.querySelector("[data-bp-lock]");
+      if (bpLock) {
+        bpLock.classList.toggle("is-unlocked", Boolean(vm.lock && vm.lock.s && vm.lock.s.state !== "locked"));
+      }
 
       var winOpen = this._isOn(vm.winFL) || this._isOn(vm.winFR) || this._isOn(vm.winRL) || this._isOn(vm.winRR) ||
         (vm.windowsCov && vm.windowsCov.s && vm.windowsCov.s.state === "open");
@@ -2576,6 +3108,12 @@
     escapeHtml: escapeHtml,
     isSensitiveAction: isSensitiveAction,
     getTexts: getTexts,
+    formatMetric: formatMetric,
+    translateOption: translateOption,
+    computeToggleDays: computeToggleDays,
+    presetForDays: presetForDays,
+    presetDaysForKey: presetDaysForKey,
+    svgIcon: svgIcon,
   };
 
   if (!customElements.get("lepas-card-editor")) {
