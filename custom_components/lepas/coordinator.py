@@ -1536,11 +1536,14 @@ class LepasCoordinator(DataUpdateCoordinator):
             self._online = bool(res.get("online"))
 
     def _on_probe_data(self, data: dict) -> None:
-        """Dati realtime (GPS/batteria/velocità/online) dalla sonda → stato posizione.
+        """Dati realtime (GPS/batteria/velocità/online/META stato) dalla sonda.
 
-        Gira nel thread executor: gli accessi a self.position sono serializzati col
-        lock e si emette sempre una COPIA (no condivisione per riferimento)."""
+        Gira nel thread executor: gli accessi a self.position e self._fields sono
+        serializzati col lock e si emette sempre una COPIA (no condivisione per riferimento)."""
         patch: dict = {"realtime": dict(data) if isinstance(data, dict) else data}
+        if not isinstance(data, dict):
+            self._update(patch)
+            return
         # Freschezza del dato batteria/odometro. NON si usa più `resultTime`: misurato il
         # 22/07 che resta indietro mentre i valori cambiano davvero — resultTime fermo alle
         # 08:37:37 con la batteria passata da 41% a 40% dopo le 08:59, e `time` a 09:01:59.
@@ -1548,28 +1551,44 @@ class LepasCoordinator(DataUpdateCoordinator):
         # esattamente il contrario del suo scopo. Si guarda invece il CONTENUTO: il
         # timestamp avanza quando la telemetria cambia rispetto alla lettura precedente. Ad
         # auto ferma resta indietro — ed è proprio quello che l'utente vuole sapere.
-        if isinstance(data, dict):
-            impronta = _impronta_telemetria(data)
-            if self._impronta_dati is None:
-                # Primo frame dopo l'avvio: non c'è nulla con cui confrontare. Si parte dal
-                # timestamp dichiarato dall'auto invece di spacciare per "adesso" un dato
-                # che potrebbe essere vecchio di ore.
-                for tk in ("resultTime", "collectTime", "time", "updateTime"):
-                    raw = data.get(tk)
-                    try:
-                        if raw not in (None, "", 0, "0"):
-                            patch["car_data_ts"] = dt_util.utc_from_timestamp(int(float(raw)) / 1000)
-                            break
-                    except (TypeError, ValueError):
-                        continue
-            elif impronta != self._impronta_dati:
-                patch["car_data_ts"] = dt_util.utcnow()
-            self._impronta_dati = impronta
-        if isinstance(data, dict) and "lat" in data and "lon" in data:
-            geo = {k: data[k] for k in GEO_KEYS if k in data}
-            with self._state_lock:
+        impronta = _impronta_telemetria(data)
+        if self._impronta_dati is None:
+            # Primo frame dopo l'avvio: non c'è nulla con cui confrontare. Si parte dal
+            # timestamp dichiarato dall'auto invece di spacciare per "adesso" un dato
+            # che potrebbe essere vecchio di ore.
+            for tk in ("resultTime", "collectTime", "time", "updateTime"):
+                raw = data.get(tk)
+                try:
+                    if raw not in (None, "", 0, "0"):
+                        patch["car_data_ts"] = dt_util.utc_from_timestamp(int(float(raw)) / 1000)
+                        break
+                except (TypeError, ValueError):
+                    continue
+        elif impronta != self._impronta_dati:
+            patch["car_data_ts"] = dt_util.utcnow()
+        self._impronta_dati = impronta
+
+        has_geo = "lat" in data and "lon" in data
+        geo = {k: data[k] for k in GEO_KEYS if k in data} if has_geo else None
+        # _state_lock non è rientrante: calcola awake inline senza chiamare _auto_e_sveglia().
+        with self._state_lock:
+            awake = bool(self._last_msg_ts) and (time.time() - self._last_msg_ts) < self.awake_window
+            for k, v in data.items():
+                if (
+                    v is not None
+                    and k in META
+                    and k not in CMD_CONFIRM_META
+                    and k != "time"
+                    and k not in GEO_KEYS
+                    and (not awake or k not in self._fields)
+                ):
+                    self._fields[k] = str(v)
+            fields_copy = dict(self._fields)
+            if geo is not None:
                 self.position = {**(self.position or {}), **geo}
                 pos_copy = dict(self.position)
+        patch["fields"] = fields_copy
+        if geo is not None:
             patch["position"] = pos_copy
             patch["last_pos_fix"] = dt_util.utcnow()
         self._update(patch)

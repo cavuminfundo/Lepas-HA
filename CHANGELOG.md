@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.17.1 — 2026-11-17
+
+### 🇬🇧 English
+
+- **Populate Vehicle State Entities from `/asr/manager/realtime` (`_on_probe_data`)**: Propagated `META` status fields already returned in the 90-key `/asr/manager/realtime` payload (`frontLeftDoor`..`backRightDoor`, `trunkDoor`, `liftgateOperateState`, `doorLock`, `*WindowState`, `sunroofState`, `sunroofMoveState`, `frontHVACState`, `airPurification`, `fWinHeatingState`, seat switches, `chargeGunState`, `engineState`) into `coordinator.data["fields"]`, eliminating `unknown` states on vehicles that do not emit unsolicited `5A02` MQTT pushes during driving or door events. Fresh MQTT `5A02` updates (`_auto_e_sveglia()`) are never overwritten by cached `realtime` snapshots, and `msg_fields` / `CMD_CONFIRM_META` / `GEO_KEYS` remain strictly isolated.
+
+### 🇮🇹 Italiano
+
+- **Popolamento Entità di Stato da `/asr/manager/realtime` (`_on_probe_data`)**: Propagati in `coordinator.data["fields"]` i campi `META` di stato fisico già restituiti dal payload a 90 chiavi di `/asr/manager/realtime` (`frontLeftDoor`..`backRightDoor`, `trunkDoor`, `liftgateOperateState`, `doorLock`, `*WindowState`, `sunroofState`, `sunroofMoveState`, `frontHVACState`, `airPurification`, `fWinHeatingState`, switch sedili, `chargeGunState`, `engineState`), eliminando gli `unknown` sui veicoli che non inviano push MQTT `5A02` spontanei durante la guida o l'apertura delle portiere. Eventuali push `5A02` live recenti (`_auto_e_sveglia()`) non vengono mai sovrascritti e `msg_fields` / `CMD_CONFIRM_META` / `GEO_KEYS` restano rigorosamente isolati.
+
 ## v1.17.0 — 2026-11-16
 
 ### 🇬🇧 English

@@ -41,3 +41,10 @@
 - **Invariant**: `PRESET_LEPAS_EU`, `DEFAULTS[CONF_CHANNEL_ID]`, `DEFAULT_CHANNEL_ID` e `CHANNEL_ID` devono restare `"6"`, con `LepasConfigFlow.VERSION >= 2` e `async_migrate_entry` per aggiornare le entry `v1` Lepas EU preservando `chery_eu` (`"2"`) e `custom`.
 - **onFailure Mandate**: Su ricomparsa di `A00361`, verificare `GET /tsp/v1/app/env/defaultEnv` e `entry.data[CONF_CHANNEL_ID]` prima di toccare il flow PIN/lockout.
 - **Forbidden Regex**: `PRESET_LEPAS_EU[^}]*CONF_CHANNEL_ID:\s*["']1["']`
+
+## [AB-LEP-007] `/asr/manager/realtime` `META` Fields Propagation & `_state_lock` Non-Reentrancy
+- **Target Files**: `custom_components/lepas/coordinator.py`
+- **Root Cause**: Lepas L8 non invia push `5A02` spontanei su MQTT durante la marcia o l'apertura porte, ma `/asr/manager/realtime` restituisce già i campi `META` di stato fisico (`frontLeftDoor`, `doorLock`, `trunkDoor`, `sunroofState`, `sunroofMoveState`, ecc.); `_on_probe_data` aggiornava solo `patch["realtime"]` lasciando `self._fields` vuoto (`unknown` sulle entità non-realtime). Inoltre `self._state_lock` è un `threading.Lock` non rientrante usato anche da `_auto_e_sveglia()`.
+- **Invariant**: In `_on_probe_data`, propagare in `self._fields` i campi `k in META` non `None` (esclusi `CMD_CONFIRM_META`, `"time"`, `GEO_KEYS`) senza emettere `msg_fields`; calcolare `awake = bool(self._last_msg_ts) and (time.time() - self._last_msg_ts) < self.awake_window` atomicamente dentro `with self._state_lock:` (senza mai chiamare `_auto_e_sveglia()` dentro il lock) e, se `awake` è `True`, riempire solo le chiavi assenti per non sovrascrivere un `5A02` live recente.
+- **onFailure Mandate**: Se `data` non è un `dict`, saltare la propagazione senza sollevare né toccare `self._fields`; non chiamare mai `_auto_e_sveglia()` dentro `with self._state_lock:`.
+- **Forbidden Regex**: `with\s+self\._state_lock:[^#]*self\._auto_e_sveglia\(`

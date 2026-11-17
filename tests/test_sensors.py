@@ -280,3 +280,74 @@ def test_le_traduzioni_coprono_le_stesse_entita():
             assert attese == trovate, (
                 f"{lingua}.json, entity.{piattaforma}: "
                 f"mancano {sorted(attese - trovate)}, in più {sorted(trovate - attese)}")
+
+
+async def test_probe_popola_campi_stato_da_realtime(hass, integrazione_avviata):
+    """I campi META presenti in /asr/manager/realtime devono popolare data['fields']
+    (porte, serratura, cover, sensori diagnostici), escludendo CMD_CONFIRM_META/time/geo
+    e senza emettere msg_fields."""
+    coord = _coord(hass, integrazione_avviata)
+    payload = {
+        "odometer": "513",
+        "dumpEnergy": "77",
+        "pureElectricRange": "71",
+        "frontLeftDoor": "0",
+        "doorLock": "1",
+        "trunkDoor": "1",
+        "sunroofState": "0",
+        "sunroofMoveState": "2",
+        "chargeGunState": "1",
+        "engineState": "0",
+        "frontHVACState": "0",
+        "result": "000000",
+        "seq": "abc",
+        "time": "1763360000000",
+        "lat": 45.0,
+        "lon": 9.0,
+    }
+    await _push_realtime(hass, coord, payload)
+
+    assert hass.states.get("binary_sensor.lepas_front_left_door").state == "off"
+    assert hass.states.get("lock.lepas_lock").state == "unlocked"
+    assert hass.states.get("cover.lepas_trunk").state == "open"
+    assert hass.states.get("sensor.lepas_sunroof_movement_state").state == "2"
+    assert hass.states.get("binary_sensor.lepas_charging_cable").state == "on"
+
+    fields = coord.data.get("fields") or {}
+    for meta_key in ("result", "seq", "time", "lat", "lon"):
+        assert meta_key not in fields
+    assert not coord.data.get("msg_fields")
+
+
+async def test_probe_non_sovrascrive_5a02_fresco_se_auto_sveglia(hass, integrazione_avviata):
+    """Se è arrivato un 5A02 recente (auto sveglia), realtime riempie solo le chiavi
+    mancanti senza sovrascrivere un campo già aggiornato dal push MQTT."""
+    import time
+
+    coord = _coord(hass, integrazione_avviata)
+    with coord._state_lock:
+        coord._last_msg_ts = time.time()
+        coord._fields["doorLock"] = "1"
+
+    await _push_realtime(hass, coord, {"doorLock": "0", "frontLeftDoor": "0"})
+
+    fields = coord.data.get("fields") or {}
+    assert fields["doorLock"] == "1"
+    assert fields["frontLeftDoor"] == "0"
+    assert hass.states.get("lock.lepas_lock").state == "unlocked"
+    assert hass.states.get("binary_sensor.lepas_front_left_door").state == "off"
+
+    # Valori None non sovrascrivono né popolano; fuori finestra awake, realtime aggiorna
+    with coord._state_lock:
+        coord._last_msg_ts = time.time() - (coord.awake_window + 5)
+    await _push_realtime(hass, coord, {"doorLock": None})
+    assert coord.data["fields"]["doorLock"] == "1"
+
+    await _push_realtime(hass, coord, {"doorLock": "0"})
+    assert coord.data["fields"]["doorLock"] == "0"
+    assert hass.states.get("lock.lepas_lock").state == "locked"
+
+    # Input non-dict (es. None) non solleva e non altera self._fields
+    coord._on_probe_data(None)
+    await hass.async_block_till_done()
+    assert coord.data["fields"]["doorLock"] == "0"
