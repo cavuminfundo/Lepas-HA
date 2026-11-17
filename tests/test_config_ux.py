@@ -556,7 +556,8 @@ async def test_charging_window_and_next_departure_sensors_multilang_and_riepilog
         assert nd_weekly.attributes["source"] == "weekly"
         assert nd_weekly.attributes["weekday"] == 2
 
-        # LepasDeparturePlan adds riepilogo while preserving existing attributes
+        # LepasDeparturePlan converts UTC travelTime to hass.config.time_zone and preserves riepilogo
+        hass.config.time_zone = "UTC"
         dp = next(
             e
             for e in hass.data["entity_components"]["sensor"].entities

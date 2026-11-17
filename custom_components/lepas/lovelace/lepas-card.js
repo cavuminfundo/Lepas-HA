@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.20.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.20.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.20.0";
+  var CARD_VERSION = "1.20.1";
   var CONFIRM_MS = 4000;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -53,13 +53,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.20.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.20.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.20.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.20.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.20.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.20.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.20.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.20.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.20.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.20.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.20.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.20.1";
 
   var SENSITIVE_ACTIONS = {
     unlock: true,
@@ -838,6 +838,7 @@
       ".field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }",
       ".field-lbl { font-size: 0.82rem; color: var(--lp-text-secondary); }",
       ".ctrl-input, .ctrl-select { min-height: 44px; padding: 6px 10px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.84rem; }",
+      '.ctrl-input[type="time"] { caret-color: transparent; user-select: none; cursor: pointer; }',
       ".charge-days-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }",
       ".charge-day-chip { min-height: 44px; min-width: 0; padding: 4px 2px; border-radius: 9px; font-size: 0.78rem; font-weight: 700; }",
       ".charge-day-chip.is-active { background: #2A313D; color: var(--lp-emerald); border-color: rgba(52, 211, 153, 0.55); }",
@@ -1084,7 +1085,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.20.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.20.1">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -1132,6 +1133,13 @@
       this._onClick = this._handleClick.bind(this);
       this._onChange = this._handleChange.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
+      var isTimeInput = function (el) {
+        return Boolean(el && el.tagName === "INPUT" && (el.type === "time" || (el.getAttribute && el.getAttribute("type") === "time")));
+      };
+      this._isTimeInput = isTimeInput;
+      this._onBlockTimeEdit = function (ev) {
+        if (ev && isTimeInput(ev.target)) ev.preventDefault();
+      };
     }
 
     static getStubConfig() {
@@ -1302,6 +1310,8 @@
       this.shadowRoot.addEventListener("click", this._onClick);
       this.shadowRoot.addEventListener("change", this._onChange);
       this.shadowRoot.addEventListener("keydown", this._onKeyDown);
+      this.shadowRoot.addEventListener("beforeinput", this._onBlockTimeEdit);
+      this.shadowRoot.addEventListener("paste", this._onBlockTimeEdit);
       this._listenersBound = true;
     }
 
@@ -1371,6 +1381,13 @@
         return;
       }
 
+      if (this._isTimeInput(target)) {
+        if (typeof target.showPicker === "function") {
+          try { target.showPicker(); } catch (e) { /* ignore */ }
+        }
+        return;
+      }
+
       if (target.closest("input, select, button")) return;
 
       var entEl = target.closest("[data-e]");
@@ -1386,9 +1403,22 @@
     }
 
     _handleKeyDown(ev) {
-      if (ev.key !== "Enter" && ev.key !== " ") return;
       var target = ev.target;
       if (!target || !target.closest) return;
+      if (this._isTimeInput(target)) {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          if (typeof target.showPicker === "function") {
+            try { target.showPicker(); } catch (e) { /* ignore */ }
+          }
+          return;
+        }
+        if (ev.key !== "Tab" && ev.key !== "Escape" && !ev.ctrlKey && !ev.metaKey) {
+          ev.preventDefault();
+        }
+        return;
+      }
+      if (ev.key !== "Enter" && ev.key !== " ") return;
       if (target.tagName === "BUTTON" || target.tagName === "INPUT" || target.tagName === "SELECT") return;
       var actionable = target.closest("[data-e], [data-device]");
       if (!actionable) return;
@@ -2270,7 +2300,7 @@
           chargeModeSwitchHtml +
           timelineHtml +
           '<div class="manual-charge-box" data-bind="manualChargeBox">' +
-            (ctx.chgStartTime ? '<div class="field-row"><label class="field-lbl">' + self._h(t.startTime) + '</label><input type="time" class="ctrl-input num" data-entity-input="' + self._h(ctx.chgStartTime.id) + '" data-uid="input:' + self._h(ctx.chgStartTime.id) + '"></div>' : "") +
+            (ctx.chgStartTime ? '<div class="field-row"><label class="field-lbl">' + self._h(t.startTime) + '</label><input type="time" inputmode="none" class="ctrl-input num" data-entity-input="' + self._h(ctx.chgStartTime.id) + '" data-uid="input:' + self._h(ctx.chgStartTime.id) + '"></div>' : "") +
             (ctx.chgDur ? '<div class="field-row"><span class="field-lbl">' + self._h(t.chargeDuration) + '</span><div class="stepper" style="min-width:150px"><button type="button" class="ctrl-btn" data-action-id="charge_dur_down" aria-label="-">' + svgIcon("minus", "btn-ico") + '</button><span class="num" data-bind="chgDurText">—</span><button type="button" class="ctrl-btn" data-action-id="charge_dur_up" aria-label="+">' + svgIcon("plus", "btn-ico") + "</button></div></div>" : "") +
             chargeDaysStripHtml +
           "</div>" +
@@ -2300,7 +2330,7 @@
         '<div class="day-editor" data-day-editor="' + expandedDayObj.slug + '">' +
           '<div class="sec-hdr"><span>' + self._h(expandedDayObj.name) + "</span></div>" +
           (expandedDayObj.sw ? '<button type="button" class="ctrl-btn" data-action-id="day_toggle_' + expandedDayObj.slug + '" data-bind="expandedDayToggle"></button>' : "") +
-          (expandedDayObj.tm ? '<div class="field-row"><label class="field-lbl">' + self._h(t.timeLbl) + '</label><input type="time" class="ctrl-input num" data-entity-input="' + self._h(expandedDayObj.tm.id) + '" data-uid="input:' + self._h(expandedDayObj.tm.id) + '"></div>' : "") +
+          (expandedDayObj.tm ? '<div class="field-row"><label class="field-lbl">' + self._h(t.timeLbl) + '</label><input type="time" inputmode="none" class="ctrl-input num" data-entity-input="' + self._h(expandedDayObj.tm.id) + '" data-uid="input:' + self._h(expandedDayObj.tm.id) + '"></div>' : "") +
         "</div>"
       ) : "";
 
@@ -2311,7 +2341,7 @@
           ((ctx.quickDep || ctx.quickDepTime)
             ? '<div class="btn-row">' +
                 (ctx.quickDep ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="quick_departure_toggle" data-confirm-key="quick_departure_toggle" data-bind="quickDepBtn"></button>' : "") +
-                (ctx.quickDepTime ? '<input type="time" class="ctrl-input num" data-entity-input="' + self._h(ctx.quickDepTime.id) + '" data-uid="input:' + self._h(ctx.quickDepTime.id) + '">' : "") +
+                (ctx.quickDepTime ? '<input type="time" inputmode="none" class="ctrl-input num" data-entity-input="' + self._h(ctx.quickDepTime.id) + '" data-uid="input:' + self._h(ctx.quickDepTime.id) + '">' : "") +
               "</div>"
             : "") +
           (ctx.depCliMode ? '<div class="field-row"><label class="field-lbl">' + self._h(t.depClimateMode) + '</label><select class="ctrl-select" data-entity-input="' + self._h(ctx.depCliMode.id) + '" data-uid="input:' + self._h(ctx.depCliMode.id) + '">' + depModeOptsHtml + "</select></div>" : "") +

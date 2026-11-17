@@ -63,10 +63,41 @@ def test_piano_spento_dice_disattivata(sensore):
 
 
 def test_piano_acceso_mostra_lorario(sensore):
-    """350 minuti dalla mezzanotte = 05:50."""
+    """350 minuti UTC dalla mezzanotte = 05:50 in UTC (senza hass/fuso locale)."""
     attivo = dict(PIANO_REALE, switcher=1)
     assert _con(sensore, attivo)._live_value() == "05:50"
     assert sensore.extra_state_attributes["orario"] == "05:50"
+
+
+def test_piano_partenza_converte_travel_time_da_utc_a_fuso_locale(sensore, monkeypatch):
+    """travelTime arriva in minuti UTC: 305 (05:05 UTC) diventa 06:05 in CET e 07:05 in CEST."""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from zoneinfo import ZoneInfo
+
+    from custom_components.lepas import sensor as sensor_mod
+
+    sensore.hass = SimpleNamespace(config=SimpleNamespace(time_zone="Europe/Rome"))
+    rome = ZoneInfo("Europe/Rome")
+    monkeypatch.setattr(sensor_mod.dt_util, "get_time_zone", lambda tz: ZoneInfo(tz))
+
+    # Inverno (CET, UTC+1): 05:05 UTC (305 min) -> 06:05 locale
+    monkeypatch.setattr(sensor_mod.dt_util, "utcnow", lambda: datetime(2026, 11, 17, 23, 0, tzinfo=timezone.utc))
+    piano_inverno = dict(PIANO_REALE, switcher=1, travelTime=305)
+    assert _con(sensore, piano_inverno)._live_value() == "06:05"
+    assert sensore.extra_state_attributes["orario"] == "06:05"
+    assert sensore.extra_state_attributes["giorni"] == [1, 2, 3, 4, 5]
+
+    # Estate (CEST, UTC+2): 05:05 UTC -> 07:05 locale
+    monkeypatch.setattr(sensor_mod.dt_util, "utcnow", lambda: datetime(2026, 8, 10, 10, 0, tzinfo=timezone.utc))
+    assert _con(sensore, piano_inverno)._live_value() == "07:05"
+
+    # Scavalco mezzanotte (23:30 UTC = 1410 min -> 00:30 CET giorno successivo, giorni traslati +1 con wrap 7->1)
+    monkeypatch.setattr(sensor_mod.dt_util, "utcnow", lambda: datetime(2026, 11, 17, 23, 0, tzinfo=timezone.utc))
+    piano_notte = dict(PIANO_REALE, switcher=1, travelTime=1410, travelDate=[5, 7])
+    assert _con(sensore, piano_notte)._live_value() == "00:30"
+    assert sensore.extra_state_attributes["giorni"] == [6, 1]
+    assert rome is not None
 
 
 def test_i_giorni_diventano_leggibili(sensore):

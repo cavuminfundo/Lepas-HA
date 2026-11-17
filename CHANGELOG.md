@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.20.1 — 2026-11-17
+
+### 🇬🇧 English
+
+- **Fix Scheduled Departure UTC→Local Time Conversion (`sensor.lepas_scheduled_departure`)**: Converted `appointmentTravelSetVOS.travelTime` (which arrives in UTC minutes since midnight rather than local minutes) into Home Assistant's configured local time zone (handling CET/CEST and midnight weekday rollover automatically).
+- **Selection-Only Time Pickers (`custom:lepas-card`)**: Disabled manual keyboard typing and mobile soft keyboards (`inputmode="none"`, blocked `keydown`/`beforeinput`/`paste`) on all `input[type="time"]` selectors while opening the scrollable `HH | MM` picker directly via `showPicker()` on tap/click, with `?v=1.20.1` cache-busting.
+
+### 🇮🇹 Italiano
+
+- **Fix Conversione Orario Partenza Programmata UTC→Locale (`sensor.lepas_scheduled_departure`)**: Convertito `appointmentTravelSetVOS.travelTime` (che arriva dal cloud in minuti dalla mezzanotte UTC anziché in ora locale) nel fuso orario configurato su Home Assistant, gestendo automaticamente ora solare/legale (CET/CEST) e l'eventuale salto di giorno attorno alla mezzanotte.
+- **Selettori Orario Solo a Scelta (`custom:lepas-card`)**: Bloccata la digitazione manuale e la tastiera mobile (`inputmode="none"`, blocco `keydown`/`beforeinput`/`paste`) su tutti i campi `input[type="time"]` della card aprendo direttamente il selettore a scorrimento `HH | MM` (`showPicker()`) al tap/click, con query anti-cache `?v=1.20.1`.
+
 ## v1.20.0 — 2026-11-17
 
 ### 🇬🇧 English

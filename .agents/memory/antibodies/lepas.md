@@ -54,3 +54,10 @@
 - **Invariant**: `window.customCards` entries MUST use `type: "lepas-card"` (matching `customElements.define("lepas-card", ...)`), never `custom:lepas-card`, and `manifest.json` MUST keep `"frontend"` in `after_dependencies`.
 - **onFailure Mandate**: Check `window.customCards` in `lepas-card.js` and `tests/lepas_card.test.mjs`, verify `?v=<manifest.version>` matches `manifest.json`, and run `tests/test_lovelace_card.py` + `tests/lepas_card.test.mjs`.
 - **Forbidden Regex**: `customCards\.push\(\{[^}]*type:\s*["']custom:`
+
+### [AB-LEP-009] `appointmentTravelSetVOS.travelTime` UTC Minutes vs `chargeAppointPlans.startTime` Local Minutes
+- **Target Files**: `custom_components/lepas/sensor.py`
+- **Root Cause**: By analogy with `chargeAppointPlans.startTime` (which is local minutes since midnight), `LepasDeparturePlan` read `appointmentTravelSetVOS[0]["travelTime"]` directly as local `HH:MM`, causing a `-1h` (CET) / `-2h` (CEST) drift vs the official Lepas app (`05:05` in HA when `06:05` CET was set in app).
+- **Invariant**: Always convert `appointmentTravelSetVOS.travelTime` from UTC minutes since midnight into Home Assistant's configured local timezone (`hass.config.time_zone` / `dt_util.DEFAULT_TIME_ZONE`) via `_orario_locale`, and shift `travelDate` weekdays by `day_delta` when crossing UTC midnight. Keep `chargeAppointPlans.startTime` in local minutes.
+- **onFailure Mandate**: If `travelTime` is out of `0..1439` or non-numeric, return `None` without shifting `travelDate` or raising.
+- **Forbidden Regex**: `return _orario\(piano\.get\(["']travelTime["']\)\)`

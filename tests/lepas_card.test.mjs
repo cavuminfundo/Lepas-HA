@@ -881,13 +881,13 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   assert.ok(h, "LepasCard._helpers must be exposed");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.20.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.20.1");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.20.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.20.1`
     );
   }
 
@@ -906,7 +906,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.20.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.20.1`
     );
   }
 
@@ -1564,4 +1564,54 @@ test("v1.20.0 TPMS localized wheel labels and grouped security/closures buttons"
   assert.ok(closuresGrp.querySelector('[data-action-id="trunk_open"]'));
   assert.ok(securityGrp.querySelector('[data-action-id="alarm_toggle"]'));
   assert.ok(securityGrp.querySelector('[data-action-id="locate_gps"]'));
+});
+
+test("v1.20.1 Time inputs block manual keyboard typing and open picker on click", () => {
+  const card = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
+  const timeInputs = card.shadowRoot.querySelectorAll('input[type="time"]');
+  assert.ok(timeInputs.length >= 2, "Expected scheduled charge and quick departure time inputs");
+
+  for (const inp of timeInputs) {
+    assert.equal(inp.getAttribute("inputmode"), "none", "Time input must disable mobile keyboard via inputmode=none");
+    assert.equal(inp.hasAttribute("readonly"), false, "Time input must NOT set readonly so showPicker() stays valid");
+  }
+
+  const target = timeInputs[0];
+  let pickerCalls = 0;
+  target.showPicker = () => {
+    pickerCalls += 1;
+  };
+
+  // Typing digits or Backspace must be prevented
+  for (const key of ["1", "5", "Backspace", "Delete", "a"]) {
+    const ev = new Event("keydown", { bubbles: true, cancelable: true });
+    ev.key = key;
+    target.dispatchEvent(ev);
+    assert.equal(ev.defaultPrevented, true, `Key ${key} must be blocked on time input`);
+  }
+
+  // beforeinput / paste must also be prevented
+  const bi = new Event("beforeinput", { bubbles: true, cancelable: true });
+  target.dispatchEvent(bi);
+  assert.equal(bi.defaultPrevented, true);
+  const pasteEv = new Event("paste", { bubbles: true, cancelable: true });
+  target.dispatchEvent(pasteEv);
+  assert.equal(pasteEv.defaultPrevented, true);
+
+  // Navigation keys Tab / Escape stay allowed
+  for (const allowed of ["Tab", "Escape"]) {
+    const ev = new Event("keydown", { bubbles: true, cancelable: true });
+    ev.key = allowed;
+    target.dispatchEvent(ev);
+    assert.equal(ev.defaultPrevented, false, `Key ${allowed} must NOT be blocked`);
+  }
+
+  // Clicking or pressing Enter/Space opens the picker via showPicker()
+  target.click();
+  assert.equal(pickerCalls, 1, "Clicking time input must open picker");
+  const enterEv = new Event("keydown", { bubbles: true, cancelable: true });
+  enterEv.key = "Enter";
+  target.dispatchEvent(enterEv);
+  assert.equal(enterEv.defaultPrevented, true);
+  assert.equal(pickerCalls, 2, "Pressing Enter on time input must open picker");
 });

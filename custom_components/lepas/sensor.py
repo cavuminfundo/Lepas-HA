@@ -11,7 +11,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 
 from homeassistant.components.sensor import (
     ENTITY_ID_FORMAT,
@@ -847,6 +847,21 @@ def _orario(minuti) -> str | None:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
+def _orario_locale(minuti, hass=None) -> tuple[str | None, int]:
+    """Converte `travelTime` (minuti dalla mezzanotte UTC) nel fuso locale di HA e delta giorni."""
+    if _orario(minuti) is None:
+        return None, 0
+    m = int(minuti)
+    tz_name = getattr(getattr(hass, "config", None), "time_zone", None) if hass is not None else None
+    tz = (dt_util.get_time_zone(tz_name) if tz_name else None) or (
+        dt_util.DEFAULT_TIME_ZONE if hass is not None else timezone.utc
+    )
+    utc_today = dt_util.utcnow().date()
+    utc_dt = datetime(utc_today.year, utc_today.month, utc_today.day, m // 60, m % 60, tzinfo=timezone.utc)
+    local_dt = utc_dt.astimezone(tz)
+    return f"{local_dt.hour:02d}:{local_dt.minute:02d}", (local_dt.date() - utc_today).days
+
+
 class LepasDeparturePlan(_LepasRestoreSensor):
     """Piano di partenza programmata, letto dall'auto (`appointmentTravelSetVOS`).
 
@@ -863,10 +878,10 @@ class LepasDeparturePlan(_LepasRestoreSensor):
     esatto della lettura. Mostrarli significherebbe dire all'utente «impostato oggi alle 09:31»
     di un piano che non tocca da mesi.
 
-    ⚠️ `travelTime` è in minuti dalla mezzanotte **locale**, come `startTime` della ricarica
-    programmata (misurato il 2026-08-10: un piano scritto con `startTime = 0` l'app lo mostra
-    come 00:00, non 02:00). È l'unico anello dedotto per analogia fra le due funzioni, ed è
-    per questo che il collaudo prevede il confronto con l'ora mostrata dall'app."""
+    ⚠️ A differenza di `chargeAppointPlans.startTime` (che è in ora locale), `travelTime`
+    arriva in minuti dalla mezzanotte **UTC** (verificato dal vivo il 2026-11-17: 06:05 CET
+    impostato in app = `305` / `05:05` UTC nel payload realtime) e viene quindi convertito
+    nel fuso orario locale di Home Assistant."""
 
     _attr_icon = "mdi:calendar-arrow-right"
 
@@ -889,7 +904,8 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         # Stessa parola già usata da `APPT_CHARGE_STATE_MAP`, per non avere due vocabolari.
         if str(piano.get("switcher", "0")).strip() in ("", "0", "None", "False"):
             return "Disattivata"
-        return _orario(piano.get("travelTime"))
+        orario, _ = _orario_locale(piano.get("travelTime"), getattr(self, "hass", None))
+        return orario
 
     @property
     def extra_state_attributes(self) -> dict | None:
@@ -897,11 +913,13 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         if piano is None:
             return None
         giorni = piano.get("travelDate")
-        giorni = giorni if isinstance(giorni, list) else []
+        giorni = list(giorni) if isinstance(giorni, list) else []
         attrs: dict = {"attiva": str(piano.get("switcher", "0")).strip() not in ("", "0", "None", "False")}
-        orario = _orario(piano.get("travelTime"))
+        orario, day_delta = _orario_locale(piano.get("travelTime"), getattr(self, "hass", None))
         if orario:
             attrs["orario"] = orario
+            if day_delta and giorni:
+                giorni = [((int(g) - 1 + day_delta) % 7) + 1 for g in giorni if isinstance(g, int) or str(g).isdigit()]
         if giorni:
             attrs["giorni"] = giorni
             attrs["giorni_testo"] = ", ".join(GIORNI.get(g, str(g)) for g in giorni)
