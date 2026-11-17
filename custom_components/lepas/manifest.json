@@ -2,7 +2,8 @@
   "domain": "lepas",
   "name": "Lepas Connect",
   "after_dependencies": [
-    "recorder"
+    "recorder",
+    "frontend"
   ],
   "codeowners": [
     "@cavuminfundo"
@@ -19,5 +20,5 @@
     "paho-mqtt>=2.0",
     "pycryptodome>=3.17"
   ],
-  "version": "1.19.0"
+  "version": "1.19.1"
 }

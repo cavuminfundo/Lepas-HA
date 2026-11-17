@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.19.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.19.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.19.0";
+  var CARD_VERSION = "1.19.1";
   var CONFIRM_MS = 4000;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -46,13 +46,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.19.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.19.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.19.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.19.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.19.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.19.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.19.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.19.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.19.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.19.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.19.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.19.1";
 
   var SENSITIVE_ACTIONS = {
     unlock: true,
@@ -818,7 +818,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.19.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.19.1">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -2585,9 +2585,9 @@
     customElements.define("lepas-card", LepasCard);
   }
   window.customCards = window.customCards || [];
-  if (!window.customCards.some(function (c) { return c.type === "custom:lepas-card"; })) {
+  if (!window.customCards.some(function (c) { return c.type === "lepas-card"; })) {
     window.customCards.push({
-      type: "custom:lepas-card",
+      type: "lepas-card",
       name: "Lepas Card",
       preview: true,
       description: "Matte Titanium OEM dashboard card for Lepas Connect (responsive 4-tab / cockpit, blueprint SVG, TPMS, climate, charging, departures).",

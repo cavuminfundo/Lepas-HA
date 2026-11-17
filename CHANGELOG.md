@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.19.1 — 2026-11-17
+
+### 🇬🇧 English
+
+- **Fix Lovelace Card Picker Visibility & Frontend Load Order**: Registered `type: "lepas-card"` (without the `custom:` prefix) in `window.customCards` inside `lepas-card.js` so Home Assistant's **Add Card** picker discovers and inserts `custom:lepas-card` reliably, added `"frontend"` to `after_dependencies` in `manifest.json` to ensure `add_extra_js_url` runs after Frontend initialization, and bumped asset cache-busting queries to `?v=1.19.1`.
+
+### 🇮🇹 Italiano
+
+- **Fix Visibilità nel Selettore Schede & Ordine di Caricamento Frontend**: Registrato `type: "lepas-card"` (senza prefisso `custom:`) in `window.customCards` dentro `lepas-card.js` affinché il selettore **"Aggiungi scheda"** di Home Assistant rilevi e inserisca correttamente `custom:lepas-card`, aggiunto `"frontend"` in `after_dependencies` di `manifest.json` per garantire l'inizializzazione del Frontend prima di `add_extra_js_url`, e aggiornata la query anti-cache degli asset a `?v=1.19.1`.
+
 ## v1.19.0 — 2026-11-17
 
 ### 🇬🇧 English

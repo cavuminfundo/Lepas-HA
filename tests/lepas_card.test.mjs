@@ -861,8 +861,12 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
   const editor = LepasCard.getConfigElement();
   assert.equal(editor.tagName, "LEPAS-CARD-EDITOR");
 
-  const regEntry = window.customCards.find((c) => c.type === "custom:lepas-card");
-  assert.ok(regEntry, "customCards registration missing");
+  const regEntry = window.customCards.find((c) => c.type === "lepas-card");
+  assert.ok(regEntry, "customCards registration missing (must use 'lepas-card' without 'custom:' prefix)");
+  assert.ok(
+    !window.customCards.some((c) => c.type === "custom:lepas-card"),
+    "window.customCards must NOT include 'custom:' prefix in type"
+  );
 
   const card = createCard({}, makeFullHass());
   assert.ok(card.shadowRoot, "LepasCard must use Shadow DOM");
@@ -877,13 +881,13 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   assert.ok(h, "LepasCard._helpers must be exposed");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.19.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.19.1");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.19.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.19.1`
     );
   }
 
@@ -902,7 +906,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.19.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.19.1`
     );
   }
 

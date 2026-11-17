@@ -48,3 +48,9 @@
 - **Invariant**: In `_on_probe_data`, propagare in `self._fields` i campi `k in META` non `None` (esclusi `CMD_CONFIRM_META`, `"time"`, `GEO_KEYS`) senza emettere `msg_fields`; calcolare `awake = bool(self._last_msg_ts) and (time.time() - self._last_msg_ts) < self.awake_window` atomicamente dentro `with self._state_lock:` (senza mai chiamare `_auto_e_sveglia()` dentro il lock) e, se `awake` è `True`, riempire solo le chiavi assenti per non sovrascrivere un `5A02` live recente.
 - **onFailure Mandate**: Se `data` non è un `dict`, saltare la propagazione senza sollevare né toccare `self._fields`; non chiamare mai `_auto_e_sveglia()` dentro `with self._state_lock:`.
 - **Forbidden Regex**: `with\s+self\._state_lock:[^#]*self\._auto_e_sveglia\(`
+
+### AB-LEP-008: `window.customCards` must register tag name without `custom:` prefix
+- **Root Cause**: In `v1.19.0`, `lepas-card.js` pushed `{ type: "custom:lepas-card" }` into `window.customCards`. Home Assistant's Lovelace card picker prepends `custom:` automatically to `entry.type`, causing missing picker discovery / malformed `custom:custom:lepas-card`. Additionally, `manifest.json` lacked `"frontend"` in `after_dependencies` before `add_extra_js_url`.
+- **Invariant**: `window.customCards` entries MUST use `type: "lepas-card"` (matching `customElements.define("lepas-card", ...)`), never `custom:lepas-card`, and `manifest.json` MUST keep `"frontend"` in `after_dependencies`.
+- **onFailure Mandate**: Check `window.customCards` in `lepas-card.js` and `tests/lepas_card.test.mjs`, verify `?v=<manifest.version>` matches `manifest.json`, and run `tests/test_lovelace_card.py` + `tests/lepas_card.test.mjs`.
+- **Forbidden Regex**: `customCards\.push\(\{[^}]*type:\s*["']custom:`

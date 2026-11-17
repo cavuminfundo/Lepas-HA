@@ -123,11 +123,12 @@ def test_hero_png_assets_exist_valid_and_tracked() -> None:
 
 
 def test_card_version_and_matte_titanium_design_tokens() -> None:
-    """Verify v1.19.0 cache-busting query and Matte Titanium OEM tokens (zero neon)."""
+    """Verify v1.19.1 cache-busting query, customCards tag, and Matte Titanium OEM tokens."""
     source = CARD_JS.read_text(encoding="utf-8")
 
-    assert re.search(r"\?v=1\.19\.0\b", source), "Expected ?v=1.19.0 cache-busting query in lepas-card.js"
+    assert re.search(r"\?v=1\.19\.1\b", source), "Expected ?v=1.19.1 cache-busting query in lepas-card.js"
     assert re.search(r"\?v=\d+\.\d+\.\d+\b", source), "Expected semver ?v=X.Y.Z query in lepas-card.js"
+    assert 'type: "lepas-card"' in source, "window.customCards must register type: 'lepas-card' (no custom: prefix)"
     assert ":host-context" not in source, "lepas-card.js must NOT use :host-context()"
     assert "container-type: inline-size" in source, "lepas-card.js must declare container-type: inline-size"
 
