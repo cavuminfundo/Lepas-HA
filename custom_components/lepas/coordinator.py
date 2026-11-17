@@ -707,6 +707,8 @@ class LepasCoordinator(DataUpdateCoordinator):
             # sessione senza mai contattare l'auto.
             self._timers.cancel_many(GRUPPO_POLL)
             self._hv_poll_count = 0
+        if not self._timers.closing:
+            self.async_update_listeners()
 
     # ───────────────── programmatore partenze e ricarica intelligente ─────────────────
     def async_start_departure_scheduler(self) -> None:

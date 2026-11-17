@@ -392,3 +392,49 @@ async def test_at_home_restores_from_device_tracker(hass: HomeAssistant, cloud, 
 
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_set_poll_enabled_notifies_at_home_availability(hass: HomeAssistant, cloud, monkeypatch):
+    """Toggling poll_enabled notifies availability-dependent entities (e.g. LepasAtHome)."""
+    import fixtures as FX
+    from homeassistant.setup import async_setup_component
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    hass.config.latitude, hass.config.longitude = 45.0, 9.0
+    assert await async_setup_component(hass, "zone", {})
+    await hass.async_block_till_done()
+
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs", lambda self: (True, "ok"))
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_keepalive", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_telemetry_poll", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_drive_watch", lambda self: None)
+
+    async def _no_backfill(self) -> None:
+        return None
+
+    monkeypatch.setattr(LepasCoordinator, "async_ensure_vehicle_identity", _no_backfill)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=f"Lepas ({FX.VIN})",
+        unique_id=FX.VIN,
+        data={CONF_VIN: FX.VIN, "tuserid": FX.TUSERID, "email": FX.EMAIL, "pin": FX.PIN},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coord = hass.data[DOMAIN][entry.entry_id]
+    coord.set_poll_enabled(False)
+    coord.restore_position(45.0, 9.0)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.lepas_at_home").state == "unavailable"
+
+    # Enabling poll afterwards must immediately notify LepasAtHome -> "on"
+    coord.set_poll_enabled(True)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.lepas_at_home").state == "on"
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

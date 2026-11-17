@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.20.2 — 2026-11-17
+
+### 🇬🇧 English
+
+- **Fix `binary_sensor.lepas_at_home` Boot Availability Race (`set_poll_enabled`)**: `LepasCoordinator.set_poll_enabled()` now notifies coordinator listeners (`async_update_listeners()`) when polling state is restored or toggled, eliminating an intermittent race on Home Assistant startup where `binary_sensor.lepas_at_home` could remain `unavailable` if `device_tracker` restored position before `switch.lepas_automatic_updates` restored `on`. Bumped card cache-busting query to `?v=1.20.2`.
+
+### 🇮🇹 Italiano
+
+- **Fix Race Condition Disponibilità `binary_sensor.lepas_at_home` all'Avvio (`set_poll_enabled`)**: `LepasCoordinator.set_poll_enabled()` notifica ora i listener del coordinator (`async_update_listeners()`) al ripristino o al cambio dello switch *Aggiornamento automatico*, eliminando la race intermittente in avvio Home Assistant in cui `binary_sensor.lepas_at_home` poteva restare `unavailable` se `device_tracker` ripristinava la posizione prima di `switch.lepas_automatic_updates`. Aggiornata la query anti-cache della card a `?v=1.20.2`.
+
 ## v1.20.1 — 2026-11-17
 
 ### 🇬🇧 English

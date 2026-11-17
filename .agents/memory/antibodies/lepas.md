@@ -61,3 +61,10 @@
 - **Invariant**: Always convert `appointmentTravelSetVOS.travelTime` from UTC minutes since midnight into Home Assistant's configured local timezone (`hass.config.time_zone` / `dt_util.DEFAULT_TIME_ZONE`) via `_orario_locale`, and shift `travelDate` weekdays by `day_delta` when crossing UTC midnight. Keep `chargeAppointPlans.startTime` in local minutes.
 - **onFailure Mandate**: If `travelTime` is out of `0..1439` or non-numeric, return `None` without shifting `travelDate` or raising.
 - **Forbidden Regex**: `return _orario\(piano\.get\(["']travelTime["']\)\)`
+
+### [AB-LEP-010] `LepasCoordinator.set_poll_enabled` Must Notify Listeners on Restore/Toggle
+- **Target Files**: `custom_components/lepas/coordinator.py`
+- **Root Cause**: During concurrent `async_forward_entry_setups` on boot, `LepasTracker` (`device_tracker`) could call `restore_position()` before `LepasPollingSwitch` (`switch`) restored `poll_enabled = True`; because `set_poll_enabled()` did not call `async_update_listeners()`, `LepasAtHome` (`available = bool(poll_enabled)`) remained stuck on `unavailable`.
+- **Invariant**: `LepasCoordinator.set_poll_enabled(on)` MUST call `self.async_update_listeners()` when `not self._timers.closing`, so availability-dependent entities (`LepasAtHome`, `LepasChargedEnergy`) immediately reflect the restored or toggled `poll_enabled` state regardless of platform setup order.
+- **onFailure Mandate**: Guard with `if not self._timers.closing:` so teardown never dispatches listener updates during unload.
+- **Forbidden Regex**: `def set_poll_enabled\([^)]*\):(?![\s\S]*async_update_listeners)`
