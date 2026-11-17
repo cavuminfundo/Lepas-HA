@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.19.0 — 2026-11-17
+
+### 🇬🇧 English
+
+- **Redesigned `custom:lepas-card` (*Matte Titanium OEM*) & Visual Editor**: Rebuilt `lepas-card.js` in a zero-neon *Matte Titanium OEM* style (`#111317` / `#181B20` / `#21252C` surfaces, `tabular-nums` telemetry, `#34D399` / `#60A5FA` / `#F59E0B` / `#EF4444` semantic accents) as a single responsive Web Component via CSS `@container` (`container-type: inline-size`), switching between a 4-tab compact view (`< 680px`) and a multi-column Cockpit (`>= 680px`, 3 columns at `>= 960px`) with `layout: auto|compact|cockpit` and `default_tab` options. Added native Home Assistant visual editor (`LepasCardEditor` / `<lepas-card-editor>`) and Sections grid support (`getGridOptions`).
+- **5 Faithful Lepas L8 Studio Vehicle Renders**: Added 5 consistent Lepas L8 studio renders (`grey` default, plus `teal`, `violet`, `black`, and `white`) served via `/lepas_card/lepas-hero-{color}.png?v=1.19.0` (with `lepas-hero.png` updated to the grey render for compatibility), selectable via `color:` or visual editor swatches while preserving `image:` overrides and `vehicle_image` entity attributes.
+- **Full `v1.18.0` Telemetry, SVG Blueprint & Safe Controls**: Integrated `v1.18.0` weekly/quick departure schedules and the 24h scheduled charging timeline (`scheduled_charging_window`, `charge_days`, `next_departure`), climate hub (`number.lepas_climate_duration`, `cool_everything` / `heat_everything` macros, 4 defrost/steering heaters, 4+1 seat heating/ventilation matrix), animated top-down SUV SVG blueprint with 4-corner TPMS, 4-second inline confirmation on sensitive physical actions, EN/IT/NL translations, and Android System WebView ES compatibility.
+
+### 🇮🇹 Italiano
+
+- **Nuova `custom:lepas-card` (*Matte Titanium OEM*) & Editor Visuale**: Riprogettata `lepas-card.js` in stile *Matte Titanium OEM* (zero neon, superfici `#111317` / `#181B20` / `#21252C`, numeri `tabular-nums` e accenti semantici `#34D399` / `#60A5FA` / `#F59E0B` / `#EF4444`) come singolo Web Component reattivo tramite CSS `@container` (`container-type: inline-size`), con vista compatta a 4 tab (`< 680px`) e Cockpit multi-colonna (`>= 680px`, 3 colonne da `>= 960px`) configurabile con `layout: auto|compact|cockpit` e `default_tab`. Aggiunti l'editor visuale nativo Home Assistant (`LepasCardEditor` / `<lepas-card-editor>`) e il supporto alle dashboard a Sezioni (`getGridOptions`).
+- **5 Render Studio Fedeli della Lepas L8**: Aggiunti 5 render studio coerenti della Lepas L8 (`grey` predefinito, più `teal`, `violet`, `black` e `white`) serviti da `/lepas_card/lepas-hero-{color}.png?v=1.19.0` (con `lepas-hero.png` aggiornato al render grigio per compatibilità), selezionabili tramite `color:` o i selettori dell'editor visuale preservando gli override `image:` e l'attributo `vehicle_image`.
+- **Telemetria Completa `v1.18.0`, Blueprint SVG & Comandi Sicuri**: Integrati il programmatore partenze settimanale/rapido e la timeline 24h di ricarica programmata (`scheduled_charging_window`, `charge_days`, `next_departure`), hub clima completo (`number.lepas_climate_duration`, macro `cool_everything` / `heat_everything`, 4 sbrinamenti/volante, matrice sedili 4+1), blueprint SVG top-down animato della SUV con TPMS ai 4 angoli, conferma inline di 4 secondi sulle azioni fisiche sensibili, traduzioni IT/EN/NL e compatibilità Android System WebView.
+
 ## v1.18.0 — 2026-11-17
 
 ### 🇬🇧 English

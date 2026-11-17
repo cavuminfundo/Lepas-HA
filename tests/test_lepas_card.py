@@ -2,7 +2,7 @@
 
 Verifica:
 1) Compatibilità Android WebView (zero ?. o ??, protezione accessi annidati).
-2) Dark Tech Automotive theme, CSS Container Queries, accessibilità tastiera,
+2) Matte Titanium OEM theme, CSS Container Queries, accessibilità tastiera,
    4 metriche veicolo e indicatore live di connessione.
 """
 
@@ -71,7 +71,7 @@ def test_lepas_card_js_webview_compat() -> None:
 
 
 def test_lepas_card_dark_tech_theme_and_4_metrics() -> None:
-    """Verifica il tema Dark Tech Automotive, Container Queries, a11y e le 4 metriche."""
+    """Verifica il tema Matte Titanium OEM, Container Queries, a11y e le 4 metriche."""
     import json
 
     with open(f"{REPO}/custom_components/lepas/manifest.json", encoding="utf-8") as fh:
@@ -79,24 +79,30 @@ def test_lepas_card_dark_tech_theme_and_4_metrics() -> None:
 
     source = _read_card_source()
 
-    # 1. Fallback hero con cache busting
-    assert f"/lepas_card/lepas-hero.png?v={manifest_version}" in source, (
-        f"Manca il fallback hero dark-studio `/lepas_card/lepas-hero.png?v={manifest_version}`"
-    )
+    # 1. Asset veicolo per i 5 colori (+ fallback lepas-hero.png) con cache busting
+    hero_urls = [
+        f"/lepas_card/lepas-hero-{color}.png?v={manifest_version}"
+        for color in ("grey", "teal", "violet", "black", "white")
+    ] + [f"/lepas_card/lepas-hero.png?v={manifest_version}"]
+    for url in hero_urls:
+        assert url in source, f"Manca l'asset hero `{url}` in lepas-card.js"
 
-    # 2. Palette Dark Tech Automotive (WCAG AA/AAA)
-    dark_tech_palette = [
-        "#0F141C",  # Obsidian dark background
-        "#151D28",  # Tile dark surface
-        "#00D2FF",  # Electric cyan accent
-        "#0A84FF",  # Automotive blue accent
-        "#F1F5F9",  # Primary high-contrast text
-        "#94A3B8",  # Secondary muted text
+    # 2. Palette Matte Titanium OEM (zero neon)
+    matte_titanium_palette = [
+        "#111317",  # Canvas base
+        "#181B20",  # Surface panels
+        "#21252C",  # Elevated controls
+        "#F3F4F6",  # Primary text & platinum accent
+        "#9CA3AF",  # Secondary muted text
+        "#34D399",  # Semantic emerald
+        "#60A5FA",  # Semantic glacier blue
+        "#F59E0B",  # Semantic warm amber
+        "#EF4444",  # Semantic coral red
     ]
     source_upper = source.upper()
-    for color in dark_tech_palette:
+    for color in matte_titanium_palette:
         assert color.upper() in source_upper, (
-            f"Colore {color} della palette Dark Tech Automotive mancante in lepas-card.js"
+            f"Colore {color} della palette Matte Titanium OEM mancante in lepas-card.js"
         )
 
     # 3. CSS Container Queries
