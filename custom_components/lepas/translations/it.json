@@ -243,6 +243,9 @@
       },
       "find_car_flash_lights": {
         "name": "Trova auto (lampeggio)"
+      },
+      "apply_charging_schedule": {
+        "name": "Applica orari ricarica"
       }
     },
     "climate": {
@@ -273,10 +276,31 @@
     },
     "number": {
       "climate_duration": {
-        "name": "Durata clima"
+        "name": "A/C acceso per (pre-clima)"
       },
       "charge_duration": {
-        "name": "Durata ricarica"
+        "name": "Ricarica prog. · durata"
+      }
+    },
+    "select": {
+      "charge_days": {
+        "name": "Giorni di ricarica",
+        "state": {
+          "all_days": "Tutti i giorni (Lun–Dom)",
+          "weekdays": "Feriali (Lun–Ven)",
+          "weekend": "Weekend (Sab–Dom)",
+          "mon_wed_fri": "Lun · Mer · Ven",
+          "tue_thu_sat": "Mar · Gio · Sab",
+          "custom": "Personalizzati"
+        }
+      },
+      "departure_climate_mode": {
+        "name": "Partenza · clima automatico",
+        "state": {
+          "at_home": "Solo a casa",
+          "anywhere": "Ovunque",
+          "off": "Disattivato"
+        }
       }
     },
     "sensor": {
@@ -411,6 +435,12 @@
       },
       "electric_efficiency_mi_kwh": {
         "name": "Efficienza elettrica (mi/kWh)"
+      },
+      "scheduled_charging_window": {
+        "name": "Finestra ricarica programmata"
+      },
+      "next_departure": {
+        "name": "Prossima partenza"
       }
     },
     "switch": {
@@ -467,11 +497,112 @@
       },
       "rear_left_seat_ventilation": {
         "name": "Ventilazione sedile post. SX"
+      },
+      "quick_departure": {
+        "name": "Prenota partenza rapida"
+      },
+      "sync_charge_to_departure": {
+        "name": "Adatta ricarica alla partenza"
+      },
+      "departure_mon_enabled": {
+        "name": "Partenza Lun · attiva"
+      },
+      "departure_tue_enabled": {
+        "name": "Partenza Mar · attiva"
+      },
+      "departure_wed_enabled": {
+        "name": "Partenza Mer · attiva"
+      },
+      "departure_thu_enabled": {
+        "name": "Partenza Gio · attiva"
+      },
+      "departure_fri_enabled": {
+        "name": "Partenza Ven · attiva"
+      },
+      "departure_sat_enabled": {
+        "name": "Partenza Sab · attiva"
+      },
+      "departure_sun_enabled": {
+        "name": "Partenza Dom · attiva"
       }
     },
     "time": {
       "charge_start_time": {
-        "name": "Orario di inizio ricarica"
+        "name": "Ricarica prog. · inizio"
+      },
+      "quick_departure_time": {
+        "name": "Partenza rapida · orario"
+      },
+      "departure_mon_time": {
+        "name": "Partenza Lun · orario"
+      },
+      "departure_tue_time": {
+        "name": "Partenza Mar · orario"
+      },
+      "departure_wed_time": {
+        "name": "Partenza Mer · orario"
+      },
+      "departure_thu_time": {
+        "name": "Partenza Gio · orario"
+      },
+      "departure_fri_time": {
+        "name": "Partenza Ven · orario"
+      },
+      "departure_sat_time": {
+        "name": "Partenza Sab · orario"
+      },
+      "departure_sun_time": {
+        "name": "Partenza Dom · orario"
+      }
+    }
+  },
+  "services": {
+    "set_quick_departure": {
+      "name": "Imposta partenza rapida",
+      "description": "Configura e abilita o disabilita una partenza rapida singola.",
+      "fields": {
+        "entry_id": {
+          "name": "Veicolo",
+          "description": "ID della config entry del veicolo (opzionale se è configurato un solo veicolo)."
+        },
+        "time": {
+          "name": "Orario di partenza",
+          "description": "Orario locale di partenza desiderato (HH:MM)."
+        },
+        "enabled": {
+          "name": "Attiva",
+          "description": "Indica se la partenza rapida è attiva."
+        },
+        "sync_charging": {
+          "name": "Sincronizza ricarica",
+          "description": "Adatta la ricarica programmata per terminare entro l'orario di partenza rapida."
+        }
+      }
+    },
+    "set_charging_schedule": {
+      "name": "Imposta orari di ricarica",
+      "description": "Configura orario di inizio, durata e giorni attivi della ricarica programmata.",
+      "fields": {
+        "entry_id": {
+          "name": "Veicolo",
+          "description": "ID della config entry del veicolo (opzionale se è configurato un solo veicolo)."
+        },
+        "start_time": {
+          "name": "Orario di inizio",
+          "description": "Orario locale di inizio ricarica (HH:MM)."
+        },
+        "duration_hours": {
+          "name": "Durata (ore)",
+          "description": "Durata della ricarica in ore (1–12)."
+        },
+        "days": {
+          "name": "Giorni",
+          "description": "Nome preset, CSV o lista di giorni ISO (1–7 / mon–sun)."
+        },
+        "apply": {
+          "name": "Applica subito",
+          "description": "Invia subito al veicolo il programma di ricarica aggiornato."
+        }
       }
     }
   }

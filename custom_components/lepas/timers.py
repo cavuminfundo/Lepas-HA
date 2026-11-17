@@ -39,6 +39,7 @@ HV_POLL = "hv_poll"              # follow-up ravvicinato ad alta tensione accesa
 STARTUP_PROBE = "startup_probe"  # sonda one-shot ~15s dopo l'avvio (semina il follow-up)
 DRIVE_WATCH = "drive_watch"      # battito di rilevamento marcia (sola lettura)
 AWAKE = "awake_expiry"           # scadenza dello stato «auto sveglia» (nessun contatto col cloud)
+DEPARTURE_TICK = "departure_tick"  # programmatore locale partenze/ricarica (sopravvive a poll OFF)
 
 # Timer legati all'interruttore «Aggiornamento automatico»: si spengono TUTTI insieme.
 # Il keep-alive NON è del gruppo — tiene viva la sessione (nessun contatto con l'auto) e

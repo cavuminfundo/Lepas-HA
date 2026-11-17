@@ -8,6 +8,7 @@ arriva un dato live dall'auto.
 """
 from __future__ import annotations
 
+import ast
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -16,6 +17,7 @@ from homeassistant.components.sensor import (
     ENTITY_ID_FORMAT,
     RestoreSensor,
     SensorDeviceClass,
+    SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -39,6 +41,8 @@ from homeassistant.util import dt as dt_util
 from .const import CHARGE_ENERGY_MAX_GAP, DOMAIN, FIELDS_AS_RICH_ENTITY, entity_allowed
 from .coordinator import SENSORS
 from .entity import LepasEntity, in_zona_casa
+from .naming import ID_PREFIX
+from .scheduler import compute_charge_start_for_departure, compute_charge_window
 
 # ───────────────────────── sensori "realtime" (Round B) ─────────────────────────
 # Campi del canale REST /asr/manager/realtime (in coordinator.data["realtime"]),
@@ -461,6 +465,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     # [2.0] freschezza del frame auto (resultTime del realtime): quanto è vecchio il dato
     #       batteria/odometro mostrato — utile ad auto ferma per sapere se è recente o stantio.
     ents.append(LepasTimestampSensor(coord, "Lepas Dati auto aggiornati", "car_data_ts", "car_data_ts", "mdi:database-clock"))
+    if entity_allowed(coord, "sensor", "scheduled_charging_window"):
+        ents.append(LepasScheduledChargingWindowSensor(coord))
+    ents.append(LepasNextDepartureSensor(coord))
     add(ents)
 
 
@@ -898,4 +905,212 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         if giorni:
             attrs["giorni"] = giorni
             attrs["giorni_testo"] = ", ".join(GIORNI.get(g, str(g)) for g in giorni)
+        lang = _ux_lang(getattr(self, "hass", None))
+        txt = _UX_TEXT[lang]
+        summary_parts = [p for p in (orario, attrs.get("giorni_testo")) if p]
+        summary = " · ".join(summary_parts)
+        if attrs["attiva"]:
+            attrs["riepilogo"] = summary or txt["active"]
+        else:
+            attrs["riepilogo"] = f"{txt['disabled']} ({summary})" if summary else txt["disabled"]
         return attrs
+
+
+_DAY_ABBR: dict[str, dict[int, str]] = {
+    "it": {1: "Lun", 2: "Mar", 3: "Mer", 4: "Gio", 5: "Ven", 6: "Sab", 7: "Dom"},
+    "en": {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"},
+    "nl": {1: "Ma", 2: "Di", 3: "Wo", 4: "Do", 5: "Vr", 6: "Za", 7: "Zo"},
+}
+
+_UX_TEXT: dict[str, dict[str, str]] = {
+    "it": {
+        "next_day": "Giorno dopo ",
+        "disabled": "Disattivata",
+        "today": "Oggi",
+        "tomorrow": "Domani",
+        "quick": "rapida",
+        "climate": "clima",
+        "active": "Attiva",
+    },
+    "en": {
+        "next_day": "Next day ",
+        "disabled": "Disabled",
+        "today": "Today",
+        "tomorrow": "Tomorrow",
+        "quick": "quick",
+        "climate": "climate",
+        "active": "Active",
+    },
+    "nl": {
+        "next_day": "Volgende dag ",
+        "disabled": "Uitgeschakeld",
+        "today": "Vandaag",
+        "tomorrow": "Morgen",
+        "quick": "snel",
+        "climate": "klimaat",
+        "active": "Actief",
+    },
+}
+
+
+def _ux_lang(hass: HomeAssistant | None) -> str:
+    if hass is None or getattr(hass, "config", None) is None:
+        return "en"
+    code = (getattr(hass.config, "language", None) or "en").lower()[:2]
+    return code if code in ("it", "en", "nl") else "en"
+
+
+def _format_days(days: list[int], lang: str) -> str:
+    abbr = _DAY_ABBR[lang]
+    norm = sorted({int(d) for d in days if 1 <= int(d) <= 7})
+    if not norm:
+        return ""
+    if len(norm) >= 2 and norm == list(range(norm[0], norm[-1] + 1)):
+        return f"{abbr[norm[0]]}–{abbr[norm[-1]]}"
+    return ", ".join(abbr[d] for d in norm)
+
+
+class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
+    """Diagnostic summary of the configured scheduled charging window."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:battery-clock-outline"
+
+    def __init__(self, coord) -> None:
+        super().__init__(
+            coord,
+            "Lepas Scheduled charging window",
+            "scheduled_charging_window",
+            object_id=f"{ID_PREFIX}_scheduled_charging_window",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key="scheduled_charging_window",
+        )
+
+    def _window_params(self) -> tuple[int, int, list[int]]:
+        start_min = int(getattr(self.coordinator, "charge_start_minutes", 480) or 0) % 1440
+        dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
+        eff_fn = getattr(self.coordinator, "effective_charge_days", None)
+        if callable(eff_fn):
+            days = list(eff_fn())
+        else:
+            days = list(getattr(self.coordinator, "charge_days", [1, 2, 3, 4, 5, 6, 7]))
+        return start_min, dur_h, days
+
+    def _synced_with_car(self, start_min: int, dur_h: int, days: list[int]) -> bool | None:
+        raw = (self.coordinator.data or {}).get("fields", {}).get("chargeAppointPlans")
+        if not raw:
+            return None
+        try:
+            plans = ast.literal_eval(raw) if isinstance(raw, str) else raw
+            piano = plans[0] if isinstance(plans, list) and plans and isinstance(plans[0], dict) else None
+            if piano is None:
+                return None
+            car_start = int(piano["startTime"]) % 1440
+            car_dur = int(piano["timeConsuming"])
+            car_days = sorted(int(d) for d in (piano.get("cycleData") or []))
+        except (ValueError, SyntaxError, KeyError, TypeError, IndexError):
+            return None
+        return car_start == start_min and car_dur == dur_h * 60 and car_days == sorted(days)
+
+    @property
+    def native_value(self) -> str:
+        lang = _ux_lang(getattr(self, "hass", None))
+        txt = _UX_TEXT[lang]
+        start_min, dur_h, days = self._window_params()
+        start_hhmm, end_hhmm, next_day = compute_charge_window(start_min, dur_h, days)
+        end_part = f"{txt['next_day']}{end_hhmm}" if next_day else end_hhmm
+        days_lbl = _format_days(days, lang)
+        base = f"{start_hhmm} → {end_part}"
+        return (f"{base} · {days_lbl}" if days_lbl else base)[:255]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        start_min, dur_h, days = self._window_params()
+        start_hhmm, end_hhmm, next_day = compute_charge_window(start_min, dur_h, days)
+        return {
+            "start_time": start_hhmm,
+            "end_time": end_hhmm,
+            "next_day": next_day,
+            "duration_hours": dur_h,
+            "days": days,
+            "synced_with_car": self._synced_with_car(start_min, dur_h, days),
+        }
+
+
+class LepasNextDepartureSensor(LepasEntity, SensorEntity):
+    """Diagnostic summary of the next scheduled departure and pre-climate window."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:car-clock"
+
+    def __init__(self, coord) -> None:
+        super().__init__(
+            coord,
+            "Lepas Next departure",
+            "next_departure",
+            object_id=f"{ID_PREFIX}_next_departure",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key="next_departure",
+        )
+
+    def _snapshot(self):
+        now = dt_util.now()
+        occ_fn = getattr(self.coordinator, "next_departure_occurrence", None)
+        occ = occ_fn(now) if callable(occ_fn) else None
+        return now, occ
+
+    @property
+    def native_value(self) -> str:
+        lang = _ux_lang(getattr(self, "hass", None))
+        txt = _UX_TEXT[lang]
+        now, occ = self._snapshot()
+        if occ is None:
+            return txt["disabled"]
+        delta_days = (occ.departure_at.date() - now.date()).days
+        day_abbr = _DAY_ABBR[lang][occ.weekday]
+        if delta_days == 0:
+            day_lbl = txt["today"]
+        elif delta_days == 1:
+            day_lbl = f"{txt['tomorrow']} {day_abbr.lower()}"
+        else:
+            day_lbl = day_abbr
+        dep_hhmm = f"{occ.departure_at.hour:02d}:{occ.departure_at.minute:02d}"
+        climate_mode = getattr(self.coordinator, "departure_climate_mode", "at_home")
+        parts: list[str] = []
+        if occ.source == "quick":
+            parts.append(txt["quick"])
+        if climate_mode != "off":
+            c_hhmm = f"{occ.climate_start_at.hour:02d}:{occ.climate_start_at.minute:02d}"
+            parts.append(f"{txt['climate']} {c_hhmm}")
+        detail = f" ({' · '.join(parts)})" if parts else ""
+        return f"{day_lbl} {dep_hhmm}{detail}"[:255]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        _, occ = self._snapshot()
+        climate_mode = getattr(self.coordinator, "departure_climate_mode", "at_home")
+        sync_charging = bool(getattr(self.coordinator, "sync_charge_to_departure", False))
+        if occ is None:
+            return {
+                "departure_at": None,
+                "climate_start_at": None,
+                "source": None,
+                "weekday": None,
+                "climate_mode": climate_mode,
+                "sync_charging": sync_charging,
+                "planned_charge_start": None,
+            }
+        planned_charge = None
+        if sync_charging:
+            dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
+            c_min = compute_charge_start_for_departure(occ.departure_at_minutes, dur_h)
+            planned_charge = f"{c_min // 60:02d}:{c_min % 60:02d}"
+        return {
+            "departure_at": occ.departure_at.isoformat(),
+            "climate_start_at": occ.climate_start_at.isoformat() if climate_mode != "off" else None,
+            "source": occ.source,
+            "weekday": occ.weekday,
+            "climate_mode": climate_mode,
+            "sync_charging": sync_charging,
+            "planned_charge_start": planned_charge,
+        }

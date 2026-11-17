@@ -39,6 +39,8 @@ from .const import (
     entity_allowed,
 )
 from .entity import LepasEntity, LepasOptimisticMixin, field_on
+from .naming import ID_PREFIX
+from .scheduler import DEPARTURE_DAY_SLUGS
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
@@ -113,6 +115,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     raffredda._exclusive = riscalda
     riscalda._exclusive = raffredda
     polling = LepasPollingSwitch(coord)
+    quick_dep = LepasScheduleSwitch(
+        coord, "Lepas Quick departure", "quick_departure",
+        "quick_departure_enabled", "mdi:car-clock",
+    )
+    sync_charge = LepasScheduleSwitch(
+        coord, "Lepas Sync charging to departure", "sync_charge_to_departure",
+        "sync_charge_to_departure", "mdi:battery-sync",
+    )
     cand_switches = [
         (ricarica, "ricarica"),
         (ricarica_prog, "ricarica_programmata"),
@@ -131,6 +141,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         (raffredda, "raffredda_tutto"),
         (riscalda, "riscalda_tutto"),
         (polling, "polling_auto"),
+        (quick_dep, "quick_departure"),
+        (sync_charge, "sync_charge_to_departure"),
+        *[
+            (LepasWeeklyDepartureSwitch(coord, day, slug), f"departure_{slug}_enabled")
+            for day, slug in DEPARTURE_DAY_SLUGS.items()
+        ],
     ]
     switches_to_add = [sw for sw, sfx in cand_switches if entity_allowed(coord, "switch", sfx)]
     if coord.feature_enabled("alarm"):
@@ -616,14 +632,24 @@ class LepasScheduledChargeSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity
 
     def _live_on(self) -> bool | None:
         raw = self.coordinator.data.get("fields", {}).get("chargeAppointPlans")
-        if not raw:
-            return None
-        try:
-            plans = ast.literal_eval(raw) if isinstance(raw, str) else raw
-            if plans:
-                return field_on(plans[0].get("switchStatus"))
-        except (ValueError, SyntaxError, AttributeError, IndexError, TypeError):
-            return None
+        if raw:
+            try:
+                plans = ast.literal_eval(raw) if isinstance(raw, str) else raw
+                if plans:
+                    res = field_on(plans[0].get("switchStatus"))
+                    if res is not None:
+                        return res
+            except (ValueError, SyntaxError, AttributeError, IndexError, TypeError):
+                pass
+        rt = self.coordinator.data.get("realtime") or {}
+        if isinstance(rt, dict):
+            appt = rt.get("appointmentChargeState")
+            if appt is not None and not isinstance(appt, bool):
+                state_str = str(appt).strip()
+                if state_str == "1":
+                    return True
+                if state_str == "0":
+                    return False
         return None
 
     @property
@@ -683,7 +709,9 @@ class LepasScheduledChargeSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity
         if mins is None:
             mins = int(getattr(self.coordinator, "charge_start_hour", 8) or 8) * 60
         dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
-        return {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": int(mins),
+        eff_fn = getattr(self.coordinator, "effective_charge_days", None)
+        days = list(eff_fn()) if callable(eff_fn) else [1, 2, 3, 4, 5, 6, 7]
+        return {"cycleData": days, "startTime": int(mins),
                 "switchStatus": switch_status, "timeConsuming": dur_h * 60}
 
     async def async_turn_on(self, **kwargs) -> None:
@@ -814,3 +842,93 @@ class LepasTheftAlarmSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Res
     async def async_turn_off(self, **kwargs) -> None:
         await self._run_command("antifurto_off", False)
         self._programma_rilettura()
+
+
+class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
+    """Local boolean switch backing a coordinator departure/charging preference."""
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coord, name: str, suffix: str, attr: str, icon: str) -> None:
+        super().__init__(
+            coord,
+            name,
+            suffix,
+            object_id=f"{ID_PREFIX}_{suffix}",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key=suffix,
+        )
+        self._attr = attr
+        self._attr_icon = icon
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state in ("on", "off"):
+            setattr(self.coordinator, self._attr, last.state == "on")
+            if hasattr(self.coordinator, "notify_schedule_changed"):
+                self.coordinator.notify_schedule_changed()
+
+    @property
+    def is_on(self) -> bool:
+        return bool(getattr(self.coordinator, self._attr, False))
+
+    async def _set_enabled(self, enabled: bool) -> None:
+        setattr(self.coordinator, self._attr, enabled)
+        if hasattr(self.coordinator, "notify_schedule_changed"):
+            self.coordinator.notify_schedule_changed(sync_charge=enabled)
+        self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set_enabled(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._set_enabled(False)
+
+
+class LepasWeeklyDepartureSwitch(LepasEntity, SwitchEntity, RestoreEntity):
+    """Enable/disable scheduled departure for a single ISO weekday (1..7)."""
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:calendar-check"
+
+    def __init__(self, coord, day: int, slug: str) -> None:
+        suffix = f"departure_{slug}_enabled"
+        super().__init__(
+            coord,
+            f"Lepas Departure {slug} enabled",
+            suffix,
+            object_id=f"{ID_PREFIX}_{suffix}",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key=suffix,
+        )
+        self._day = day
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state in ("on", "off"):
+            _, mins = self.coordinator.departure_weekly.get(self._day, (False, 420))
+            self.coordinator.departure_weekly[self._day] = (last.state == "on", mins)
+            if hasattr(self.coordinator, "notify_schedule_changed"):
+                self.coordinator.notify_schedule_changed()
+
+    @property
+    def is_on(self) -> bool:
+        entry = self.coordinator.departure_weekly.get(self._day)
+        return bool(entry[0]) if entry else False
+
+    async def _set_enabled(self, enabled: bool) -> None:
+        _, mins = self.coordinator.departure_weekly.get(self._day, (False, 420))
+        self.coordinator.departure_weekly[self._day] = (enabled, mins)
+        if hasattr(self.coordinator, "notify_schedule_changed"):
+            self.coordinator.notify_schedule_changed(sync_charge=enabled)
+        self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set_enabled(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._set_enabled(False)

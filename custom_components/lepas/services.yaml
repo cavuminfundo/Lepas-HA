@@ -1,1 +1,76 @@
-{}
+set_quick_departure:
+  name: Set quick departure
+  description: Configure and enable or disable a one-time quick departure.
+  fields:
+    entry_id:
+      name: Vehicle entry
+      description: Config entry ID of the vehicle (optional when only one vehicle is configured).
+      required: false
+      selector:
+        config_entry:
+          integration: lepas
+    time:
+      name: Departure time
+      description: Local target departure time (HH:MM).
+      required: false
+      example: "07:30"
+      selector:
+        time:
+    enabled:
+      name: Enabled
+      description: Whether the quick departure is enabled.
+      required: false
+      default: true
+      selector:
+        boolean:
+    sync_charging:
+      name: Sync charging
+      description: Adapt charging schedule to finish by the quick departure time.
+      required: false
+      selector:
+        boolean:
+
+set_charging_schedule:
+  name: Set charging schedule
+  description: Configure scheduled charging start time, duration, and active days.
+  fields:
+    entry_id:
+      name: Vehicle entry
+      description: Config entry ID of the vehicle (optional when only one vehicle is configured).
+      required: false
+      selector:
+        config_entry:
+          integration: lepas
+    start_time:
+      name: Start time
+      description: Local charging start time (HH:MM).
+      required: false
+      example: "23:00"
+      selector:
+        time:
+    duration_hours:
+      name: Duration (hours)
+      description: Charging duration in hours (1–12).
+      required: false
+      example: 6
+      selector:
+        number:
+          min: 1
+          max: 12
+          step: 1
+          unit_of_measurement: h
+          mode: box
+    days:
+      name: Days
+      description: Preset name, CSV, or list of ISO weekdays (1–7 / mon–sun).
+      required: false
+      example: "weekdays"
+      selector:
+        object:
+    apply:
+      name: Apply immediately
+      description: Send the updated charging schedule to the vehicle immediately.
+      required: false
+      default: true
+      selector:
+        boolean:

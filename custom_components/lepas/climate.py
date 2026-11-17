@@ -79,6 +79,7 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
         self._attr_max_temp = hi
         self._attr_target_temperature_step = step
         self._target = min(hi, max(lo, DEFAULT_TEMP))
+        coord.climate_target_temp = self._target
         self._opt_on: bool | None = None
         self._opt_anchor = None
         self._opt_at: float | None = None
@@ -93,6 +94,7 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
                     self._target = min(self._attr_max_temp, max(self._attr_min_temp, float(t)))
             except (TypeError, ValueError):
                 pass
+        self.coordinator.climate_target_temp = self._target
 
     # ── stato ──
     def _live_on(self) -> bool | None:
@@ -171,6 +173,7 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
         if temp is None:
             return
         self._target = min(self._attr_max_temp, max(self._attr_min_temp, float(temp)))
+        self.coordinator.climate_target_temp = self._target
         # se il clima è già acceso, riapplica subito il nuovo setpoint; altrimenti
         # memorizza soltanto (verrà usato alla prossima accensione).
         if self.hvac_mode != HVACMode.OFF:

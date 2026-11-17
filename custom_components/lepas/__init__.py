@@ -1,12 +1,16 @@
 """Custom component Lepas Connect — bootstrap."""
 from __future__ import annotations
 
+from datetime import datetime, time as dt_time
 import logging
 import os
+import re
+
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 
 from .const import (
     CONF_BFF,
@@ -18,8 +22,31 @@ from .const import (
     PRESET_LEPAS_EU,
     PRESETS,
 )
+from .scheduler import parse_days_input
 
 _LOGGER = logging.getLogger(__name__)
+
+SERVICE_SET_QUICK_DEPARTURE = "set_quick_departure"
+SERVICE_SET_CHARGING_SCHEDULE = "set_charging_schedule"
+
+_QUICK_DEPARTURE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entry_id"): object,
+        vol.Optional("time"): object,
+        vol.Optional("enabled"): object,
+        vol.Optional("sync_charging"): object,
+    }
+)
+
+_CHARGING_SCHEDULE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entry_id"): object,
+        vol.Optional("start_time"): object,
+        vol.Optional("duration_hours"): object,
+        vol.Optional("days"): object,
+        vol.Optional("apply"): object,
+    }
+)
 
 _CARD_PATH = f"/{DOMAIN}_card"
 _CARD_URL = f"{_CARD_PATH}/lepas-card.js"
@@ -259,18 +286,147 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # battito di rilevamento marcia (sola lettura): fa partire il refresh automatico durante un
         # viaggio. No-op se l'interruttore "Aggiornamento automatico" è spento (lo riavvia lo switch).
         coordinator.async_start_drive_watch()
+        coordinator.async_start_departure_scheduler()
         # ricarica l'entry quando l'utente cambia le opzioni (es. intervalli di poll)
         entry.async_on_unload(entry.add_update_listener(_async_options_updated))
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        _async_register_services(hass)
         # backfill identità veicolo (nome device dinamico) per gli entry creati prima che il
         # config flow la salvasse: in background, così un eventuale reload avviene a setup finito.
         hass.async_create_background_task(
             coordinator.async_ensure_vehicle_identity(), "lepas_vehicle_identity")
     except Exception:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        if not hass.data.get(DOMAIN):
+            _async_unregister_services(hass)
         await hass.async_add_executor_job(coordinator.async_stop)
         raise
     return True
+
+
+def _parse_time_minutes(raw: object) -> int:
+    if isinstance(raw, datetime):
+        raise ServiceValidationError(f"Invalid time value: {raw!r}")
+    if isinstance(raw, dt_time):
+        return raw.hour * 60 + raw.minute
+    if isinstance(raw, str):
+        match = re.fullmatch(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", raw.strip())
+        if not match:
+            raise ServiceValidationError(f"Invalid time format (HH:MM or HH:MM:SS): {raw!r}")
+        hh, mm, ss = int(match.group(1)), int(match.group(2)), int(match.group(3) or 0)
+        if not (0 <= hh <= 23 and 0 <= mm <= 59 and 0 <= ss <= 59):
+            raise ServiceValidationError(f"Time out of range: {raw!r}")
+        return hh * 60 + mm
+    raise ServiceValidationError(f"Unsupported time type: {type(raw).__name__}")
+
+
+def _parse_bool(raw: object, field: str) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        norm = raw.strip().lower()
+        if norm in ("true", "on", "yes", "1"):
+            return True
+        if norm in ("false", "off", "no", "0"):
+            return False
+    raise ServiceValidationError(f"Invalid boolean for {field}: {raw!r}")
+
+
+def _parse_duration_hours(raw: object) -> int:
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise ServiceValidationError(f"duration_hours must be an integer 1..12, got {raw!r}")
+    if isinstance(raw, float) and not raw.is_integer():
+        raise ServiceValidationError(f"duration_hours must be an integer 1..12, got {raw!r}")
+    dur = int(raw)
+    if not 1 <= dur <= 12:
+        raise ServiceValidationError(f"duration_hours out of range 1..12: {raw!r}")
+    return dur
+
+
+def _resolve_coordinator(hass: HomeAssistant, entry_id: object):
+    entries = hass.data.get(DOMAIN) or {}
+    if not entries:
+        raise ServiceValidationError("No loaded Lepas vehicles")
+    if entry_id is not None:
+        if not isinstance(entry_id, str) or not entry_id.strip():
+            raise ServiceValidationError(f"Invalid entry_id: {entry_id!r}")
+        coord = entries.get(entry_id)
+        if coord is None:
+            raise ServiceValidationError(f"Unknown Lepas entry_id: {entry_id!r}")
+        return coord
+    if len(entries) > 1:
+        raise ServiceValidationError("Multiple Lepas vehicles configured; entry_id is required")
+    return next(iter(entries.values()))
+
+
+def _async_register_services(hass: HomeAssistant) -> None:
+    async def _handle_set_quick_departure(call: ServiceCall) -> None:
+        coord = _resolve_coordinator(hass, call.data.get("entry_id"))
+        minutes = _parse_time_minutes(call.data["time"]) if "time" in call.data else None
+        enabled = _parse_bool(call.data["enabled"], "enabled") if "enabled" in call.data else True
+        sync_charging = (
+            _parse_bool(call.data["sync_charging"], "sync_charging")
+            if "sync_charging" in call.data
+            else None
+        )
+        await coord.async_set_quick_departure(
+            minutes,
+            enabled=enabled,
+            sync_charging=sync_charging,
+        )
+
+    async def _handle_set_charging_schedule(call: ServiceCall) -> None:
+        coord = _resolve_coordinator(hass, call.data.get("entry_id"))
+        start_min = _parse_time_minutes(call.data["start_time"]) if "start_time" in call.data else None
+        dur_h = (
+            _parse_duration_hours(call.data["duration_hours"])
+            if "duration_hours" in call.data
+            else None
+        )
+        days = None
+        if "days" in call.data:
+            try:
+                days = parse_days_input(call.data["days"])
+            except ValueError as err:
+                raise ServiceValidationError(str(err)) from err
+        apply_now = _parse_bool(call.data["apply"], "apply") if "apply" in call.data else True
+
+        if apply_now:
+            await coord.async_apply_charging_schedule(
+                start_minutes=start_min,
+                duration_hours=dur_h,
+                days=days,
+            )
+            return
+
+        if start_min is not None:
+            coord.charge_start_minutes = start_min
+        if dur_h is not None:
+            coord.charge_duration_hours = dur_h
+        if days is not None:
+            coord.charge_days = days
+        coord.notify_schedule_changed(sync_charge=False)
+
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_QUICK_DEPARTURE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_QUICK_DEPARTURE,
+            _handle_set_quick_departure,
+            schema=_QUICK_DEPARTURE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_CHARGING_SCHEDULE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_CHARGING_SCHEDULE,
+            _handle_set_charging_schedule,
+            schema=_CHARGING_SCHEDULE_SCHEMA,
+        )
+
+
+def _async_unregister_services(hass: HomeAssistant) -> None:
+    for svc in (SERVICE_SET_QUICK_DEPARTURE, SERVICE_SET_CHARGING_SCHEDULE):
+        if hass.services.has_service(DOMAIN, svc):
+            hass.services.async_remove(DOMAIN, svc)
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -312,6 +468,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     #       coerente; HA ritenterà l'unload).
     if ok:
         coordinator = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        if not hass.data.get(DOMAIN):
+            _async_unregister_services(hass)
         if coordinator is not None:
             # async_stop è bloccante (loop_stop fa join del thread paho) → executor.
             await hass.async_add_executor_job(coordinator.async_stop)

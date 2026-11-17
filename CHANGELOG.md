@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.18.0 — 2026-11-17
+
+### 🇬🇧 English
+
+- **Scheduled Charging UX, Days Selector & `appointmentChargeState` Fallback**: Clarified configuration entity labels (`A/C duration (pre-climate)`, `Scheduled charge · duration`, `Scheduled charge · start`) without changing existing `entity_id`s, added `select.lepas_charge_days` (with presets and custom weekday support), `button.lepas_apply_charging_schedule`, and diagnostic `sensor.lepas_scheduled_charging_window` (including `synced_with_car`). `switch.lepas_scheduled_charging` now also falls back to `realtime["appointmentChargeState"]` when `chargeAppointPlans` is absent, and vehicles lacking permission `2131` (`DATA_CAPS_PROBED_V4`) transparently fall back to `[1..7]` for `cycleData`.
+- **Weekly & Quick Departure Scheduler (`airControl` + `chargeAppointControl` Sync)**: Added per-weekday departure schedules (`switch.lepas_departure_{mon..sun}_enabled`, `time.lepas_departure_{mon..sun}_time`), one-time quick departure (`switch.lepas_quick_departure`, `time.lepas_quick_departure_time` with automatic reset after firing), `select.lepas_departure_climate_mode` (`at_home` / `anywhere` / `off`), `switch.lepas_sync_charge_to_departure`, and diagnostic `sensor.lepas_next_departure`. Automatic pre-climatization (`airControl`) includes safety guards against starting while the engine is running or vehicle speed > 0 and respects the `at_home` geofence check; charging schedule synchronization (`chargeAppointControl`) aligns the charging end time with the next departure.
+- **New Automation Services (`lepas.set_quick_departure`, `lepas.set_charging_schedule`)**: Added Home Assistant services with full EN/IT/NL translations to configure quick departures and scheduled charging parameters directly from automations and dashboards.
+
+### 🇮🇹 Italiano
+
+- **UX Ricarica Programmata, Selettore Giorni & Fallback `appointmentChargeState`**: Chiarite le etichette di configurazione (`A/C acceso per (pre-clima)`, `Ricarica prog. · durata`, `Ricarica prog. · inizio`) senza cambiare gli `entity_id` esistenti, e aggiunti `select.lepas_charge_days` (con preset e giorni personalizzati), `button.lepas_apply_charging_schedule` e il sensore diagnostico `sensor.lepas_scheduled_charging_window` (incluso `synced_with_car`). Lo switch `switch.lepas_scheduled_charging` ora usa `realtime["appointmentChargeState"]` come ripiego quando `chargeAppointPlans` è assente, e i veicoli senza permesso `2131` (`DATA_CAPS_PROBED_V4`) ripiegano automaticamente su `[1..7]` in `cycleData`.
+- **Pianificatore Partenze Settimanale e Rapido (Sync `airControl` + `chargeAppointControl`)**: Aggiunti gli orari di partenza per giorno (`switch.lepas_departure_{mon..sun}_enabled`, `time.lepas_departure_{mon..sun}_time`), la partenza rapida singola (`switch.lepas_quick_departure`, `time.lepas_quick_departure_time` con disattivazione automatica dopo l'esecuzione), `select.lepas_departure_climate_mode` (`at_home` / `anywhere` / `off`), `switch.lepas_sync_charge_to_departure` e il sensore diagnostico `sensor.lepas_next_departure`. La pre-climatizzazione automatica (`airControl`) integra controlli di sicurezza (motore spento, velocità nulla, verifica geofence `at_home`); l'allineamento della ricarica (`chargeAppointControl`) sincronizza la fine ricarica con la prossima partenza prevista.
+- **Nuovi Servizi di Automazione (`lepas.set_quick_departure`, `lepas.set_charging_schedule`)**: Aggiunti servizi Home Assistant tradotti in EN/IT/NL per configurare partenza rapida e finestra di ricarica programmata direttamente da automazioni e dashboard.
+
 ## v1.17.1 — 2026-11-17
 
 ### 🇬🇧 English

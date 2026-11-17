@@ -90,13 +90,15 @@ def test_il_gruppo_poll_copre_ogni_timer_che_contatta_il_cloud():
     sopravviverebbe allo switch OFF — è esattamente il bug P0-5."""
     from custom_components.lepas import timers
 
-    # Le uniche due eccezioni ammesse, entrambe perché NON contattano nessuno:
-    #   KEEPALIVE → parla col cloud ma NON con l'auto, e deve restare acceso a poll spento
-    #               (altrimenti il token scade e l'utente si rifà un OTP per niente);
-    #   AWAKE     → puro conto alla rovescia locale che fa scadere lo stato «auto sveglia».
-    #               Spegnerlo col poll rimetterebbe il flag nella condizione in cui restava
-    #               acceso per sempre, e il pulsante «Sveglia auto» tornerebbe inutilizzabile.
-    senza_contatto = {KEEPALIVE, timers.AWAKE}
+    # Le uniche tre eccezioni ammesse:
+    #   KEEPALIVE      → parla col cloud ma NON con l'auto, e deve restare acceso a poll spento
+    #                    (altrimenti il token scade e l'utente si rifà un OTP per niente);
+    #   AWAKE          → puro conto alla rovescia locale che fa scadere lo stato «auto sveglia».
+    #                    Spegnerlo col poll rimetterebbe il flag nella condizione in cui restava
+    #                    acceso per sempre, e il pulsante «Sveglia auto» tornerebbe inutilizzabile;
+    #   DEPARTURE_TICK → programmatore locale partenze/ricarica: deve continuare a funzionare
+    #                    anche con l'interruttore «Aggiornamento automatico» su OFF.
+    senza_contatto = {KEEPALIVE, timers.AWAKE, timers.DEPARTURE_TICK}
     tutti = {v for k, v in vars(timers).items()
              if k.isupper() and isinstance(v, str) and not k.startswith("_")}
     fuori_gruppo = tutti - set(GRUPPO_POLL)

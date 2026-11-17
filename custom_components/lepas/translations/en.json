@@ -243,6 +243,9 @@
       },
       "find_car_flash_lights": {
         "name": "Find car (flash lights)"
+      },
+      "apply_charging_schedule": {
+        "name": "Apply charging schedule"
       }
     },
     "climate": {
@@ -273,10 +276,31 @@
     },
     "number": {
       "climate_duration": {
-        "name": "Climate duration"
+        "name": "A/C duration (pre-climate)"
       },
       "charge_duration": {
-        "name": "Charge duration"
+        "name": "Scheduled charge · duration"
+      }
+    },
+    "select": {
+      "charge_days": {
+        "name": "Charge days",
+        "state": {
+          "all_days": "All days (Mon–Sun)",
+          "weekdays": "Weekdays (Mon–Fri)",
+          "weekend": "Weekend (Sat–Sun)",
+          "mon_wed_fri": "Mon · Wed · Fri",
+          "tue_thu_sat": "Tue · Thu · Sat",
+          "custom": "Custom"
+        }
+      },
+      "departure_climate_mode": {
+        "name": "Departure · auto climate",
+        "state": {
+          "at_home": "At home only",
+          "anywhere": "Anywhere",
+          "off": "Off"
+        }
       }
     },
     "sensor": {
@@ -411,6 +435,12 @@
       },
       "electric_efficiency_mi_kwh": {
         "name": "Electric efficiency (mi/kWh)"
+      },
+      "scheduled_charging_window": {
+        "name": "Scheduled charging window"
+      },
+      "next_departure": {
+        "name": "Next departure"
       }
     },
     "switch": {
@@ -467,11 +497,112 @@
       },
       "rear_left_seat_ventilation": {
         "name": "Rear left seat ventilation"
+      },
+      "quick_departure": {
+        "name": "Quick departure"
+      },
+      "sync_charge_to_departure": {
+        "name": "Sync charge to departure"
+      },
+      "departure_mon_enabled": {
+        "name": "Departure Mon · enabled"
+      },
+      "departure_tue_enabled": {
+        "name": "Departure Tue · enabled"
+      },
+      "departure_wed_enabled": {
+        "name": "Departure Wed · enabled"
+      },
+      "departure_thu_enabled": {
+        "name": "Departure Thu · enabled"
+      },
+      "departure_fri_enabled": {
+        "name": "Departure Fri · enabled"
+      },
+      "departure_sat_enabled": {
+        "name": "Departure Sat · enabled"
+      },
+      "departure_sun_enabled": {
+        "name": "Departure Sun · enabled"
       }
     },
     "time": {
       "charge_start_time": {
-        "name": "Charge start time"
+        "name": "Scheduled charge · start"
+      },
+      "quick_departure_time": {
+        "name": "Quick departure · time"
+      },
+      "departure_mon_time": {
+        "name": "Departure Mon · time"
+      },
+      "departure_tue_time": {
+        "name": "Departure Tue · time"
+      },
+      "departure_wed_time": {
+        "name": "Departure Wed · time"
+      },
+      "departure_thu_time": {
+        "name": "Departure Thu · time"
+      },
+      "departure_fri_time": {
+        "name": "Departure Fri · time"
+      },
+      "departure_sat_time": {
+        "name": "Departure Sat · time"
+      },
+      "departure_sun_time": {
+        "name": "Departure Sun · time"
+      }
+    }
+  },
+  "services": {
+    "set_quick_departure": {
+      "name": "Set quick departure",
+      "description": "Configure and enable or disable a one-time quick departure.",
+      "fields": {
+        "entry_id": {
+          "name": "Vehicle entry",
+          "description": "Config entry ID of the vehicle (optional when only one vehicle is configured)."
+        },
+        "time": {
+          "name": "Departure time",
+          "description": "Local target departure time (HH:MM)."
+        },
+        "enabled": {
+          "name": "Enabled",
+          "description": "Whether the quick departure is enabled."
+        },
+        "sync_charging": {
+          "name": "Sync charging",
+          "description": "Adapt charging schedule to finish by the quick departure time."
+        }
+      }
+    },
+    "set_charging_schedule": {
+      "name": "Set charging schedule",
+      "description": "Configure scheduled charging start time, duration, and active days.",
+      "fields": {
+        "entry_id": {
+          "name": "Vehicle entry",
+          "description": "Config entry ID of the vehicle (optional when only one vehicle is configured)."
+        },
+        "start_time": {
+          "name": "Start time",
+          "description": "Local charging start time (HH:MM)."
+        },
+        "duration_hours": {
+          "name": "Duration (hours)",
+          "description": "Charging duration in hours (1–12)."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Preset name, CSV, or list of ISO weekdays (1–7 / mon–sun)."
+        },
+        "apply": {
+          "name": "Apply immediately",
+          "description": "Send the updated charging schedule to the vehicle immediately."
+        }
       }
     }
   }

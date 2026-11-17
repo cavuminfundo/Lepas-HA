@@ -5,11 +5,13 @@ import logging
 
 from homeassistant.components.button import ENTITY_ID_FORMAT, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import COMMANDS_AS_RICH_ENTITY, DOMAIN, entity_allowed
 from .entity import LepasEntity
+from .naming import ID_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +37,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     if entity_allowed(coord, "button", "refresh_full"):
         ents.append(LepasActionButton(coord, "Lepas Aggiorna stato completo", "refresh_full",
                                         coord.async_refresh_full_status))
+    if entity_allowed(coord, "button", "apply_charging_schedule"):
+        ents.append(
+            LepasActionButton(
+                coord,
+                "Lepas Apply charging schedule",
+                "apply_charging_schedule",
+                coord.async_apply_charging_schedule,
+                category=EntityCategory.CONFIG,
+                object_id=f"{ID_PREFIX}_apply_charging_schedule",
+                translation_key="apply_charging_schedule",
+            )
+        )
     add(ents)
 
 
@@ -64,10 +78,28 @@ class LepasActionButton(LepasEntity, ButtonEntity):
         "wake": "mdi:car-connected",
         "refresh_pos": "mdi:crosshairs-gps",
         "refresh_full": "mdi:car-info",
+        "apply_charging_schedule": "mdi:calendar-sync",
     }
 
-    def __init__(self, coord, name: str, suffix: str, action, category=None) -> None:
-        super().__init__(coord, name, suffix, entity_id_format=ENTITY_ID_FORMAT)
+    def __init__(
+        self,
+        coord,
+        name: str,
+        suffix: str,
+        action,
+        category=None,
+        *,
+        object_id: str | None = None,
+        translation_key: str | None = None,
+    ) -> None:
+        super().__init__(
+            coord,
+            name,
+            suffix,
+            object_id=object_id,
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key=translation_key,
+        )
         self._action = action
         self._attr_icon = self._ICONS.get(suffix, "mdi:gesture-tap-button")
         if category is not None:

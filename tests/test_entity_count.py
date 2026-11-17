@@ -37,15 +37,16 @@ from custom_components.lepas.const import (
 # `entity_registry_enabled_default = False` (27 nel registro, 26 attive in `hass.states`).
 ATTESO = {
     "binary_sensor": 26,
-    "sensor": 41,
-    "button": 13,
-    "switch": 18,
+    "sensor": 43,
+    "button": 14,
+    "switch": 27,
     "cover": 3,
     "number": 2,
     "climate": 1,
     "lock": 1,
     "device_tracker": 1,
-    "time": 1,
+    "time": 9,
+    "select": 2,
 }
 # 107 -> 110 il 2026-08-24: portati dalla linea fork i due contatori di energia di ricarica
 # (casa/fuori) e il binary sensor "A casa". Cambiamento DELIBERATO e annunciato: questo numero
@@ -73,7 +74,9 @@ ATTESO = {
 # `tetto_ventila`, skylightControl controlType 2). A deliberate extra button, the sunroof
 # counterpart of `button.lepas_vent_windows`; the sunroof cover is unchanged.
 # 2026-11-16: `binary_sensor.lepas_sunroof_blind` disabilitato di default -> 107 attive in `hass.states`.
-TOTALE_ATTESO = 107
+# 2026-11-17 (v1.18.0): +22 entità per Programmatore Partenze & UX Ricarica (2 select, 1 button,
+# 2 sensor diagnostici, 9 switch, 8 time) -> 129 attive in `hass.states`.
+TOTALE_ATTESO = 129
 
 
 def test_totale_dichiarato_coerente():

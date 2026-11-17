@@ -243,6 +243,9 @@
       },
       "find_car_flash_lights": {
         "name": "Auto vinden (knipperlichten)"
+      },
+      "apply_charging_schedule": {
+        "name": "Laadschema toepassen"
       }
     },
     "climate": {
@@ -273,10 +276,31 @@
     },
     "number": {
       "climate_duration": {
-        "name": "Klimaatduur"
+        "name": "Airco-duur (voorklimatisering)"
       },
       "charge_duration": {
-        "name": "Laadduur"
+        "name": "Gepland laden · duur"
+      }
+    },
+    "select": {
+      "charge_days": {
+        "name": "Laaddagen",
+        "state": {
+          "all_days": "Alle dagen (Ma–Zo)",
+          "weekdays": "Werkdagen (Ma–Vr)",
+          "weekend": "Weekend (Za–Zo)",
+          "mon_wed_fri": "Ma · Wo · Vr",
+          "tue_thu_sat": "Di · Do · Za",
+          "custom": "Aangepast"
+        }
+      },
+      "departure_climate_mode": {
+        "name": "Vertrek · auto klimaat",
+        "state": {
+          "at_home": "Alleen thuis",
+          "anywhere": "Overal",
+          "off": "Uit"
+        }
       }
     },
     "sensor": {
@@ -411,6 +435,12 @@
       },
       "electric_efficiency_mi_kwh": {
         "name": "Electric efficiency (mi/kWh)"
+      },
+      "scheduled_charging_window": {
+        "name": "Gepland laadvenster"
+      },
+      "next_departure": {
+        "name": "Volgend vertrek"
       }
     },
     "switch": {
@@ -467,11 +497,112 @@
       },
       "rear_left_seat_ventilation": {
         "name": "Achterste linker stoel ventilatie"
+      },
+      "quick_departure": {
+        "name": "Snel vertrek plannen"
+      },
+      "sync_charge_to_departure": {
+        "name": "Laadtijd afstemmen op vertrek"
+      },
+      "departure_mon_enabled": {
+        "name": "Vertrek Ma · ingeschakeld"
+      },
+      "departure_tue_enabled": {
+        "name": "Vertrek Di · ingeschakeld"
+      },
+      "departure_wed_enabled": {
+        "name": "Vertrek Wo · ingeschakeld"
+      },
+      "departure_thu_enabled": {
+        "name": "Vertrek Do · ingeschakeld"
+      },
+      "departure_fri_enabled": {
+        "name": "Vertrek Vr · ingeschakeld"
+      },
+      "departure_sat_enabled": {
+        "name": "Vertrek Za · ingeschakeld"
+      },
+      "departure_sun_enabled": {
+        "name": "Vertrek Zo · ingeschakeld"
       }
     },
     "time": {
       "charge_start_time": {
-        "name": "Starttijd laden"
+        "name": "Gepland laden · start"
+      },
+      "quick_departure_time": {
+        "name": "Snel vertrek · tijd"
+      },
+      "departure_mon_time": {
+        "name": "Vertrek Ma · tijd"
+      },
+      "departure_tue_time": {
+        "name": "Vertrek Di · tijd"
+      },
+      "departure_wed_time": {
+        "name": "Vertrek Wo · tijd"
+      },
+      "departure_thu_time": {
+        "name": "Vertrek Do · tijd"
+      },
+      "departure_fri_time": {
+        "name": "Vertrek Vr · tijd"
+      },
+      "departure_sat_time": {
+        "name": "Vertrek Za · tijd"
+      },
+      "departure_sun_time": {
+        "name": "Vertrek Zo · tijd"
+      }
+    }
+  },
+  "services": {
+    "set_quick_departure": {
+      "name": "Snel vertrek instellen",
+      "description": "Configureer en schakel een eenmalig snel vertrek in of uit.",
+      "fields": {
+        "entry_id": {
+          "name": "Voertuig",
+          "description": "Config entry-ID van het voertuig (optioneel als er slechts één voertuig is geconfigureerd)."
+        },
+        "time": {
+          "name": "Vertrektijd",
+          "description": "Lokale gewenste vertrektijd (UU:MM)."
+        },
+        "enabled": {
+          "name": "Ingeschakeld",
+          "description": "Of snel vertrek is ingeschakeld."
+        },
+        "sync_charging": {
+          "name": "Laden synchroniseren",
+          "description": "Stem het laadschema af om klaar te zijn vóór de snelle vertrektijd."
+        }
+      }
+    },
+    "set_charging_schedule": {
+      "name": "Laadschema instellen",
+      "description": "Configureer starttijd, duur en actieve dagen voor gepland laden.",
+      "fields": {
+        "entry_id": {
+          "name": "Voertuig",
+          "description": "Config entry-ID van het voertuig (optioneel als er slechts één voertuig is geconfigureerd)."
+        },
+        "start_time": {
+          "name": "Starttijd",
+          "description": "Lokale starttijd voor laden (UU:MM)."
+        },
+        "duration_hours": {
+          "name": "Duur (uren)",
+          "description": "Laadduur in uren (1–12)."
+        },
+        "days": {
+          "name": "Dagen",
+          "description": "Presetnaam, CSV of lijst van ISO-weekdagen (1–7 / mon–sun)."
+        },
+        "apply": {
+          "name": "Direct toepassen",
+          "description": "Stuur het bijgewerkte laadschema direct naar het voertuig."
+        }
       }
     }
   }

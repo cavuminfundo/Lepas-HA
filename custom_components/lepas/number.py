@@ -61,9 +61,12 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last = await self.async_get_last_number_data()
-        if last is not None and last.native_value is not None:
+        restored = last is not None and last.native_value is not None
+        if restored:
             self._value = float(last.native_value)
         self._push()
+        if restored and hasattr(self.coordinator, "notify_schedule_changed"):
+            self.coordinator.notify_schedule_changed()
 
     def _push(self) -> None:
         # mantieni il valore come int quando è intero (orari/giorni), così i body comando
@@ -73,9 +76,19 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
 
     @property
     def native_value(self) -> float:
+        val = getattr(self.coordinator, self._attr, None)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
         return self._value
 
     async def async_set_native_value(self, value: float) -> None:
         self._value = float(value)
         self._push()
+        if hasattr(self.coordinator, "notify_schedule_changed"):
+            self.coordinator.notify_schedule_changed(
+                sync_charge=(self._attr == "charge_duration_hours")
+            )
         self.async_write_ha_state()

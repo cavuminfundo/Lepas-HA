@@ -2,7 +2,7 @@
 
 DOMAIN = "lepas"
 PLATFORMS = ["sensor", "binary_sensor", "button", "lock", "switch", "climate",
-             "number", "time", "cover", "device_tracker"]
+             "number", "time", "select", "cover", "device_tracker"]
 
 # Campi auto (5A02) ora rappresentati da entità native ATTUABILI (lock/switch/cover):
 # esclusi dalla creazione di sensor/binary_sensor "di sola lettura" per non duplicarli.
@@ -121,6 +121,7 @@ DATA_AIR_DURATIONS = "air_durations"
 DATA_CAPS_PROBED = "caps_probed"          # v1.10.0: powerType + range clima
 DATA_CAPS_PROBED_V2 = "caps_probed_v2"    # v1.13.0: estremi LO/HI + durate ammesse
 DATA_CAPS_PROBED_V3 = "caps_probed_v3"    # v1.17.0: optional/permessi da queryVehicleAuthority
+DATA_CAPS_PROBED_V4 = "caps_probed_v4"    # v1.18.0: permesso 2131 (ciclo ricarica personalizzato)
 DATA_VEHICLE_FEATURES = "vehicle_features"
 
 # Regole di derivazione feature da permessi (vmc/queryVehicleAuthority).
@@ -133,6 +134,7 @@ _FEATURE_RULES: dict[str, tuple[int | None, tuple[int, ...]]] = {
     "steering_wheel_heating": (208, ()),
     "instant_charging": (220, ()),
     "scheduled_charging": (213, ()),
+    "scheduled_charging_custom_days": (2131, ()),
     "alarm": (401, ()),
     "sunroof": (207, ()),
     "windows": (206, ()),
@@ -193,6 +195,10 @@ ENTITY_FEATURE_MAP: dict[tuple[str, str], str] = {
     ("switch", "ricarica"): "instant_charging",
     # scheduled_charging
     ("switch", "ricarica_programmata"): "scheduled_charging",
+    ("select", "charge_days"): "scheduled_charging",
+    ("button", "apply_charging_schedule"): "scheduled_charging",
+    ("switch", "sync_charge_to_departure"): "scheduled_charging",
+    ("sensor", "scheduled_charging_window"): "scheduled_charging",
     # alarm
     ("switch", "antifurto"): "alarm",
     ("button", "cmd_antifurto_on"): "alarm",
@@ -240,6 +246,7 @@ ENTITY_FEATURE_MAP: dict[tuple[str, str], str] = {
     # climate
     ("climate", "climate"): "climate",
     ("number", "clima_durata"): "climate",
+    ("select", "departure_climate_mode"): "climate",
     # cool_everything
     ("switch", "raffredda_tutto"): "cool_everything",
     ("button", "cmd_clima_raffredda_on"): "cool_everything",
