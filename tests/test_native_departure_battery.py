@@ -152,7 +152,7 @@ def test_commands_catalog_and_rich_entity_gating(core):
     assert commands.CMD_MAP["partenza_prog_on"]["body"]["mainSwitcher"] == "1"
     assert commands.CMD_MAP["partenza_prog_off"]["endpoint"] == "appointmentTravel"
     assert commands.CMD_MAP["partenza_prog_off"]["body"]["mainSwitcher"] == "0"
-    assert commands.CMD_MAP["partenza_prog_off"]["body"]["appointmentTravelSetVOS"][0]["travelWeekday"] == ""
+    assert commands.CMD_MAP["partenza_prog_off"]["body"]["appointmentTravelSetVOS"][0]["travelWeekday"] == "1,2,3,4,5"
 
     assert commands.CMD_MAP["battery_heat_on"]["endpoint"] == "batteryPackHeat"
     assert commands.CMD_MAP["battery_heat_on"]["body"]["switchState"] == "1"
@@ -229,9 +229,9 @@ def test_permessi_travel_and_battery_tables_and_csv_giorni(core):
     body_all = {"appointmentTravelSetVOS": [{"travelWeekday": "1,2,3,4,5,6,7"}]}
     assert P.ciclo_non_autorizzato("appointmentTravel", body_all, {212: 1, 2121: 1, 2122: 0}) is not None
 
-    # Empty "" on partenza_prog_off is non-blocking
+    # Disabling (mainSwitcher == "0") sends non-empty travelWeekday (API rejects "") and never warns on cycle
     off_body = dict(commands.CMD_MAP["partenza_prog_off"]["body"])
-    assert P._giorni(off_body, "travelWeekday") is None
+    assert P._giorni(off_body, "travelWeekday") == [1, 2, 3, 4, 5]
     assert P.ciclo_non_autorizzato("appointmentTravel", off_body, {212: 1, 2121: 0, 2122: 0}) is None
 
 
@@ -400,14 +400,22 @@ async def test_native_departure_sync_weekly_grouping_server_id_and_off(hass, mon
     assert vo2["travelTime"] == str(23 * 60 + 30)
     assert vo2["travelWeekday"] == "1,2,3,4,5,6,7"
 
-    # No active departure -> partenza_prog_off
+    # No active departure -> partenza_prog_off (non-empty travelWeekday + preserved travelTime)
+    # and refreshes realtime from travelQuery (clearing stale appointmentTravelSetVOS on mainSwitcher=0)
+    async def fake_query():
+        return {"mainSwitcher": 0}
+
+    monkeypatch.setattr(coord, "async_query_travel_appoint", fake_query)
     for d in range(1, 8):
         coord.departure_weekly[d] = (False, 420)
     await coord.async_apply_departure_schedule()
     assert sent[2][0] == "partenza_prog_off"
     assert sent[2][1]["mainSwitcher"] == "0"
     assert sent[2][1]["appointmentTravelSetVOS"][0]["switcher"] == "0"
-    assert sent[2][1]["appointmentTravelSetVOS"][0]["travelWeekday"] == ""
+    assert sent[2][1]["appointmentTravelSetVOS"][0]["travelTime"] == "305"
+    assert sent[2][1]["appointmentTravelSetVOS"][0]["travelWeekday"] == "1"
+    assert coord.data["realtime"]["mainSwitcher"] == 0
+    assert "appointmentTravelSetVOS" not in coord.data["realtime"]
 
 
 async def test_quick_departure_hold_across_preclimate_and_expiry_in_all_modes(hass, monkeypatch):

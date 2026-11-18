@@ -902,23 +902,26 @@ class LepasDeparturePlan(_LepasRestoreSensor):
             return piani[0]
         return None
 
-    def _is_piano_attivo(self, piano: dict) -> bool:
+    def _main_switcher_off(self) -> bool:
         rt = (self.coordinator.data or {}).get("realtime") or {}
-        if isinstance(rt, dict) and field_on(rt.get("mainSwitcher")) is False:
+        return isinstance(rt, dict) and field_on(rt.get("mainSwitcher")) is False
+
+    def _is_piano_attivo(self, piano: dict) -> bool:
+        if self._main_switcher_off():
             return False
         return str(piano.get("switcher", "0")).strip() not in ("", "0", "None", "False")
 
     def _live_value(self):
         piano = self._piano()
         if piano is None:
-            return None
+            return "Disattivata" if self._main_switcher_off() else None
         # `switcher` 0 o `mainSwitcher` 0 = piano memorizzato ma spento.
         if not self._is_piano_attivo(piano):
             return "Disattivata"
         orario, _ = _orario_locale(piano.get("travelTime"), getattr(self, "hass", None))
         return orario
 
-    def _synced_with_ha(self, piano: dict) -> bool | None:
+    def _synced_with_ha(self, piano: dict | None) -> bool | None:
         occ_fn = getattr(self.coordinator, "next_departure_occurrence", None)
         build_fn = getattr(self.coordinator, "_build_native_departure_payload", None)
         if not callable(occ_fn) or not callable(build_fn):
@@ -929,6 +932,11 @@ class LepasDeparturePlan(_LepasRestoreSensor):
             return None
 
         main_state = field_on(rt.get("mainSwitcher"))
+        if piano is None:
+            if main_state is not False:
+                return None
+            return occ_fn(dt_util.now()) is None
+
         sw_state = field_on(piano.get("switcher"))
         if sw_state is None and main_state is not False:
             return None
@@ -976,8 +984,16 @@ class LepasDeparturePlan(_LepasRestoreSensor):
     @property
     def extra_state_attributes(self) -> dict | None:
         piano = self._piano()
+        lang = _ux_lang(getattr(self, "hass", None))
+        txt = _UX_TEXT[lang]
         if piano is None:
-            return None
+            if not self._main_switcher_off():
+                return None
+            return {
+                "attiva": False,
+                "riepilogo": txt["disabled"],
+                "synced_with_ha": self._synced_with_ha(None),
+            }
         giorni = piano.get("travelDate")
         giorni = list(giorni) if isinstance(giorni, list) else []
         attrs: dict = {"attiva": self._is_piano_attivo(piano)}
@@ -989,8 +1005,6 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         if giorni:
             attrs["giorni"] = giorni
             attrs["giorni_testo"] = ", ".join(GIORNI.get(g, str(g)) for g in giorni)
-        lang = _ux_lang(getattr(self, "hass", None))
-        txt = _UX_TEXT[lang]
         summary_parts = [p for p in (orario, attrs.get("giorni_testo")) if p]
         summary = " · ".join(summary_parts)
         if attrs["attiva"]:

@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.22.3 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Scheduled Departure OFF (`appointmentTravel`) & Instant `mainSwitcher=0` Sensor Refresh (`commands.py`, `permessi.py`, `coordinator.py`, `sensor.py`)**: Fixed `partenza_prog_off` sending `travelWeekday: ""` (which `tspconsole-eu` rejected with `A07900` even while the car was awake) by preserving the existing `travelTime` and using non-empty `effective_departure_days([1])` (and `"1,2,3,4,5"` in `CMD_MAP` while skipping cycle warnings when `mainSwitcher == "0"`). Fixed `LepasDeparturePlan` to report `Disattivata` (`attiva: false`) when `/asd/travelManage/travelQuery` returns `mainSwitcher: 0` without `appointmentTravelSetVOS`, and refreshed `realtime` from `travelQuery` right after `async_apply_departure_schedule()`, bumping `?v=1.22.3`.
+
+### 🇮🇹 Italiano
+
+- **Disattivazione Partenza Programmata (`appointmentTravel`) & Aggiornamento Immediato `mainSwitcher=0` (`commands.py`, `permessi.py`, `coordinator.py`, `sensor.py`)**: Risolto il rifiuto `A07900` di `partenza_prog_off` dovuto a `travelWeekday: ""` (rifiutato dal backend anche ad auto sveglia) preservando l'eventuale `travelTime` esistente e inviando `effective_departure_days([1])` non vuoto (con `"1,2,3,4,5"` nel catalogo e senza falsi avvisi ciclo su `mainSwitcher == "0"`). Aggiornato inoltre `LepasDeparturePlan` per mostrare `Disattivata` (`attiva: false`) anche quando `/asd/travelManage/travelQuery` risponde `{mainSwitcher: 0}` senza `appointmentTravelSetVOS`, e riallineato subito `realtime` dopo `async_apply_departure_schedule()`, con bump `?v=1.22.3`.
+
 ## v1.22.2 — 2026-11-18
 
 ### 🇬🇧 English

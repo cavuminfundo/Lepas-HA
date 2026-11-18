@@ -70,6 +70,16 @@ def test_piano_spento_con_main_switcher_zero(sensore):
     assert sensore.extra_state_attributes["attiva"] is False
 
 
+def test_piano_spento_con_main_switcher_zero_senza_lista(sensore):
+    """`/asd/travelManage/travelQuery` a piano spento ritorna `{mainSwitcher: 0}` senza lista."""
+    sensore.coordinator.data = {"realtime": {"mainSwitcher": 0}}
+    assert sensore._live_value() == "Disattivata"
+    attrs = sensore.extra_state_attributes
+    assert attrs is not None
+    assert attrs["attiva"] is False
+    assert attrs["riepilogo"] == "Disabled"
+
+
 def test_piano_acceso_mostra_lorario(sensore):
     """350 minuti UTC dalla mezzanotte = 05:50 in UTC (senza hass/fuso locale)."""
     attivo = dict(PIANO_REALE, switcher=1)

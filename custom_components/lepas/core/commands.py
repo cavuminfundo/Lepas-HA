@@ -239,8 +239,8 @@ COMMANDS = [
                    "name": "Partenza programmata ON", "icon": "mdi:calendar-arrow-right", "group": "Clima"}),
     ("partenza_prog_off", {"endpoint": "appointmentTravel",
                    "body": {"mainSwitcher": "0", "appointmentTravelSetVOS": [
-                       {"planId": 1, "switcher": "0", "travelTime": "0",
-                        "travelWeekday": ""}]},
+                       {"planId": 1, "switcher": "0", "travelTime": "420",
+                        "travelWeekday": "1,2,3,4,5"}]},
                    "name": "Partenza programmata OFF", "icon": "mdi:calendar-remove", "group": "Clima"}),
     ("battery_heat_on", {"endpoint": "batteryPackHeat",
                    "body": {"switchState": "1", "startTime": "420"},

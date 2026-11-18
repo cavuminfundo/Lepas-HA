@@ -829,11 +829,23 @@ class LepasCoordinator(DataUpdateCoordinator):
     ) -> tuple[str, dict, tuple]:
         server_id = self._native_departure_server_id()
         if occ is None:
+            rt = (self.data or {}).get("realtime") or {}
+            existing_time: str | None = None
+            for source in (rt, self._cached_travel_appoint):
+                if not isinstance(source, dict):
+                    continue
+                vos = source.get("appointmentTravelSetVOS")
+                if isinstance(vos, list) and vos and isinstance(vos[0], dict):
+                    raw_t = vos[0].get("travelTime")
+                    if raw_t is not None and str(raw_t).strip().isdigit():
+                        existing_time = str(int(str(raw_t).strip()) % 1440)
+                        break
+            off_days = self.effective_departure_days([1])
             plan: dict[str, object] = {
                 "planId": 1,
                 "switcher": "0",
-                "travelTime": "0",
-                "travelWeekday": "",
+                "travelTime": existing_time if existing_time is not None else "420",
+                "travelWeekday": ",".join(str(d) for d in off_days),
             }
             if server_id is not None:
                 plan["id"] = server_id
@@ -876,8 +888,28 @@ class LepasCoordinator(DataUpdateCoordinator):
             ("1", utc_min, tuple(utc_days)),
         )
 
+    async def _async_refresh_travel_appoint_realtime(self) -> None:
+        """Riallinea `realtime` da `/asd/travelManage/travelQuery` dopo appointmentTravel."""
+        if self._timers.closing:
+            return
+        try:
+            res = await self.async_query_travel_appoint()
+        except Exception as err:  # noqa: BLE001 — refresh best-effort post comando
+            _LOGGER.debug("[scheduler] refresh travelQuery post-comando fallito: %s", type(err).__name__)
+            return
+        if self._timers.closing or not isinstance(res, dict):
+            return
+        rt = dict((self.data or {}).get("realtime") or {})
+        if "mainSwitcher" in res:
+            rt["mainSwitcher"] = res["mainSwitcher"]
+        if "appointmentTravelSetVOS" in res:
+            rt["appointmentTravelSetVOS"] = res["appointmentTravelSetVOS"]
+        elif str(res.get("mainSwitcher")).strip().lower() in ("0", "false"):
+            rt.pop("appointmentTravelSetVOS", None)
+        self._apply_update({"realtime": rt})
+
     async def async_apply_departure_schedule(self) -> None:
-        """Override manuale: invia subito travelAppointControl (ON o OFF) ignorando dedup."""
+        """Override manuale: invia subito appointmentTravel (ON o OFF) ignorando dedup."""
         if self._timers.closing:
             return
         now = dt_util.now()
@@ -890,6 +922,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             return
         self._last_synced_native_dep_sig = sig
         self._last_attempted_native_dep_sig = None
+        await self._async_refresh_travel_appoint_realtime()
 
     async def _async_sync_native_departure(self, occ: DepartureOccurrence | None) -> None:
         if self._timers.closing:

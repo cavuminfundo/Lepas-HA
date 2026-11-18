@@ -437,6 +437,8 @@ def ciclo_non_autorizzato(endpoint: str, body: dict, perms: dict) -> str | None:
     regola = CICLO.get(endpoint)
     if not perms or not regola:
         return None
+    if str(body.get("mainSwitcher")) == "0" or str(body.get("mainSwitch")) == "0":
+        return None
     voce_personalizzato, voce_settimana, campo = regola
     giorni = _giorni(body, campo)
     if not giorni:
