@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.21.0 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Native Scheduled Departure Sync (`travelAppointControl`, Cat. `212`)**: Added bidirectional UTC↔local schedule translation (`local_schedule_to_utc` / `utc_schedule_to_local`), server `id` preservation, `DATA_CAPS_PROBED_V5` capability backfill, `switch.lepas_native_departure_sync`, `button.lepas_apply_departure_schedule`, `synced_with_ha` on `sensor.lepas_scheduled_departure`, and optional `apply_native` on `lepas.set_quick_departure`, including clean quick-departure hold and post-expiry resync across all climate modes.
+- **Plug-in Battery Preheating (`batteryPackHeat`, Cat. `216`)**: Added `switch.lepas_battery_pack_heat` (optimistic + `RestoreEntity`), `time.lepas_battery_pack_heat_time`, `switch.lepas_sync_battery_heat_to_departure` (`T_dep - 30 min`), `lepas.set_battery_pack_heat`, and permission-gated hiding (`216=0`).
+- **Dynamic Departure Climate Extras & Lovelace Card v2 Controls**: Added 12 VIN-filtered cabin/seat/defrost climate extras persisted on `sensor.lepas_next_departure` (`climate_extras` / `allowed_climate_extras`) and configurable via `lepas.set_departure_climate_extras`, plus XSS-safe interactive chips, native departure controls, and conditional battery preheat UI in `custom:lepas-card` (`?v=1.21.0`, full IT/EN/NL localization).
+
+### 🇮🇹 Italiano
+
+- **Sincronizzazione Partenza Programmata Nativa (`travelAppointControl`, Cat. `212`)**: Aggiunta la conversione bidirezionale UTC↔locale (`local_schedule_to_utc` / `utc_schedule_to_local`), preservazione dell'`id` server, backfill capacità `DATA_CAPS_PROBED_V5`, `switch.lepas_native_departure_sync`, `button.lepas_apply_departure_schedule`, attributo `synced_with_ha` su `sensor.lepas_scheduled_departure` e opzione `apply_native` su `lepas.set_quick_departure`, con gestione pulita della scadenza partenza veloce e riallineamento automatico in tutte le modalità clima.
+- **Preriscaldamento Batteria Plug-in (`batteryPackHeat`, Cat. `216`)**: Aggiunti `switch.lepas_battery_pack_heat` (ottimistico + `RestoreEntity`), `time.lepas_battery_pack_heat_time`, `switch.lepas_sync_battery_heat_to_departure` (`T_dep - 30 min`), il servizio `lepas.set_battery_pack_heat` e occultamento automatico se il permesso `216` è `0`.
+- **Extra Clima Dinamici alla Partenza & Controlli Lovelace Card v2**: Aggiunti 12 extra clima abitacolo/sedili/sbrinamento filtrati sulle feature del VIN e persistiti su `sensor.lepas_next_departure` (`climate_extras` / `allowed_climate_extras`), configurabili via `lepas.set_departure_climate_extras`, insieme a chip interattivi protetti da allowlist/XSS, controlli di partenza nativa e riquadro condizionale batteria in `custom:lepas-card` (`?v=1.21.0`, traduzioni complete IT/EN/NL).
+
 ## v1.20.3 — 2026-11-18
 
 ### 🇬🇧 English

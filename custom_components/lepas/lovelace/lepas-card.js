@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.20.3).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.21.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.20.3";
+  var CARD_VERSION = "1.21.0";
   var CONFIRM_MS = 4000;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -83,13 +83,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.20.3",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.20.3",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.20.3",
-    black: "/lepas_card/lepas-hero-black.png?v=1.20.3",
-    white: "/lepas_card/lepas-hero-white.png?v=1.20.3",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.21.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.21.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.21.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.21.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.21.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.20.3";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.21.0";
 
   var SENSITIVE_ACTIONS = {
     unlock: true,
@@ -1216,7 +1216,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.20.3">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.21.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
