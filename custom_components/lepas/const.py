@@ -29,6 +29,8 @@ COMMANDS_AS_RICH_ENTITY = {
     # ricarica EV: switch dedicati (switch.py) → niente pulsanti singoli.
     # NB: `avvio_remoto` NON è qui → resta un pulsante (button.lepas_remote_start).
     "ricarica_start", "ricarica_stop", "ricarica_prog_on", "ricarica_prog_off",
+    "partenza_prog_on", "partenza_prog_off",
+    "battery_heat_on", "battery_heat_off",
     "baule_apri", "baule_chiudi",
     "finestrini_apri", "finestrini_chiudi",
     "tetto_apri", "tetto_chiudi",
@@ -122,6 +124,7 @@ DATA_CAPS_PROBED = "caps_probed"          # v1.10.0: powerType + range clima
 DATA_CAPS_PROBED_V2 = "caps_probed_v2"    # v1.13.0: estremi LO/HI + durate ammesse
 DATA_CAPS_PROBED_V3 = "caps_probed_v3"    # v1.17.0: optional/permessi da queryVehicleAuthority
 DATA_CAPS_PROBED_V4 = "caps_probed_v4"    # v1.18.0: permesso 2131 (ciclo ricarica personalizzato)
+DATA_CAPS_PROBED_V5 = "caps_probed_v5"    # v1.21.0: permessi 212/2121/216 (partenza nativa e batteria)
 DATA_VEHICLE_FEATURES = "vehicle_features"
 
 # Regole di derivazione feature da permessi (vmc/queryVehicleAuthority).
@@ -135,6 +138,9 @@ _FEATURE_RULES: dict[str, tuple[int | None, tuple[int, ...]]] = {
     "instant_charging": (220, ()),
     "scheduled_charging": (213, ()),
     "scheduled_charging_custom_days": (2131, ()),
+    "scheduled_departure_control": (212, ()),
+    "scheduled_departure_custom_days": (2121, ()),
+    "battery_pack_heat": (216, ()),
     "alarm": (401, ()),
     "sunroof": (207, ()),
     "windows": (206, ()),

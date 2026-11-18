@@ -28,6 +28,8 @@ _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_QUICK_DEPARTURE = "set_quick_departure"
 SERVICE_SET_CHARGING_SCHEDULE = "set_charging_schedule"
+SERVICE_SET_DEPARTURE_CLIMATE_EXTRAS = "set_departure_climate_extras"
+SERVICE_SET_BATTERY_PACK_HEAT = "set_battery_pack_heat"
 
 _QUICK_DEPARTURE_SCHEMA = vol.Schema(
     {
@@ -35,6 +37,7 @@ _QUICK_DEPARTURE_SCHEMA = vol.Schema(
         vol.Optional("time"): object,
         vol.Optional("enabled"): object,
         vol.Optional("sync_charging"): object,
+        vol.Optional("apply_native"): object,
     }
 )
 
@@ -45,6 +48,22 @@ _CHARGING_SCHEDULE_SCHEMA = vol.Schema(
         vol.Optional("duration_hours"): object,
         vol.Optional("days"): object,
         vol.Optional("apply"): object,
+    }
+)
+
+_DEPARTURE_CLIMATE_EXTRAS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entry_id"): object,
+        vol.Required("extras"): object,
+    }
+)
+
+_BATTERY_PACK_HEAT_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entry_id"): object,
+        vol.Optional("enabled"): object,
+        vol.Optional("time"): object,
+        vol.Optional("sync_to_departure"): object,
     }
 )
 
@@ -369,10 +388,16 @@ def _async_register_services(hass: HomeAssistant) -> None:
             if "sync_charging" in call.data
             else None
         )
+        apply_native = (
+            _parse_bool(call.data["apply_native"], "apply_native")
+            if "apply_native" in call.data
+            else None
+        )
         await coord.async_set_quick_departure(
             minutes,
             enabled=enabled,
             sync_charging=sync_charging,
+            apply_native=apply_native,
         )
 
     async def _handle_set_charging_schedule(call: ServiceCall) -> None:
@@ -407,6 +432,34 @@ def _async_register_services(hass: HomeAssistant) -> None:
             coord.charge_days = days
         coord.notify_schedule_changed(sync_charge=False)
 
+    async def _handle_set_departure_climate_extras(call: ServiceCall) -> None:
+        coord = _resolve_coordinator(hass, call.data.get("entry_id"))
+        try:
+            await coord.async_set_departure_climate_extras(call.data["extras"])
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    async def _handle_set_battery_pack_heat(call: ServiceCall) -> None:
+        coord = _resolve_coordinator(hass, call.data.get("entry_id"))
+        enabled = _parse_bool(call.data["enabled"], "enabled") if "enabled" in call.data else None
+        minutes = _parse_time_minutes(call.data["time"]) if "time" in call.data else None
+        sync_to_dep = (
+            _parse_bool(call.data["sync_to_departure"], "sync_to_departure")
+            if "sync_to_departure" in call.data
+            else None
+        )
+        if sync_to_dep is not None:
+            coord.sync_battery_heat_to_departure = sync_to_dep
+        if enabled is not None or (minutes is not None and coord.battery_heat_enabled):
+            await coord.async_apply_battery_pack_heat(enabled=enabled, minutes=minutes)
+            if sync_to_dep is True:
+                coord.notify_schedule_changed(sync_battery=True)
+        else:
+            if minutes is not None:
+                coord.battery_heat_minutes = minutes
+            if minutes is not None or sync_to_dep is not None:
+                coord.notify_schedule_changed(sync_battery=bool(sync_to_dep))
+
     if not hass.services.has_service(DOMAIN, SERVICE_SET_QUICK_DEPARTURE):
         hass.services.async_register(
             DOMAIN,
@@ -421,10 +474,29 @@ def _async_register_services(hass: HomeAssistant) -> None:
             _handle_set_charging_schedule,
             schema=_CHARGING_SCHEDULE_SCHEMA,
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_DEPARTURE_CLIMATE_EXTRAS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_DEPARTURE_CLIMATE_EXTRAS,
+            _handle_set_departure_climate_extras,
+            schema=_DEPARTURE_CLIMATE_EXTRAS_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_BATTERY_PACK_HEAT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_BATTERY_PACK_HEAT,
+            _handle_set_battery_pack_heat,
+            schema=_BATTERY_PACK_HEAT_SCHEMA,
+        )
 
 
 def _async_unregister_services(hass: HomeAssistant) -> None:
-    for svc in (SERVICE_SET_QUICK_DEPARTURE, SERVICE_SET_CHARGING_SCHEDULE):
+    for svc in (
+        SERVICE_SET_QUICK_DEPARTURE,
+        SERVICE_SET_CHARGING_SCHEDULE,
+        SERVICE_SET_DEPARTURE_CLIMATE_EXTRAS,
+        SERVICE_SET_BATTERY_PACK_HEAT,
+    ):
         if hass.services.has_service(DOMAIN, svc):
             hass.services.async_remove(DOMAIN, svc)
 

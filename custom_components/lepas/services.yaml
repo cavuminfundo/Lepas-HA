@@ -29,6 +29,12 @@ set_quick_departure:
       required: false
       selector:
         boolean:
+    apply_native:
+      name: Apply native departure
+      description: Force syncing travelAppointControl (and battery preheat if synced) even when native sync is disabled.
+      required: false
+      selector:
+        boolean:
 
 set_charging_schedule:
   name: Set charging schedule
@@ -72,5 +78,55 @@ set_charging_schedule:
       description: Send the updated charging schedule to the vehicle immediately.
       required: false
       default: true
+      selector:
+        boolean:
+
+set_departure_climate_extras:
+  name: Set departure climate extras
+  description: Configure vehicle-supported comfort extras activated alongside departure pre-climate.
+  fields:
+    entry_id:
+      name: Vehicle entry
+      description: Config entry ID of the vehicle (optional when only one vehicle is configured).
+      required: false
+      selector:
+        config_entry:
+          integration: lepas
+    extras:
+      name: Climate extras
+      description: List of climate extra keys (e.g. steering_wheel_heating, driver_seat_heating, windshield_defog).
+      required: true
+      example: ["steering_wheel_heating", "driver_seat_heating"]
+      selector:
+        object:
+
+set_battery_pack_heat:
+  name: Set battery pack heat
+  description: Configure battery pack preheating state, local start time, or departure sync.
+  fields:
+    entry_id:
+      name: Vehicle entry
+      description: Config entry ID of the vehicle (optional when only one vehicle is configured).
+      required: false
+      selector:
+        config_entry:
+          integration: lepas
+    enabled:
+      name: Enabled
+      description: Enable or disable battery pack preheating.
+      required: false
+      selector:
+        boolean:
+    time:
+      name: Start time
+      description: Local battery pack preheat start time (HH:MM).
+      required: false
+      example: "06:30"
+      selector:
+        time:
+    sync_to_departure:
+      name: Sync to departure
+      description: Automatically align battery preheating to 30 minutes before the next scheduled departure.
+      required: false
       selector:
         boolean:

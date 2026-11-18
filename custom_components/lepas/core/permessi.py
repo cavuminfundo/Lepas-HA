@@ -81,6 +81,8 @@ CATEGORIA = {
     "skylightControl": 207,
     "chargeStartStopControl": 220,
     "chargeAppointControl": 213,
+    "travelAppointControl": 212,
+    "batteryPackHeat": 216,
     "findCar": 202,
     "vehicleLocation": 211,
 }
@@ -393,22 +395,35 @@ def categoria_chiusa(categoria: int | None, perms: dict) -> bool:
 # 7 giorni e la 212 solo il personalizzato. Per questo la tabella è per-endpoint e non una regola.
 CICLO = {
     "chargeAppointControl": (2131, 2132, "cycleData"),
+    "travelAppointControl": (2121, 2122, "travelWeekday"),
 }
-# NB `appointmentTravel` non compare: non esiste un comando con quell'endpoint — il piano di
-# partenza programmata è di sola lettura (`sensor.py`). Le sue voci restano però interessanti e
-# vanno conservate qui: (2121 «ciclo personalizzato», 2122 «7 giorni», campo `travelWeekday`),
-# con la polarità INVERTITA rispetto alla ricarica e identica su entrambe le auto conosciute.
+
+
+def _parse_giorni_val(val) -> list | None:
+    if isinstance(val, list):
+        return val
+    if isinstance(val, str):
+        parts = [p.strip() for p in val.split(",") if p.strip()]
+        if not parts:
+            return None
+        return [int(p) if p.isdigit() else p for p in parts]
+    return None
 
 
 def _giorni(body: dict, campo: str) -> list | None:
-    """Estrae la lista dei giorni dal corpo, sia se è in cima sia dentro il piano annidato."""
-    if isinstance(body.get(campo), list):
-        return body[campo]
+    """Estrae la lista dei giorni dal corpo (list o CSV), sia in cima sia nel piano annidato."""
+    if not isinstance(body, dict):
+        return None
+    parsed = _parse_giorni_val(body.get(campo))
+    if parsed is not None:
+        return parsed
     for valore in body.values():
         if isinstance(valore, list):
             for voce in valore:
-                if isinstance(voce, dict) and isinstance(voce.get(campo), list):
-                    return voce[campo]
+                if isinstance(voce, dict):
+                    parsed = _parse_giorni_val(voce.get(campo))
+                    if parsed is not None:
+                        return parsed
     return None
 
 

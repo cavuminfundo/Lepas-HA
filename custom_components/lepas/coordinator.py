@@ -11,6 +11,7 @@ DALL'entry prima di importarli (assunzione: una sola auto per istanza HA).
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 import functools
 import hashlib
 import json
@@ -45,16 +46,21 @@ from .const import (
     DATA_POWER_TYPE, DATA_CLIMATE_MIN, DATA_CLIMATE_MAX, DATA_CLIMATE_STEP,
     DATA_CLIMATE_LO, DATA_CLIMATE_HI, DATA_AIR_DURATIONS,
     DATA_CAPS_PROBED, DATA_CAPS_PROBED_V2, DATA_CAPS_PROBED_V3, DATA_CAPS_PROBED_V4,
-    DATA_VEHICLE_FEATURES,
+    DATA_CAPS_PROBED_V5, DATA_VEHICLE_FEATURES,
     capabilities_from_item, features_from_permissions,
     CLIMA_MIN_DEFAULT, CLIMA_MAX_DEFAULT, CLIMA_STEP_DEFAULT,
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
 )
 from .scheduler import (
+    DEPARTURE_CLIMATE_EXTRAS_COMMANDS,
+    DEPARTURE_CLIMATE_EXTRAS_FEATURES,
     DepartureOccurrence,
+    compute_battery_heat_start_for_departure,
     compute_charge_start_for_departure,
     compute_next_occurrence,
+    local_schedule_to_utc,
     next_quick_departure_at,
+    normalize_climate_extras,
     parse_days_input,
     shift_minutes,
 )
@@ -434,6 +440,18 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._attempted_climate_key: str | None = None
         self._last_synced_charge_sig: tuple | None = None
         self._last_attempted_charge_sig: tuple | None = None
+        self.native_departure_sync: bool = False
+        self.battery_heat_enabled: bool = False
+        self.battery_heat_minutes: int = 420
+        self.sync_battery_heat_to_departure: bool = False
+        self.departure_climate_extras: list[str] = []
+        self._quick_native_until: datetime | None = None
+        self._quick_applied_native: bool = False
+        self._last_synced_native_dep_sig: tuple | None = None
+        self._last_attempted_native_dep_sig: tuple | None = None
+        self._last_synced_battery_sig: tuple | None = None
+        self._last_attempted_battery_sig: tuple | None = None
+        self._cached_travel_appoint: dict | None = None
 
     def feature_enabled(self, feature: str) -> bool:
         """True se la feature è abilitata per questo veicolo (fail-open su chiave assente)."""
@@ -749,6 +767,284 @@ class LepasCoordinator(DataUpdateCoordinator):
         src = self.charge_days if target_days is None else target_days
         return parse_days_input(src)
 
+    def _local_tzinfo(self):
+        tz_name = getattr(getattr(self.hass, "config", None), "time_zone", None)
+        return (dt_util.get_time_zone(tz_name) if tz_name else None) or dt_util.DEFAULT_TIME_ZONE
+
+    def effective_departure_days(self, target_days=None) -> list[int]:
+        """Giorni effettivi per travelWeekday, con ripiego [1..7] se 2121 == 0."""
+        if not self.feature_enabled("scheduled_departure_custom_days"):
+            return [1, 2, 3, 4, 5, 6, 7]
+        if isinstance(self._probed_permessi, dict) and self._probed_permessi.get(2121) == 0:
+            return [1, 2, 3, 4, 5, 6, 7]
+        if target_days is not None:
+            return parse_days_input(target_days)
+        active = [
+            d
+            for d in range(1, 8)
+            if isinstance(self.departure_weekly.get(d), tuple) and self.departure_weekly[d][0]
+        ]
+        return active or [1, 2, 3, 4, 5, 6, 7]
+
+    def _extra_feature_allowed(self, extra_key: str) -> bool:
+        feat = DEPARTURE_CLIMATE_EXTRAS_FEATURES.get(extra_key)
+        if not feat or not self.feature_enabled(feat):
+            return False
+        if isinstance(self._probed_permessi, dict):
+            if features_from_permissions(self._probed_permessi).get(feat) is False:
+                return False
+        return True
+
+    def allowed_departure_climate_extras(self) -> list[str]:
+        """Chiavi extra clima consentite dalle capability del veicolo."""
+        return [k for k in DEPARTURE_CLIMATE_EXTRAS_COMMANDS if self._extra_feature_allowed(k)]
+
+    async def async_set_departure_climate_extras(self, extras: Sequence[str]) -> list[str]:
+        """Valida, normalizza e salva gli extra clima da inviare al pre-clima di partenza."""
+        if self._timers.closing:
+            return list(self.departure_climate_extras)
+        normalized = normalize_climate_extras(extras)
+        filtered = [k for k in normalized if self._extra_feature_allowed(k)]
+        self.departure_climate_extras = filtered
+        self.async_update_listeners()
+        return list(filtered)
+
+    def _native_departure_server_id(self) -> object | None:
+        rt = (self.data or {}).get("realtime") or {}
+        for source in (rt, self._cached_travel_appoint):
+            if not isinstance(source, dict):
+                continue
+            vos = source.get("appointmentTravelSetVOS")
+            if isinstance(vos, list) and vos and isinstance(vos[0], dict):
+                sid = vos[0].get("id")
+                if sid is not None and str(sid).strip() != "":
+                    return sid
+            sid = source.get("id")
+            if sid is not None and str(sid).strip() != "":
+                return sid
+        return None
+
+    def _build_native_departure_payload(
+        self, occ: DepartureOccurrence | None
+    ) -> tuple[str, dict, tuple]:
+        server_id = self._native_departure_server_id()
+        if occ is None:
+            plan: dict[str, object] = {
+                "planId": 1,
+                "switcher": "0",
+                "travelTime": "0",
+                "travelWeekday": "",
+            }
+            if server_id is not None:
+                plan["id"] = server_id
+            return (
+                "partenza_prog_off",
+                {"mainSwitcher": "0", "appointmentTravelSetVOS": [plan]},
+                ("0", 0, ()),
+            )
+
+        local_min = occ.departure_at_minutes
+        if occ.source == "quick":
+            target_days = [occ.weekday]
+        else:
+            target_days = [
+                d
+                for d in range(1, 8)
+                if isinstance(self.departure_weekly.get(d), tuple)
+                and self.departure_weekly[d][0]
+                and (int(self.departure_weekly[d][1]) % 1440) == local_min
+            ] or [occ.weekday]
+        eff_local_days = self.effective_departure_days(target_days)
+        tz = occ.departure_at.tzinfo or self._local_tzinfo()
+        utc_min, utc_days = local_schedule_to_utc(
+            local_min,
+            eff_local_days,
+            tz,
+            ref_date=occ.departure_at.date(),
+        )
+        plan = {
+            "planId": 1,
+            "switcher": "1",
+            "travelTime": str(utc_min),
+            "travelWeekday": ",".join(str(d) for d in utc_days),
+        }
+        if server_id is not None:
+            plan["id"] = server_id
+        return (
+            "partenza_prog_on",
+            {"mainSwitcher": "1", "appointmentTravelSetVOS": [plan]},
+            ("1", utc_min, tuple(utc_days)),
+        )
+
+    async def async_apply_departure_schedule(self) -> None:
+        """Override manuale: invia subito travelAppointControl (ON o OFF) ignorando dedup."""
+        if self._timers.closing:
+            return
+        now = dt_util.now()
+        occ = self.next_departure_occurrence(now)
+        cmd_key, body, sig = self._build_native_departure_payload(occ)
+        if self._timers.closing:
+            return
+        await self.async_send_command(cmd_key, body)
+        if self._timers.closing:
+            return
+        self._last_synced_native_dep_sig = sig
+        self._last_attempted_native_dep_sig = None
+
+    async def _async_sync_native_departure(self, occ: DepartureOccurrence | None) -> None:
+        if self._timers.closing:
+            return
+        cmd_key, body, sig = self._build_native_departure_payload(occ)
+        if (
+            sig == self._last_synced_native_dep_sig
+            or sig == self._last_attempted_native_dep_sig
+        ):
+            return
+        try:
+            await self.async_send_command(cmd_key, body)
+        except Exception as err:  # noqa: BLE001 — evita retry storm ogni 60s
+            if self._timers.closing:
+                return
+            self._last_attempted_native_dep_sig = sig
+            _LOGGER.warning(
+                "[scheduler] sincronizzazione partenza nativa fallita (%s)",
+                type(err).__name__,
+            )
+            return
+        if self._timers.closing:
+            return
+        self._last_synced_native_dep_sig = sig
+        self._last_attempted_native_dep_sig = None
+
+    def _sync_battery_heat_start_local(self, occ: DepartureOccurrence | None) -> bool:
+        if not self.sync_battery_heat_to_departure or occ is None:
+            return False
+        start_min = compute_battery_heat_start_for_departure(occ.departure_at_minutes, 30)
+        if self.battery_heat_minutes != start_min:
+            self.battery_heat_minutes = start_min
+            return True
+        return False
+
+    async def async_apply_battery_pack_heat(
+        self,
+        *,
+        enabled: bool | None = None,
+        minutes: int | None = None,
+    ) -> None:
+        """Applica manualmente stato e orario di batteryPackHeat."""
+        if self._timers.closing:
+            return
+        if minutes is not None:
+            m = int(minutes)
+            if not 0 <= m < 1440:
+                raise ValueError(f"battery heat minutes out of range 0..1439: {minutes!r}")
+            self.battery_heat_minutes = m
+        if enabled is not None:
+            self.battery_heat_enabled = bool(enabled)
+
+        self.async_update_listeners()
+        if self._timers.closing:
+            return
+
+        tz = self._local_tzinfo()
+        if self.battery_heat_enabled:
+            local_min = int(self.battery_heat_minutes) % 1440
+            ref_local = dt_util.now().astimezone(tz)
+            utc_min, _ = local_schedule_to_utc(local_min, None, tz, ref_date=ref_local.date())
+            cmd_key = "battery_heat_on"
+            params = {"switchState": "1", "startTime": str(utc_min)}
+            sig_key = "manual"
+            occ = self.next_departure_occurrence(dt_util.now())
+            if (
+                self.sync_battery_heat_to_departure
+                and occ is not None
+                and compute_battery_heat_start_for_departure(occ.departure_at_minutes, 30) == local_min
+            ):
+                sig_key = occ.key
+            sig: tuple = (sig_key, True, utc_min)
+        else:
+            cmd_key = "battery_heat_off"
+            params = {"switchState": "0", "startTime": "0"}
+            sig = ("off", False, 0)
+
+        await self.async_send_command(cmd_key, params)
+        if self._timers.closing:
+            return
+        self._last_synced_battery_sig = sig
+        self._last_attempted_battery_sig = None
+
+    async def _async_sync_battery_for_occurrence(
+        self,
+        occ: DepartureOccurrence | None,
+        *,
+        force_off: bool = False,
+    ) -> None:
+        if self._timers.closing:
+            return
+        if occ is None:
+            was_on = self.battery_heat_enabled or (
+                self._last_synced_battery_sig is not None and bool(self._last_synced_battery_sig[1])
+            )
+            if not (force_off or was_on):
+                return
+            sig: tuple = ("off", False, 0)
+            cmd_key = "battery_heat_off"
+            params = {"switchState": "0", "startTime": "0"}
+            target_enabled = False
+        else:
+            local_min = compute_battery_heat_start_for_departure(occ.departure_at_minutes, 30)
+            heat_dt = shift_minutes(occ.departure_at, -30)
+            tz = occ.departure_at.tzinfo or self._local_tzinfo()
+            utc_min, _ = local_schedule_to_utc(local_min, None, tz, ref_date=heat_dt.date())
+            sig = (occ.key, True, utc_min)
+            cmd_key = "battery_heat_on"
+            params = {"switchState": "1", "startTime": str(utc_min)}
+            target_enabled = True
+
+        if sig == self._last_synced_battery_sig or sig == self._last_attempted_battery_sig:
+            return
+        try:
+            await self.async_send_command(cmd_key, params)
+        except Exception as err:  # noqa: BLE001 — evita retry storm ogni 60s
+            if self._timers.closing:
+                return
+            self._last_attempted_battery_sig = sig
+            _LOGGER.warning(
+                "[scheduler] sincronizzazione preriscaldamento batteria fallita (%s)",
+                type(err).__name__,
+            )
+            return
+        if self._timers.closing:
+            return
+        self.battery_heat_enabled = target_enabled
+        self._last_synced_battery_sig = sig
+        self._last_attempted_battery_sig = None
+        self.async_update_listeners()
+
+    async def async_query_travel_appoint(self) -> dict | None:
+        """Query on-demand del piano di partenza nativa (mai nel polling passivo)."""
+        if self._timers.closing:
+            return None
+        from .core import commands as CMD
+
+        res = await self.hass.async_add_executor_job(CMD.query_travel_appoint, self.ctx)
+        if self._timers.closing:
+            return None
+        if isinstance(res, dict):
+            self._cached_travel_appoint = res
+        return res
+
+    async def async_query_battery_pack_heat(self) -> dict | None:
+        """Query on-demand dello stato di preriscaldamento batteria (mai nel polling passivo)."""
+        if self._timers.closing:
+            return None
+        from .core import commands as CMD
+
+        res = await self.hass.async_add_executor_job(CMD.query_battery_pack_heat, self.ctx)
+        if self._timers.closing:
+            return None
+        return res
+
     def _anchor_quick_target(self, now: datetime, *, force: bool = False) -> None:
         if not self.quick_departure_enabled:
             self._quick_target_at = None
@@ -779,14 +1075,26 @@ class LepasCoordinator(DataUpdateCoordinator):
         return shift_minutes(charge_start_at, -60) <= now < occ.departure_at
 
     @callback
-    def notify_schedule_changed(self, *, sync_charge: bool = False) -> None:
-        """Aggiorna ancora rapida, orario ricarica locale e UI; opzionalmente avvia sync cloud."""
+    def notify_schedule_changed(
+        self,
+        *,
+        sync_charge: bool = False,
+        sync_native: bool = False,
+        sync_battery: bool = False,
+    ) -> None:
+        """Aggiorna ancora rapida, orario ricarica/batteria locale e UI; opzionalmente sync cloud."""
         if self._timers.closing:
             return
+        self._quick_native_until = None
+        self._quick_applied_native = False
+        self._last_attempted_native_dep_sig = None
+        self._last_attempted_battery_sig = None
+        self._last_attempted_charge_sig = None
         now = dt_util.now()
         self._anchor_quick_target(now)
         occ = self.next_departure_occurrence(now)
         self._sync_charge_start_local(occ)
+        self._sync_battery_heat_start_local(occ)
         self.async_update_listeners()
         if (
             sync_charge
@@ -799,12 +1107,24 @@ class LepasCoordinator(DataUpdateCoordinator):
                 self._async_sync_charge_for_occurrence(occ),
                 f"{DOMAIN}_charge_sync",
             )
+        if sync_native and self.native_departure_sync and not self._timers.closing:
+            self.hass.async_create_background_task(
+                self._async_sync_native_departure(occ),
+                f"{DOMAIN}_native_dep_sync",
+            )
+        if sync_battery and self.sync_battery_heat_to_departure and not self._timers.closing:
+            self.hass.async_create_background_task(
+                self._async_sync_battery_for_occurrence(occ),
+                f"{DOMAIN}_battery_heat_sync",
+            )
 
     async def async_set_quick_departure(
         self,
-        minutes: int | None,
+        minutes: int | None = None,
         enabled: bool = True,
+        *,
         sync_charging: bool | None = None,
+        apply_native: bool | None = None,
     ) -> None:
         """Imposta la partenza rapida una tantum e sincronizza subito se richiesto."""
         if self._timers.closing:
@@ -817,11 +1137,17 @@ class LepasCoordinator(DataUpdateCoordinator):
         if sync_charging is not None:
             self.sync_charge_to_departure = bool(sync_charging)
         self.quick_departure_enabled = bool(enabled)
+        self._quick_native_until = None
+        self._quick_applied_native = False
+        self._last_attempted_native_dep_sig = None
+        self._last_attempted_battery_sig = None
+        self._last_attempted_charge_sig = None
 
         now = dt_util.now()
         self._anchor_quick_target(now, force=True)
         occ = self.next_departure_occurrence(now)
         self._sync_charge_start_local(occ)
+        self._sync_battery_heat_start_local(occ)
         self.async_update_listeners()
 
         if (
@@ -831,6 +1157,24 @@ class LepasCoordinator(DataUpdateCoordinator):
             and self._charge_sync_window_active(now, occ)
         ):
             await self._async_sync_charge_for_occurrence(occ)
+            if self._timers.closing:
+                return
+
+        if apply_native is True:
+            await self.async_apply_departure_schedule()
+            if self._timers.closing:
+                return
+            if self.quick_departure_enabled and not self.native_departure_sync:
+                self._quick_applied_native = True
+        elif apply_native is None and self.native_departure_sync:
+            await self._async_sync_native_departure(occ)
+            if self._timers.closing:
+                return
+
+        if self.sync_battery_heat_to_departure and apply_native is not False:
+            await self._async_sync_battery_for_occurrence(occ)
+            if self._timers.closing:
+                return
 
     async def async_apply_charging_schedule(
         self,
@@ -987,20 +1331,43 @@ class LepasCoordinator(DataUpdateCoordinator):
         except Exception as err:  # noqa: BLE001 — evita retry ogni 60s su errore
             if self._timers.closing:
                 return False
-            _LOGGER.warning("[scheduler] avvio pre-clima fallito: %s", err)
+            _LOGGER.warning("[scheduler] avvio pre-clima fallito: %s", type(err).__name__)
         else:
             if self._timers.closing:
                 return False
             self._fired_climate_key = occ.key
+            try:
+                extras = normalize_climate_extras(self.departure_climate_extras)
+            except ValueError:
+                extras = []
+            for extra_key in extras:
+                if not self._extra_feature_allowed(extra_key):
+                    continue
+                if self._timers.closing:
+                    return False
+                cmd_key = DEPARTURE_CLIMATE_EXTRAS_COMMANDS[extra_key]
+                try:
+                    await self.async_send_command(cmd_key)
+                except Exception as extra_err:  # noqa: BLE001 — non azzera _fired_climate_key
+                    if self._timers.closing:
+                        return False
+                    _LOGGER.warning(
+                        "[scheduler] extra clima '%s' fallito (%s)",
+                        extra_key,
+                        type(extra_err).__name__,
+                    )
+                if self._timers.closing:
+                    return False
 
         if occ.source == "quick" and self.quick_departure_enabled:
+            self._quick_native_until = occ.departure_at
             self.quick_departure_enabled = False
             self._quick_target_at = None
             return True
         return False
 
     async def _departure_tick_cb(self, _now: datetime | None = None) -> None:
-        """Tick al minuto dello schedulatore partenze (pre-clima + sync ricarica)."""
+        """Tick al minuto dello schedulatore partenze (pre-clima + sync ricarica/partenza/batteria)."""
         if self._timers.closing or self._departure_busy:
             return
         self._departure_busy = True
@@ -1009,6 +1376,7 @@ class LepasCoordinator(DataUpdateCoordinator):
                 return
             now = _now if _now is not None else dt_util.now()
             ui_dirty = False
+            quick_expired = False
 
             if (
                 self.quick_departure_enabled
@@ -1017,7 +1385,14 @@ class LepasCoordinator(DataUpdateCoordinator):
             ):
                 self.quick_departure_enabled = False
                 self._quick_target_at = None
+                self._quick_native_until = None
                 ui_dirty = True
+                quick_expired = True
+
+            if self._quick_native_until is not None and now >= self._quick_native_until:
+                self._quick_native_until = None
+                self._quick_target_at = None
+                quick_expired = True
 
             occ = self.next_departure_occurrence(now)
 
@@ -1036,11 +1411,33 @@ class LepasCoordinator(DataUpdateCoordinator):
                 self.async_update_listeners()
                 ui_dirty = False
 
+            holding_quick = (
+                self._quick_native_until is not None and now < self._quick_native_until
+            )
+
             if occ is not None and self.sync_charge_to_departure:
                 if self._sync_charge_start_local(occ):
                     self.async_update_listeners()
                 if self._charge_sync_window_active(now, occ):
                     await self._async_sync_charge_for_occurrence(occ)
+                    if self._timers.closing:
+                        return
+
+            if not holding_quick:
+                if self.native_departure_sync or (quick_expired and self._quick_applied_native):
+                    if quick_expired:
+                        self._quick_applied_native = False
+                        self._last_attempted_native_dep_sig = None
+                    await self._async_sync_native_departure(occ)
+                    if self._timers.closing:
+                        return
+
+                if self.sync_battery_heat_to_departure:
+                    if self._sync_battery_heat_start_local(occ):
+                        self.async_update_listeners()
+                    if quick_expired:
+                        self._last_attempted_battery_sig = None
+                    await self._async_sync_battery_for_occurrence(occ, force_off=quick_expired)
                     if self._timers.closing:
                         return
         finally:
@@ -2104,15 +2501,17 @@ class LepasCoordinator(DataUpdateCoordinator):
         setup: su errore resta il fallback "Lepas L8"."""
         # Le capability (BEV/PHEV, range clima) arrivano dalla STESSA risposta: se mancano si
         # rilegge anche quando il nome è già in cache — una volta sola, poi c'è il marcatore.
+        if self._timers.closing:
+            return
         override = bool(str((self.entry.options or {}).get(CONF_VEHICLE_NAME) or "").strip())
         nome_in_cache = bool(self.entry.data.get(CONF_VEHICLE_NAME))
-        # Il marcatore è VERSIONATO: chi ha già `caps_probed` / `_v2` / `_v3` deve rileggere una
-        # volta sola per le capability V4 (permesso 2131 ciclo ricarica), poi si ferma di nuovo.
-        caps_da_leggere = not self.entry.data.get(DATA_CAPS_PROBED_V4)
+        # Il marcatore è VERSIONATO: chi ha già `caps_probed`..`_v4` deve rileggere una
+        # volta sola per le capability V5 (permessi 212/2121/216), poi si ferma di nuovo.
+        caps_da_leggere = not self.entry.data.get(DATA_CAPS_PROBED_V5)
         if (override or nome_in_cache) and not caps_da_leggere:
             return  # nulla da chiedere: nome deciso e capability già interrogate
         info = await self.hass.async_add_executor_job(self._fetch_vehicle_identity)
-        if not info:
+        if self._timers.closing or not info:
             return
         if self.entry.entry_id not in self.hass.data.get(DOMAIN, {}):
             return  # integrazione scaricata durante la chiamata
@@ -2184,7 +2583,8 @@ class LepasCoordinator(DataUpdateCoordinator):
             # della vettura. Il marcatore si scrive comunque, anche se il backend non le
             # dichiara: «chiesto e non c'è» ≠ «mai chiesto» (altrimenti si richiede a ogni avvio).
             caps: dict = {DATA_CAPS_PROBED: True, DATA_CAPS_PROBED_V2: True,
-                          DATA_CAPS_PROBED_V4: True, **capabilities_from_item(item)}
+                          DATA_CAPS_PROBED_V4: True, DATA_CAPS_PROBED_V5: True,
+                          **capabilities_from_item(item)}
             try:
                 tuid = (
                     wake._valid_tuserid(getattr(self, "tuserid", ""))

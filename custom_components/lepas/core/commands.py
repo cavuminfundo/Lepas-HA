@@ -228,6 +228,24 @@ COMMANDS = [
                        {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 480,
                         "switchStatus": 0, "timeConsuming": 360}]},
                    "name": "Ricarica programmata OFF", "icon": "mdi:calendar-remove", "group": "Ricarica"}),
+    # Partenza programmata NATIVA (travelAppointControl) + preriscaldamento batteria (batteryPackHeat).
+    # Orari in minuti dalla mezzanotte UTC come stringa; travelWeekday = CSV UTC 1..7.
+    ("partenza_prog_on", {"endpoint": "travelAppointControl",
+                   "body": {"mainSwitcher": "1", "appointmentTravelSetVOS": [
+                       {"planId": 1, "switcher": "1", "travelTime": "420",
+                        "travelWeekday": "1,2,3,4,5"}]},
+                   "name": "Partenza programmata ON", "icon": "mdi:calendar-arrow-right", "group": "Clima"}),
+    ("partenza_prog_off", {"endpoint": "travelAppointControl",
+                   "body": {"mainSwitcher": "0", "appointmentTravelSetVOS": [
+                       {"planId": 1, "switcher": "0", "travelTime": "0",
+                        "travelWeekday": ""}]},
+                   "name": "Partenza programmata OFF", "icon": "mdi:calendar-remove", "group": "Clima"}),
+    ("battery_heat_on", {"endpoint": "batteryPackHeat",
+                   "body": {"switchState": "1", "startTime": "420"},
+                   "name": "Preriscalda batteria ON", "icon": "mdi:battery-heat", "group": "Ricarica"}),
+    ("battery_heat_off", {"endpoint": "batteryPackHeat",
+                   "body": {"switchState": "0", "startTime": "0"},
+                   "name": "Preriscalda batteria OFF", "icon": "mdi:battery-off-outline", "group": "Ricarica"}),
 
     # — Altro —
     ("trova_auto", {"endpoint": "findCar", "body": {},
@@ -1060,6 +1078,46 @@ def query_theft_switch(ctx):
             except (TypeError, ValueError):
                 return None
     return None
+
+
+def _query_payload(ctx, paths: tuple[str, ...]):
+    token, _tuid = wake._bff_login(ctx)
+    if not token:
+        return None
+    for path in paths:
+        try:
+            _status, j = wake._signed_post(ctx, token, path, {"vin": ctx.vin})
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(j, dict):
+            continue
+        code = j.get("code")
+        if code is not None and str(code) not in ("0", "000000", "A00079"):
+            continue
+        for key in ("data", "body"):
+            val = j.get(key)
+            if isinstance(val, (dict, list)) and val:
+                return val
+    return None
+
+
+def query_travel_appoint(ctx) -> dict | None:
+    """Legge il piano di partenza nativa (READ-ONLY, solo su richiesta/sveglia)."""
+    payload = _query_payload(
+        ctx,
+        ("/asc/vehicleControl/travelAppointQuery", "/asd/travelAppointManage/travelAppointQuery"),
+    )
+    if isinstance(payload, dict):
+        return dict(payload)
+    if isinstance(payload, list):
+        return {"appointmentTravelSetVOS": list(payload)}
+    return None
+
+
+def query_battery_pack_heat(ctx) -> dict | None:
+    """Legge stato e orario del preriscaldamento batteria (READ-ONLY, solo su richiesta/sveglia)."""
+    payload = _query_payload(ctx, ("/asc/vehicleControl/queryBatteryPackHeat",))
+    return dict(payload) if isinstance(payload, dict) else None
 
 
 if __name__ == "__main__":
