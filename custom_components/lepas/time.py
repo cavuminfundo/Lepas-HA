@@ -25,7 +25,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, entity_allowed
 from .entity import LepasEntity
 from .naming import ID_PREFIX
 from .scheduler import DEPARTURE_DAY_SLUGS
@@ -37,6 +37,9 @@ TIMES = [
     ("Lepas Quick departure time", "quick_departure_time",
      "quick_departure_minutes", 18, 0, "mdi:clock-fast",
      f"{ID_PREFIX}_quick_departure_time", "quick_departure_time"),
+    ("Lepas Battery pack heat time", "battery_pack_heat_time",
+     "battery_heat_minutes", 7, 0, "mdi:battery-clock-outline",
+     f"{ID_PREFIX}_battery_pack_heat_time", "battery_pack_heat_time"),
 ]
 
 
@@ -62,8 +65,16 @@ def _minutes_to_time(mins: object, fallback: time) -> time:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     coord = hass.data[DOMAIN][entry.entry_id]
-    ents: list[TimeEntity] = [LepasConfigTime(coord, *spec) for spec in TIMES]
-    ents.extend(LepasWeeklyDepartureTime(coord, day, slug) for day, slug in DEPARTURE_DAY_SLUGS.items())
+    ents: list[TimeEntity] = [
+        LepasConfigTime(coord, *spec)
+        for spec in TIMES
+        if entity_allowed(coord, "time", spec[1])
+    ]
+    ents.extend(
+        LepasWeeklyDepartureTime(coord, day, slug)
+        for day, slug in DEPARTURE_DAY_SLUGS.items()
+        if entity_allowed(coord, "time", f"departure_{slug}_time")
+    )
     add(ents)
 
 
@@ -105,7 +116,9 @@ class LepasConfigTime(LepasEntity, TimeEntity, RestoreEntity):
             self._value = parsed
         self._push()
         if parsed is not None and hasattr(self.coordinator, "notify_schedule_changed"):
-            self.coordinator.notify_schedule_changed()
+            self.coordinator.notify_schedule_changed(
+                sync_charge=False, sync_native=False, sync_battery=False
+            )
 
     def _push(self) -> None:
         setattr(self.coordinator, self._attr, self._value.hour * 60 + self._value.minute)
@@ -118,12 +131,25 @@ class LepasConfigTime(LepasEntity, TimeEntity, RestoreEntity):
         # i secondi non servono (l'auto ragiona in minuti) → li azzeriamo
         self._value = value.replace(second=0, microsecond=0)
         self._push()
-        if hasattr(self.coordinator, "notify_schedule_changed"):
-            sync = (
-                self._attr == "quick_departure_minutes"
-                and bool(getattr(self.coordinator, "quick_departure_enabled", False))
+        if self._attr == "battery_heat_minutes":
+            if getattr(self.coordinator, "battery_heat_enabled", False):
+                await self.coordinator.async_apply_battery_pack_heat(
+                    minutes=self._value.hour * 60 + self._value.minute
+                )
+            elif hasattr(self.coordinator, "notify_schedule_changed"):
+                self.coordinator.notify_schedule_changed(
+                    sync_charge=False, sync_native=False, sync_battery=False
+                )
+        elif hasattr(self.coordinator, "notify_schedule_changed"):
+            is_quick = self._attr == "quick_departure_minutes"
+            self.coordinator.notify_schedule_changed(
+                sync_charge=(
+                    is_quick
+                    and bool(getattr(self.coordinator, "quick_departure_enabled", False))
+                ),
+                sync_native=is_quick,
+                sync_battery=is_quick,
             )
-            self.coordinator.notify_schedule_changed(sync_charge=sync)
         self.async_write_ha_state()
 
 
@@ -159,7 +185,9 @@ class LepasWeeklyDepartureTime(LepasEntity, TimeEntity, RestoreEntity):
             self._fallback = parsed
             self._push_minutes(parsed.hour * 60 + parsed.minute)
             if hasattr(self.coordinator, "notify_schedule_changed"):
-                self.coordinator.notify_schedule_changed()
+                self.coordinator.notify_schedule_changed(
+                    sync_charge=False, sync_native=False, sync_battery=False
+                )
 
     @property
     def native_value(self) -> time:
@@ -172,5 +200,7 @@ class LepasWeeklyDepartureTime(LepasEntity, TimeEntity, RestoreEntity):
         self._fallback = cleaned
         enabled = self._push_minutes(cleaned.hour * 60 + cleaned.minute)
         if hasattr(self.coordinator, "notify_schedule_changed"):
-            self.coordinator.notify_schedule_changed(sync_charge=bool(enabled))
+            self.coordinator.notify_schedule_changed(
+                sync_charge=bool(enabled), sync_native=True, sync_battery=True
+            )
         self.async_write_ha_state()

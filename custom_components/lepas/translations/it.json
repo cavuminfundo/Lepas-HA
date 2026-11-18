@@ -246,6 +246,9 @@
       },
       "apply_charging_schedule": {
         "name": "Applica orari ricarica"
+      },
+      "apply_departure_schedule": {
+        "name": "Applica programma partenza"
       }
     },
     "climate": {
@@ -524,6 +527,15 @@
       },
       "departure_sun_enabled": {
         "name": "Partenza Dom · attiva"
+      },
+      "native_departure_sync": {
+        "name": "Sync partenza su auto"
+      },
+      "battery_pack_heat": {
+        "name": "Preriscaldamento batteria"
+      },
+      "sync_battery_heat_to_departure": {
+        "name": "Allinea batteria alla partenza"
       }
     },
     "time": {
@@ -532,6 +544,9 @@
       },
       "quick_departure_time": {
         "name": "Partenza rapida · orario"
+      },
+      "battery_pack_heat_time": {
+        "name": "Preriscaldamento batteria · orario"
       },
       "departure_mon_time": {
         "name": "Partenza Lun · orario"
@@ -576,6 +591,10 @@
         "sync_charging": {
           "name": "Sincronizza ricarica",
           "description": "Adatta la ricarica programmata per terminare entro l'orario di partenza rapida."
+        },
+        "apply_native": {
+          "name": "Applica partenza nativa",
+          "description": "Forza la sincronizzazione di travelAppointControl (e del preriscaldamento batteria se collegato) anche con sincronizzazione nativa disattivata."
         }
       }
     },
@@ -602,6 +621,42 @@
         "apply": {
           "name": "Applica subito",
           "description": "Invia subito al veicolo il programma di ricarica aggiornato."
+        }
+      }
+    },
+    "set_departure_climate_extras": {
+      "name": "Imposta extra clima alla partenza",
+      "description": "Configura gli accessori comfort supportati dal veicolo da attivare insieme al pre-clima di partenza.",
+      "fields": {
+        "entry_id": {
+          "name": "Veicolo",
+          "description": "ID della config entry del veicolo (opzionale se è configurato un solo veicolo)."
+        },
+        "extras": {
+          "name": "Extra clima",
+          "description": "Elenco di chiavi extra clima (es. steering_wheel_heating, driver_seat_heating, windshield_defog)."
+        }
+      }
+    },
+    "set_battery_pack_heat": {
+      "name": "Imposta preriscaldamento batteria",
+      "description": "Configura stato, orario locale di avvio o sincronizzazione alla partenza del preriscaldamento batteria.",
+      "fields": {
+        "entry_id": {
+          "name": "Veicolo",
+          "description": "ID della config entry del veicolo (opzionale se è configurato un solo veicolo)."
+        },
+        "enabled": {
+          "name": "Attivo",
+          "description": "Abilita o disabilita il preriscaldamento del pacco batteria."
+        },
+        "time": {
+          "name": "Orario di inizio",
+          "description": "Orario locale di avvio del preriscaldamento batteria (HH:MM)."
+        },
+        "sync_to_departure": {
+          "name": "Allinea alla partenza",
+          "description": "Allinea automaticamente il preriscaldamento batteria a 30 minuti prima della prossima partenza programmata."
         }
       }
     }

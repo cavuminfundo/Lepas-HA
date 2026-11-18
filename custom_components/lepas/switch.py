@@ -117,11 +117,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     polling = LepasPollingSwitch(coord)
     quick_dep = LepasScheduleSwitch(
         coord, "Lepas Quick departure", "quick_departure",
-        "quick_departure_enabled", "mdi:car-clock",
+        "quick_departure_enabled", "mdi:car-clock", sync_mode="departure",
     )
     sync_charge = LepasScheduleSwitch(
         coord, "Lepas Sync charging to departure", "sync_charge_to_departure",
-        "sync_charge_to_departure", "mdi:battery-sync",
+        "sync_charge_to_departure", "mdi:battery-sync", sync_mode="charge",
+    )
+    native_dep_sync = LepasScheduleSwitch(
+        coord, "Lepas Native departure sync", "native_departure_sync",
+        "native_departure_sync", "mdi:calendar-sync", sync_mode="native",
+    )
+    battery_heat = LepasBatteryPackHeatSwitch(coord)
+    sync_battery = LepasScheduleSwitch(
+        coord, "Lepas Sync battery heat to departure", "sync_battery_heat_to_departure",
+        "sync_battery_heat_to_departure", "mdi:battery-clock", sync_mode="battery",
     )
     cand_switches = [
         (ricarica, "ricarica"),
@@ -143,6 +152,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         (polling, "polling_auto"),
         (quick_dep, "quick_departure"),
         (sync_charge, "sync_charge_to_departure"),
+        (native_dep_sync, "native_departure_sync"),
+        (battery_heat, "battery_pack_heat"),
+        (sync_battery, "sync_battery_heat_to_departure"),
         *[
             (LepasWeeklyDepartureSwitch(coord, day, slug), f"departure_{slug}_enabled")
             for day, slug in DEPARTURE_DAY_SLUGS.items()
@@ -849,8 +861,23 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
 
     _attr_device_class = SwitchDeviceClass.SWITCH
     _attr_entity_category = EntityCategory.CONFIG
+    _SYNC_MODES = {
+        "charge": lambda en: {"sync_charge": en},
+        "native": lambda en: {"sync_native": en},
+        "battery": lambda en: {"sync_battery": en},
+        "departure": lambda en: {"sync_charge": en, "sync_native": True, "sync_battery": True},
+    }
 
-    def __init__(self, coord, name: str, suffix: str, attr: str, icon: str) -> None:
+    def __init__(
+        self,
+        coord,
+        name: str,
+        suffix: str,
+        attr: str,
+        icon: str,
+        *,
+        sync_mode: str = "charge",
+    ) -> None:
         super().__init__(
             coord,
             name,
@@ -861,6 +888,7 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         )
         self._attr = attr
         self._attr_icon = icon
+        self._sync_mode = sync_mode
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -868,7 +896,9 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         if last is not None and last.state in ("on", "off"):
             setattr(self.coordinator, self._attr, last.state == "on")
             if hasattr(self.coordinator, "notify_schedule_changed"):
-                self.coordinator.notify_schedule_changed()
+                self.coordinator.notify_schedule_changed(
+                    sync_charge=False, sync_native=False, sync_battery=False
+                )
 
     @property
     def is_on(self) -> bool:
@@ -877,7 +907,8 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
     async def _set_enabled(self, enabled: bool) -> None:
         setattr(self.coordinator, self._attr, enabled)
         if hasattr(self.coordinator, "notify_schedule_changed"):
-            self.coordinator.notify_schedule_changed(sync_charge=enabled)
+            kwargs = self._SYNC_MODES[self._sync_mode](enabled)
+            self.coordinator.notify_schedule_changed(**kwargs)
         self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs) -> None:
@@ -885,6 +916,72 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._set_enabled(False)
+
+
+class LepasBatteryPackHeatSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, RestoreEntity):
+    """Plug-in battery pack preheating switch (`batteryPackHeat` / `batteryPackHeatState`)."""
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:heat-wave"
+    _opt_keys = ("batteryPackHeatState",)
+
+    def __init__(self, coord) -> None:
+        super().__init__(
+            coord,
+            "Lepas Battery pack heat",
+            "battery_pack_heat",
+            object_id=f"{ID_PREFIX}_battery_pack_heat",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key="battery_pack_heat",
+        )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state in ("on", "off"):
+            self.coordinator.battery_heat_enabled = last.state == "on"
+
+    def _live_on(self) -> bool | None:
+        data = self.coordinator.data or {}
+        for section in ("fields", "realtime"):
+            bucket = data.get(section)
+            if isinstance(bucket, dict):
+                res = field_on(bucket.get("batteryPackHeatState"))
+                if res is not None:
+                    return res
+        return None
+
+    @property
+    def is_on(self) -> bool | None:
+        if self._opt_value is not None:
+            return self._opt_value
+        live = self._live_on()
+        if live is not None:
+            return live
+        return bool(self.coordinator.battery_heat_enabled)
+
+    async def _set_heat(self, target: bool) -> None:
+        prev_enabled = self.coordinator.battery_heat_enabled
+        self._set_optimistic(target)
+        sent = False
+        try:
+            await self.coordinator.async_apply_battery_pack_heat(enabled=target)
+            sent = True
+        except Exception as err:  # noqa: BLE001
+            cmd_key = "battery_heat_on" if target else "battery_heat_off"
+            raise HomeAssistantError(f"Comando «{cmd_key}» non riuscito: {err}") from err
+        finally:
+            if not sent:
+                self.coordinator.battery_heat_enabled = prev_enabled
+                self._clear_optimistic()
+                self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set_heat(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._set_heat(False)
 
 
 class LepasWeeklyDepartureSwitch(LepasEntity, SwitchEntity, RestoreEntity):
@@ -913,7 +1010,9 @@ class LepasWeeklyDepartureSwitch(LepasEntity, SwitchEntity, RestoreEntity):
             _, mins = self.coordinator.departure_weekly.get(self._day, (False, 420))
             self.coordinator.departure_weekly[self._day] = (last.state == "on", mins)
             if hasattr(self.coordinator, "notify_schedule_changed"):
-                self.coordinator.notify_schedule_changed()
+                self.coordinator.notify_schedule_changed(
+                    sync_charge=False, sync_native=False, sync_battery=False
+                )
 
     @property
     def is_on(self) -> bool:
@@ -924,7 +1023,9 @@ class LepasWeeklyDepartureSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         _, mins = self.coordinator.departure_weekly.get(self._day, (False, 420))
         self.coordinator.departure_weekly[self._day] = (enabled, mins)
         if hasattr(self.coordinator, "notify_schedule_changed"):
-            self.coordinator.notify_schedule_changed(sync_charge=enabled)
+            self.coordinator.notify_schedule_changed(
+                sync_charge=enabled, sync_native=True, sync_battery=True
+            )
         self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs) -> None:

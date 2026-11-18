@@ -49,6 +49,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
                 translation_key="apply_charging_schedule",
             )
         )
+    if entity_allowed(coord, "button", "apply_departure_schedule"):
+        ents.append(
+            LepasActionButton(
+                coord,
+                "Lepas Apply departure schedule",
+                "apply_departure_schedule",
+                coord.async_apply_departure_schedule,
+                category=EntityCategory.CONFIG,
+                object_id=f"{ID_PREFIX}_apply_departure_schedule",
+                translation_key="apply_departure_schedule",
+            )
+        )
     add(ents)
 
 
@@ -79,6 +91,7 @@ class LepasActionButton(LepasEntity, ButtonEntity):
         "refresh_pos": "mdi:crosshairs-gps",
         "refresh_full": "mdi:car-info",
         "apply_charging_schedule": "mdi:calendar-sync",
+        "apply_departure_schedule": "mdi:calendar-export",
     }
 
     def __init__(

@@ -36,13 +36,20 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import CHARGE_ENERGY_MAX_GAP, DOMAIN, FIELDS_AS_RICH_ENTITY, entity_allowed
 from .coordinator import SENSORS
-from .entity import LepasEntity, in_zona_casa
+from .entity import LepasEntity, field_on, in_zona_casa
 from .naming import ID_PREFIX
-from .scheduler import compute_charge_start_for_departure, compute_charge_window
+from .scheduler import (
+    compute_battery_heat_start_for_departure,
+    compute_charge_start_for_departure,
+    compute_charge_window,
+    normalize_climate_extras,
+    parse_days_input,
+)
 
 # ───────────────────────── sensori "realtime" (Round B) ─────────────────────────
 # Campi del canale REST /asr/manager/realtime (in coordinator.data["realtime"]),
@@ -907,6 +914,61 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         orario, _ = _orario_locale(piano.get("travelTime"), getattr(self, "hass", None))
         return orario
 
+    def _synced_with_ha(self, piano: dict) -> bool | None:
+        occ_fn = getattr(self.coordinator, "next_departure_occurrence", None)
+        build_fn = getattr(self.coordinator, "_build_native_departure_payload", None)
+        if not callable(occ_fn) or not callable(build_fn):
+            return None
+
+        rt = (self.coordinator.data or {}).get("realtime")
+        if not isinstance(rt, dict):
+            return None
+
+        main_state = field_on(rt.get("mainSwitcher"))
+        sw_state = field_on(piano.get("switcher"))
+        if sw_state is None and main_state is not False:
+            return None
+
+        piani = rt.get("appointmentTravelSetVOS")
+        any_sw_on = (
+            any(field_on(p.get("switcher")) is True for p in piani if isinstance(p, dict))
+            if isinstance(piani, list)
+            else sw_state is True
+        )
+        car_active = (main_state is not False) and any_sw_on
+        occ = occ_fn(dt_util.now())
+        if occ is None:
+            return not car_active
+        if not car_active:
+            return False
+
+        raw_tt = piano.get("travelTime")
+        if isinstance(raw_tt, bool) or raw_tt is None:
+            return None
+        try:
+            car_utc_min = int(raw_tt)
+        except (TypeError, ValueError):
+            return None
+        if not 0 <= car_utc_min < 1440:
+            return None
+
+        raw_days = piano.get("travelDate")
+        if raw_days is None:
+            raw_days = piano.get("travelWeekday")
+        if raw_days is None:
+            return None
+        if raw_days == [] or (isinstance(raw_days, str) and not raw_days.strip()):
+            car_days: set[int] = set()
+        else:
+            try:
+                car_days = set(parse_days_input(raw_days))
+            except ValueError:
+                return None
+
+        _, _, sig = build_fn(occ)
+        _, exp_utc_min, exp_utc_days = sig
+        return car_utc_min == exp_utc_min and car_days == set(exp_utc_days)
+
     @property
     def extra_state_attributes(self) -> dict | None:
         piano = self._piano()
@@ -931,6 +993,7 @@ class LepasDeparturePlan(_LepasRestoreSensor):
             attrs["riepilogo"] = summary or txt["active"]
         else:
             attrs["riepilogo"] = f"{txt['disabled']} ({summary})" if summary else txt["disabled"]
+        attrs["synced_with_ha"] = self._synced_with_ha(piano)
         return attrs
 
 
@@ -1055,7 +1118,7 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
         }
 
 
-class LepasNextDepartureSensor(LepasEntity, SensorEntity):
+class LepasNextDepartureSensor(LepasEntity, SensorEntity, RestoreEntity):
     """Diagnostic summary of the next scheduled departure and pre-climate window."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1070,6 +1133,24 @@ class LepasNextDepartureSensor(LepasEntity, SensorEntity):
             entity_id_format=ENTITY_ID_FORMAT,
             translation_key="next_departure",
         )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is None:
+            return
+        raw_extras = last.attributes.get("climate_extras")
+        if raw_extras is None:
+            return
+        try:
+            normalized = normalize_climate_extras(raw_extras)
+        except ValueError:
+            return
+        allowed_fn = getattr(self.coordinator, "allowed_departure_climate_extras", None)
+        if callable(allowed_fn):
+            allowed = set(allowed_fn())
+            normalized = [k for k in normalized if k in allowed]
+        self.coordinator.departure_climate_extras = normalized
 
     def _snapshot(self):
         now = dt_util.now()
@@ -1108,6 +1189,10 @@ class LepasNextDepartureSensor(LepasEntity, SensorEntity):
         _, occ = self._snapshot()
         climate_mode = getattr(self.coordinator, "departure_climate_mode", "at_home")
         sync_charging = bool(getattr(self.coordinator, "sync_charge_to_departure", False))
+        sync_battery = bool(getattr(self.coordinator, "sync_battery_heat_to_departure", False))
+        allowed_fn = getattr(self.coordinator, "allowed_departure_climate_extras", None)
+        allowed_extras = list(allowed_fn()) if callable(allowed_fn) else []
+        extras = list(getattr(self.coordinator, "departure_climate_extras", []) or [])
         if occ is None:
             return {
                 "departure_at": None,
@@ -1117,12 +1202,19 @@ class LepasNextDepartureSensor(LepasEntity, SensorEntity):
                 "climate_mode": climate_mode,
                 "sync_charging": sync_charging,
                 "planned_charge_start": None,
+                "climate_extras": extras,
+                "allowed_climate_extras": allowed_extras,
+                "battery_heat_start": None,
             }
         planned_charge = None
         if sync_charging:
             dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
             c_min = compute_charge_start_for_departure(occ.departure_at_minutes, dur_h)
             planned_charge = f"{c_min // 60:02d}:{c_min % 60:02d}"
+        battery_heat_start = None
+        if sync_battery:
+            b_min = compute_battery_heat_start_for_departure(occ.departure_at_minutes, 30)
+            battery_heat_start = f"{b_min // 60:02d}:{b_min % 60:02d}"
         return {
             "departure_at": occ.departure_at.isoformat(),
             "climate_start_at": occ.climate_start_at.isoformat() if climate_mode != "off" else None,
@@ -1131,4 +1223,7 @@ class LepasNextDepartureSensor(LepasEntity, SensorEntity):
             "climate_mode": climate_mode,
             "sync_charging": sync_charging,
             "planned_charge_start": planned_charge,
+            "climate_extras": extras,
+            "allowed_climate_extras": allowed_extras,
+            "battery_heat_start": battery_heat_start,
         }

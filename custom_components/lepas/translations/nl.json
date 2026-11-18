@@ -246,6 +246,9 @@
       },
       "apply_charging_schedule": {
         "name": "Laadschema toepassen"
+      },
+      "apply_departure_schedule": {
+        "name": "Vertrekschema toepassen"
       }
     },
     "climate": {
@@ -524,6 +527,15 @@
       },
       "departure_sun_enabled": {
         "name": "Vertrek Zo · ingeschakeld"
+      },
+      "native_departure_sync": {
+        "name": "Vertrek synchroniseren met auto"
+      },
+      "battery_pack_heat": {
+        "name": "Batterij voorverwarming"
+      },
+      "sync_battery_heat_to_departure": {
+        "name": "Batterijverwarming afstemmen op vertrek"
       }
     },
     "time": {
@@ -532,6 +544,9 @@
       },
       "quick_departure_time": {
         "name": "Snel vertrek · tijd"
+      },
+      "battery_pack_heat_time": {
+        "name": "Batterij voorverwarming · tijd"
       },
       "departure_mon_time": {
         "name": "Vertrek Ma · tijd"
@@ -576,6 +591,10 @@
         "sync_charging": {
           "name": "Laden synchroniseren",
           "description": "Stem het laadschema af om klaar te zijn vóór de snelle vertrektijd."
+        },
+        "apply_native": {
+          "name": "Natief vertrek toepassen",
+          "description": "Forceer synchronisatie van travelAppointControl (en batterijvoorverwarming indien gekoppeld) ook als natieve synchronisatie uit staat."
         }
       }
     },
@@ -602,6 +621,42 @@
         "apply": {
           "name": "Direct toepassen",
           "description": "Stuur het bijgewerkte laadschema direct naar het voertuig."
+        }
+      }
+    },
+    "set_departure_climate_extras": {
+      "name": "Klimaatextra's bij vertrek instellen",
+      "description": "Configureer door het voertuig ondersteunde comfortextra's die samen met voorklimaat bij vertrek worden geactiveerd.",
+      "fields": {
+        "entry_id": {
+          "name": "Voertuig",
+          "description": "Config entry-ID van het voertuig (optioneel als er slechts één voertuig is geconfigureerd)."
+        },
+        "extras": {
+          "name": "Klimaatextra's",
+          "description": "Lijst met sleutels voor klimaatextra's (bijv. steering_wheel_heating, driver_seat_heating, windshield_defog)."
+        }
+      }
+    },
+    "set_battery_pack_heat": {
+      "name": "Batterijvoorverwarming instellen",
+      "description": "Configureer status, lokale starttijd of vertreksynchronisatie van de batterijvoorverwarming.",
+      "fields": {
+        "entry_id": {
+          "name": "Voertuig",
+          "description": "Config entry-ID van het voertuig (optioneel als er slechts één voertuig is geconfigureerd)."
+        },
+        "enabled": {
+          "name": "Ingeschakeld",
+          "description": "Schakel voorverwarming van het batterijpakket in of uit."
+        },
+        "time": {
+          "name": "Starttijd",
+          "description": "Lokale starttijd voor batterijvoorverwarming (UU:MM)."
+        },
+        "sync_to_departure": {
+          "name": "Afstemmen op vertrek",
+          "description": "Stem batterijvoorverwarming automatisch af op 30 minuten vóór het volgende geplande vertrek."
         }
       }
     }

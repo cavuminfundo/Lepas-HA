@@ -14,8 +14,6 @@ Due livelli, di proposito:
 """
 from __future__ import annotations
 
-import pytest
-
 from custom_components.lepas.const import (
     COMMANDS_AS_RICH_ENTITY,
     FIELDS_AS_RICH_ENTITY,
@@ -38,14 +36,14 @@ from custom_components.lepas.const import (
 ATTESO = {
     "binary_sensor": 26,
     "sensor": 43,
-    "button": 14,
-    "switch": 27,
+    "button": 15,
+    "switch": 30,
     "cover": 3,
     "number": 2,
     "climate": 1,
     "lock": 1,
     "device_tracker": 1,
-    "time": 9,
+    "time": 10,
     "select": 2,
 }
 # 107 -> 110 il 2026-08-24: portati dalla linea fork i due contatori di energia di ricarica
@@ -76,7 +74,9 @@ ATTESO = {
 # 2026-11-16: `binary_sensor.lepas_sunroof_blind` disabilitato di default -> 107 attive in `hass.states`.
 # 2026-11-17 (v1.18.0): +22 entità per Programmatore Partenze & UX Ricarica (2 select, 1 button,
 # 2 sensor diagnostici, 9 switch, 8 time) -> 129 attive in `hass.states`.
-TOTALE_ATTESO = 129
+# 2026-11-18 (v1.21.0): +5 entità per partenza nativa & preriscaldamento batteria (+3 switch,
+# +1 button, +1 time) -> 134 attive in `hass.states`.
+TOTALE_ATTESO = 134
 
 
 def test_totale_dichiarato_coerente():

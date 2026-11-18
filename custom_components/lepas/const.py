@@ -205,6 +205,13 @@ ENTITY_FEATURE_MAP: dict[tuple[str, str], str] = {
     ("button", "apply_charging_schedule"): "scheduled_charging",
     ("switch", "sync_charge_to_departure"): "scheduled_charging",
     ("sensor", "scheduled_charging_window"): "scheduled_charging",
+    # scheduled_departure_control
+    ("switch", "native_departure_sync"): "scheduled_departure_control",
+    ("button", "apply_departure_schedule"): "scheduled_departure_control",
+    # battery_pack_heat
+    ("switch", "battery_pack_heat"): "battery_pack_heat",
+    ("time", "battery_pack_heat_time"): "battery_pack_heat",
+    ("switch", "sync_battery_heat_to_departure"): "battery_pack_heat",
     # alarm
     ("switch", "antifurto"): "alarm",
     ("button", "cmd_antifurto_on"): "alarm",

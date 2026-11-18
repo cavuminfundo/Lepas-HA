@@ -826,3 +826,505 @@ async def test_setup_failure_after_forward_cleans_up_services(
     assert not hass.data.get(DOMAIN)
     assert not hass.services.has_service(DOMAIN, "set_quick_departure")
     assert not hass.services.has_service(DOMAIN, "set_charging_schedule")
+
+
+# ───────────────────────── v1.21.0 native departure, battery heat & sensor UX ─────────────────────────
+
+
+async def test_native_departure_and_battery_heat_feature_gating(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    _patch_io(monkeypatch)
+    entry_no_batt = await _setup_entry(
+        hass,
+        vin="L8NOBATT000000001",
+        entry_id="ux_no_216",
+        features={"battery_pack_heat": False, "scheduled_departure_control": True},
+    )
+    try:
+        for hidden in (
+            "switch.lepas_battery_pack_heat",
+            "time.lepas_battery_pack_heat_time",
+            "switch.lepas_sync_battery_heat_to_departure",
+        ):
+            assert hass.states.get(hidden) is None, f"{hidden} must be hidden when 216=0"
+        assert hass.states.get("switch.lepas_native_departure_sync") is not None
+        assert hass.states.get("button.lepas_apply_departure_schedule") is not None
+    finally:
+        await hass.config_entries.async_remove(entry_no_batt.entry_id)
+        await hass.async_block_till_done()
+
+    entry_no_dep = await _setup_entry(
+        hass,
+        vin="L8NODEP0000000001",
+        entry_id="ux_no_212",
+        features={"scheduled_departure_control": False, "battery_pack_heat": True},
+    )
+    try:
+        assert hass.states.get("switch.lepas_native_departure_sync") is None
+        assert hass.states.get("button.lepas_apply_departure_schedule") is None
+        assert hass.states.get("switch.lepas_battery_pack_heat") is not None
+        assert hass.states.get("time.lepas_battery_pack_heat_time") is not None
+        assert hass.states.get("switch.lepas_sync_battery_heat_to_departure") is not None
+    finally:
+        await hass.config_entries.async_remove(entry_no_dep.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_native_departure_entities_restore_and_apply_button(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    sent = _patch_io(monkeypatch)
+    tz = timezone.utc
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 6, 0, tzinfo=tz))
+    mock_restore_cache(
+        hass,
+        [
+            State("switch.lepas_native_departure_sync", "on"),
+            State("switch.lepas_sync_battery_heat_to_departure", "on"),
+            State("switch.lepas_quick_departure", "on"),
+            State("time.lepas_quick_departure_time", "08:00:00"),
+            State("switch.lepas_departure_mon_enabled", "on"),
+            State("time.lepas_departure_mon_time", "07:30:00"),
+        ],
+    )
+
+    entry = await _setup_entry(hass)
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        # Boot restore must NOT dispatch cloud sync commands
+        assert coord.native_departure_sync is True
+        assert coord.sync_battery_heat_to_departure is True
+        assert coord.quick_departure_enabled is True
+        assert hass.states.get("switch.lepas_native_departure_sync").state == "on"
+        assert sent == []
+
+        reg = er.async_get(hass)
+        btn_entry = reg.async_get("button.lepas_apply_departure_schedule")
+        assert btn_entry is not None
+        assert btn_entry.entity_category == EntityCategory.CONFIG
+
+        # Manual apply button sends travelAppointControl
+        await hass.services.async_call(
+            "button",
+            "press",
+            {"entity_id": "button.lepas_apply_departure_schedule"},
+            blocking=True,
+        )
+        assert len(sent) == 1
+        assert sent[0][0] == "partenza_prog_on"
+        assert sent[0][1]["mainSwitcher"] == "1"
+
+        # Turn off native sync & quick departure -> off sync when no departure active
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_quick_departure"},
+            blocking=True,
+        )
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_departure_mon_enabled"},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert any(k == "partenza_prog_off" for k, _ in sent)
+
+        sent.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_native_departure_sync"},
+            blocking=True,
+        )
+        assert coord.native_departure_sync is False
+        assert sent == []
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_battery_pack_heat_switch_time_restore_telemetry_and_optimistic_revert(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    from homeassistant.exceptions import HomeAssistantError
+
+    sent = _patch_io(monkeypatch)
+    tz = timezone.utc
+    hass.config.time_zone = "UTC"
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 6, 0, tzinfo=tz))
+    mock_restore_cache(
+        hass,
+        [
+            State("switch.lepas_battery_pack_heat", "on"),
+            State("time.lepas_battery_pack_heat_time", "06:15:00"),
+        ],
+    )
+
+    entry = await _setup_entry(hass)
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        assert hass.states.get("switch.lepas_battery_pack_heat").state == "on"
+        assert coord.battery_heat_enabled is True
+        assert hass.states.get("time.lepas_battery_pack_heat_time").state == "06:15:00"
+        assert coord.battery_heat_minutes == 6 * 60 + 15
+        assert sent == []
+
+        # Changing time while enabled dispatches async_apply_battery_pack_heat
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_battery_pack_heat_time", "time": "06:45:00"},
+            blocking=True,
+        )
+        assert coord.battery_heat_minutes == 6 * 60 + 45
+        assert sent == [("battery_heat_on", {"switchState": "1", "startTime": str(6 * 60 + 45)})]
+
+        # Telemetry from realtime and fields updates state (fields takes priority)
+        coord._on_probe_data({"batteryPackHeatState": "0"})
+        await hass.async_block_till_done()
+        assert hass.states.get("switch.lepas_battery_pack_heat").state == "off"
+
+        coord._update(
+            {
+                "realtime": {"batteryPackHeatState": "0"},
+                "fields": {"batteryPackHeatState": "1"},
+            }
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("switch.lepas_battery_pack_heat").state == "on"
+
+        # Turn off via switch
+        sent.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_battery_pack_heat"},
+            blocking=True,
+        )
+        assert sent == [("battery_heat_off", {"switchState": "0", "startTime": "0"})]
+        assert hass.states.get("switch.lepas_battery_pack_heat").state == "off"
+        assert coord.battery_heat_enabled is False
+
+        # Changing time while disabled updates local time WITHOUT sending cloud command
+        sent.clear()
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_battery_pack_heat_time", "time": "05:30:00"},
+            blocking=True,
+        )
+        assert coord.battery_heat_minutes == 5 * 60 + 30
+        assert sent == []
+
+        # Optimistic revert on error when turning on fails
+        # First clear fields so state tracks coordinator/optimistic cleanly
+        coord._update({"fields": {}, "realtime": {}})
+        await hass.async_block_till_done()
+        assert hass.states.get("switch.lepas_battery_pack_heat").state == "off"
+
+        async def failing_send(self, key: str, params: dict | None = None) -> str:
+            raise RuntimeError("backend down")
+
+        monkeypatch.setattr(LepasCoordinator, "async_send_command", failing_send)
+        with pytest.raises(HomeAssistantError):
+            await hass.services.async_call(
+                "switch",
+                "turn_on",
+                {"entity_id": "switch.lepas_battery_pack_heat"},
+                blocking=True,
+            )
+        assert hass.states.get("switch.lepas_battery_pack_heat").state == "off"
+        assert coord.battery_heat_enabled is False
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_schedule_switches_and_times_notify_propagation_flags(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    _patch_io(monkeypatch)
+    mock_restore_cache(
+        hass,
+        [
+            State("switch.lepas_native_departure_sync", "on"),
+            State("switch.lepas_sync_battery_heat_to_departure", "on"),
+            State("switch.lepas_quick_departure", "on"),
+            State("time.lepas_quick_departure_time", "07:00:00"),
+            State("switch.lepas_departure_mon_enabled", "on"),
+            State("time.lepas_departure_mon_time", "07:30:00"),
+        ],
+    )
+
+    calls: list[dict[str, bool]] = []
+    orig_notify = LepasCoordinator.notify_schedule_changed
+
+    def spy_notify(self, *, sync_charge: bool = False, sync_native: bool = False, sync_battery: bool = False) -> None:
+        calls.append({"sync_charge": sync_charge, "sync_native": sync_native, "sync_battery": sync_battery})
+        orig_notify(self, sync_charge=sync_charge, sync_native=sync_native, sync_battery=sync_battery)
+
+    monkeypatch.setattr(LepasCoordinator, "notify_schedule_changed", spy_notify)
+
+    entry = await _setup_entry(hass)
+    try:
+        # Every boot restore call must keep all sync_* flags False
+        assert calls
+        assert all(
+            not c["sync_charge"] and not c["sync_native"] and not c["sync_battery"]
+            for c in calls
+        )
+
+        # LepasScheduleSwitch("native_departure_sync") passes ONLY sync_native=enabled
+        calls.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_native_departure_sync"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": False}]
+        calls.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.lepas_native_departure_sync"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": False}]
+
+        # LepasScheduleSwitch("sync_battery_heat_to_departure") passes ONLY sync_battery=enabled
+        calls.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_sync_battery_heat_to_departure"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": False}]
+        calls.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.lepas_sync_battery_heat_to_departure"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
+
+        # LepasWeeklyDepartureSwitch: sync_charge=enabled, sync_native=True, sync_battery=True
+        calls.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_departure_mon_enabled"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+        calls.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.lepas_departure_mon_enabled"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": True, "sync_native": True, "sync_battery": True}]
+
+        # LepasWeeklyDepartureTime: sync_charge untouched when day disabled, sync_native=True, sync_battery=True
+        calls.clear()
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_departure_tue_time", "time": "08:15:00"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+
+        # quick_departure switch off/on + quick_departure_time set_value
+        calls.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_quick_departure"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+        calls.clear()
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_quick_departure_time", "time": "09:10:00"},
+            blocking=True,
+        )
+        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_next_departure_restore_extras_and_departure_plan_synced_with_ha(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    from zoneinfo import ZoneInfo
+
+    _patch_io(monkeypatch)
+    rome = ZoneInfo("Europe/Rome")
+    hass.config.time_zone = "Europe/Rome"
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 6, 0, tzinfo=rome))
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "sensor.lepas_next_departure",
+                "Disabled",
+                {
+                    "climate_extras": [
+                        "driver_seat_heating",
+                        "driver_seat_ventilation",  # mutual exclusion -> ventilation wins
+                        "steering_wheel_heating",
+                        "windshield_defrost",  # filtered out by feature gating below
+                    ]
+                },
+            )
+        ],
+    )
+
+    entry = await _setup_entry(
+        hass,
+        features={
+            "driver_seat_heating": True,
+            "driver_seat_ventilation": True,
+            "steering_wheel_heating": True,
+            "front_windshield_electric": False,
+        },
+    )
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        # Restored, normalized (mutual exclusion resolved), and capability-filtered
+        assert coord.departure_climate_extras == ["driver_seat_ventilation", "steering_wheel_heating"]
+        nd = hass.states.get("sensor.lepas_next_departure")
+        assert nd.attributes["climate_extras"] == ["driver_seat_ventilation", "steering_wheel_heating"]
+        assert "windshield_defrost" not in nd.attributes["allowed_climate_extras"]
+        assert "steering_wheel_heating" in nd.attributes["allowed_climate_extras"]
+        assert nd.attributes["battery_heat_start"] is None
+
+        # When departure + battery heat sync active -> battery_heat_start = T_dep - 30 min
+        coord.departure_weekly[1] = (True, 7 * 60)
+        coord.sync_battery_heat_to_departure = True
+        coord.async_update_listeners()
+        await hass.async_block_till_done()
+        nd = hass.states.get("sensor.lepas_next_departure")
+        assert nd.attributes["battery_heat_start"] == "06:30"
+
+        # LepasDeparturePlan.synced_with_ha:
+        # 1) HA has active Mon 07:00 CET (06:00 UTC = 360, weekday [1]) -> matching car plan -> True
+        coord.sync_battery_heat_to_departure = False
+        coord.departure_weekly[1] = (True, 7 * 60)
+        coord._on_probe_data(
+            {
+                "appointmentTravelSetVOS": [
+                    {"switcher": "1", "travelTime": 360, "travelDate": [1]}
+                ]
+            }
+        )
+        await hass.async_block_till_done()
+        dp = hass.states.get("sensor.lepas_scheduled_departure")
+        assert dp.attributes["orario"] == "07:00"  # AB-LEP-009 UTC->CET preserved
+        assert dp.attributes["synced_with_ha"] is True
+
+        # 2) Mismatched car time -> False
+        coord._on_probe_data(
+            {
+                "appointmentTravelSetVOS": [
+                    {"switcher": "1", "travelTime": 300, "travelDate": [1]}
+                ]
+            }
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("sensor.lepas_scheduled_departure").attributes["synced_with_ha"] is False
+
+        # 3) HA has NO active departure and car switcher == "0" -> True
+        coord.departure_weekly[1] = (False, 7 * 60)
+        coord._on_probe_data(
+            {
+                "appointmentTravelSetVOS": [
+                    {"switcher": "0", "travelTime": 360, "travelDate": [1]}
+                ]
+            }
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("sensor.lepas_scheduled_departure").attributes["synced_with_ha"] is True
+
+        # 4) HA has NO active departure and car mainSwitcher == "0" -> True
+        coord._on_probe_data(
+            {
+                "mainSwitcher": "0",
+                "appointmentTravelSetVOS": [
+                    {"switcher": "1", "travelTime": 360, "travelDate": [1]}
+                ],
+            }
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("sensor.lepas_scheduled_departure").attributes["synced_with_ha"] is True
+
+        # 5) HA has NO active departure and car switcher == "1" -> False
+        coord._on_probe_data(
+            {
+                "appointmentTravelSetVOS": [
+                    {"switcher": "1", "travelTime": 360, "travelDate": [1]}
+                ]
+            }
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("sensor.lepas_scheduled_departure").attributes["synced_with_ha"] is False
+
+        # 6) Unparseable travelTime when active -> None
+        coord.departure_weekly[1] = (True, 7 * 60)
+        coord._on_probe_data(
+            {
+                "appointmentTravelSetVOS": [
+                    {"switcher": "1", "travelTime": "bad", "travelDate": [1]}
+                ]
+            }
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("sensor.lepas_scheduled_departure").attributes["synced_with_ha"] is None
+
+        # 7) Midnight CET->UTC rollover: Mon 00:30 CET == Sun 23:30 UTC (1410, [7])
+        coord.departure_weekly[1] = (True, 30)
+        coord._on_probe_data(
+            {
+                "appointmentTravelSetVOS": [
+                    {"switcher": "1", "travelTime": 1410, "travelDate": [7]}
+                ]
+            }
+        )
+        await hass.async_block_till_done()
+        dp_roll = hass.states.get("sensor.lepas_scheduled_departure")
+        assert dp_roll.attributes["orario"] == "00:30"
+        assert dp_roll.attributes["giorni"] == [1]
+        assert dp_roll.attributes["synced_with_ha"] is True
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_next_departure_ignores_invalid_restored_climate_extras(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    _patch_io(monkeypatch)
+    mock_restore_cache(
+        hass,
+        [State("sensor.lepas_next_departure", "Disabled", {"climate_extras": ["bogus_key"]})],
+    )
+    entry = await _setup_entry(hass, vin="L8BADEXTRAS000001", entry_id="ux_bad_extras")
+    try:
+        coord = hass.data[DOMAIN][entry.entry_id]
+        assert coord.departure_climate_extras == []
+        assert hass.states.get("sensor.lepas_next_departure").attributes["climate_extras"] == []
+    finally:
+        await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done()

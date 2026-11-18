@@ -246,6 +246,9 @@
       },
       "apply_charging_schedule": {
         "name": "Apply charging schedule"
+      },
+      "apply_departure_schedule": {
+        "name": "Apply departure schedule"
       }
     },
     "climate": {
@@ -524,6 +527,15 @@
       },
       "departure_sun_enabled": {
         "name": "Departure Sun · enabled"
+      },
+      "native_departure_sync": {
+        "name": "Native departure sync"
+      },
+      "battery_pack_heat": {
+        "name": "Battery pack heat"
+      },
+      "sync_battery_heat_to_departure": {
+        "name": "Sync battery heat to departure"
       }
     },
     "time": {
@@ -532,6 +544,9 @@
       },
       "quick_departure_time": {
         "name": "Quick departure · time"
+      },
+      "battery_pack_heat_time": {
+        "name": "Battery pack heat · time"
       },
       "departure_mon_time": {
         "name": "Departure Mon · time"
@@ -576,6 +591,10 @@
         "sync_charging": {
           "name": "Sync charging",
           "description": "Adapt charging schedule to finish by the quick departure time."
+        },
+        "apply_native": {
+          "name": "Apply native departure",
+          "description": "Force syncing travelAppointControl (and battery preheat if synced) even when native sync is disabled."
         }
       }
     },
@@ -602,6 +621,42 @@
         "apply": {
           "name": "Apply immediately",
           "description": "Send the updated charging schedule to the vehicle immediately."
+        }
+      }
+    },
+    "set_departure_climate_extras": {
+      "name": "Set departure climate extras",
+      "description": "Configure vehicle-supported comfort extras activated alongside departure pre-climate.",
+      "fields": {
+        "entry_id": {
+          "name": "Vehicle entry",
+          "description": "Config entry ID of the vehicle (optional when only one vehicle is configured)."
+        },
+        "extras": {
+          "name": "Climate extras",
+          "description": "List of climate extra keys (e.g. steering_wheel_heating, driver_seat_heating, windshield_defog)."
+        }
+      }
+    },
+    "set_battery_pack_heat": {
+      "name": "Set battery pack heat",
+      "description": "Configure battery pack preheating state, local start time, or departure sync.",
+      "fields": {
+        "entry_id": {
+          "name": "Vehicle entry",
+          "description": "Config entry ID of the vehicle (optional when only one vehicle is configured)."
+        },
+        "enabled": {
+          "name": "Enabled",
+          "description": "Enable or disable battery pack preheating."
+        },
+        "time": {
+          "name": "Start time",
+          "description": "Local battery pack preheat start time (HH:MM)."
+        },
+        "sync_to_departure": {
+          "name": "Sync to departure",
+          "description": "Automatically align battery preheating to 30 minutes before the next scheduled departure."
         }
       }
     }
