@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.22.2 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Native Departure & Battery Preheat TSP Endpoints Fix (`commands.py`, `permessi.py`)**: Replaced the unverified Flutter method-channel names (`travelAppointControl`, `travelAppointQuery`, `/asc/vehicleControl/queryBatteryPackHeat`, which returned `HTTP 404 Not Found` on `tspconsole-eu`) with the real live-verified TSP endpoints: `/asc/vehicleControl/appointmentTravel` for scheduled departure control (`partenza_prog_on` / `partenza_prog_off` and permission tables `CATEGORIA`/`CICLO` cat. `212`/`2121`/`2122`), `/asd/travelManage/travelQuery` for `query_travel_appoint`, and `/asd/travelManage/queryBatteryPackHeat` for `query_battery_pack_heat`. Also hardened `commands.send()` to raise `CommandError` on any `HTTP >= 400` response even when no Chery JSON `code` is present (preventing Spring Boot `404` responses from reporting silent success), bumping `?v=1.22.2`.
+
+### 🇮🇹 Italiano
+
+- **Fix Endpoint Reali Partenza Programmata & Preriscaldamento Batteria (`commands.py`, `permessi.py`)**: Sostituiti i nomi interni del bridge Flutter (`travelAppointControl`, `travelAppointQuery`, `/asc/vehicleControl/queryBatteryPackHeat`, che rispondevano `HTTP 404 Not Found` su `tspconsole-eu`) con gli endpoint reali verificati dal vivo: `/asc/vehicleControl/appointmentTravel` per il controllo partenza programmata (`partenza_prog_on` / `partenza_prog_off` e tabelle permessi `CATEGORIA`/`CICLO` cat. `212`/`2121`/`2122`), `/asd/travelManage/travelQuery` per `query_travel_appoint` e `/asd/travelManage/queryBatteryPackHeat` per `query_battery_pack_heat`. Inoltre `commands.send()` solleva sempre `CommandError` su qualsiasi risposta `HTTP >= 400` anche in assenza del campo JSON `code` (evitando falsi successi su risposte `404` Spring Boot), con bump `?v=1.22.2`.
+
 ## v1.22.1 — 2026-11-18
 
 ### 🇬🇧 English

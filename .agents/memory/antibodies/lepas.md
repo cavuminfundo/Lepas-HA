@@ -75,3 +75,10 @@
 - **Invariant**: On boot and coordinator updates (`_opt_on is None`), sync `self._target` and `coordinator.climate_target_temp` whenever `frontSetTempLeft` (fallback `frontSetTempRight`) changes to a valid number within `[min_temp, max_temp]`, tracking `_last_rt_temp` so repeated identical realtime payloads never clobber a manual HA override while `OFF`.
 - **onFailure Mandate**: Ignore non-dict `realtime`, non-numeric values, or sentinel temperatures outside `[min_temp, max_temp]`.
 - **Forbidden Regex**: `def _handle_coordinator_update\(self\) -> None:(?![\s\S]*_sync_target_from_realtime)`
+
+### [AB-LEP-012] `tspconsole-eu` `appointmentTravel` / `/asd/travelManage/*` Endpoints & `HTTP >= 400` Fail-Closed Guard
+- **Target Files**: `custom_components/lepas/core/{commands,permessi}.py`
+- **Root Cause**: `libapp.so` (Flutter Dart AOT) exposes MethodChannel action names (`travelAppointControl`, `travelAppointQuery`, `queryBatteryPackHeat`), whereas the native Java/Ijiami layer routes to different `tspconsole-eu` REST paths (`404 Not Found` on `/asc/vehicleControl/travelAppointControl`, `/asd/travelAppointManage/travelAppointQuery`, and `/asc/vehicleControl/queryBatteryPackHeat`); furthermore `commands.send()` previously only raised on Chery `code` failures, silently treating Spring Boot `HTTP 404` JSON responses (`{"status": 404, "error": "Not Found"}`) as success.
+- **Invariant**: Departure control MUST use `/asc/vehicleControl/appointmentTravel` (`endpoint = "appointmentTravel"` in `commands.CMD_MAP`, `permessi.CATEGORIA["appointmentTravel"] == 212`, `permessi.CICLO["appointmentTravel"]`), read-only queries MUST use `/asd/travelManage/travelQuery` and `/asd/travelManage/queryBatteryPackHeat`, and `commands.send()` MUST raise `CommandError` whenever `status >= 400`.
+- **onFailure Mandate**: Never infer TSP write URLs from Flutter MethodChannel names alone; verify route existence via read-only `/asd/travelManage/*` or empty `POST {}` (no `vin`/`taskId`) before committing, and fail closed on any `HTTP >= 400`.
+- **Forbidden Regex**: `"endpoint":\s*["']travelAppointControl["']|travelAppointQuery|/asc/vehicleControl/queryBatteryPackHeat

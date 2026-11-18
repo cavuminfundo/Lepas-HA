@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.22.1).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.22.2).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.22.1";
+  var CARD_VERSION = "1.22.2";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.22.1",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.22.1",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.22.1",
-    black: "/lepas_card/lepas-hero-black.png?v=1.22.1",
-    white: "/lepas_card/lepas-hero-white.png?v=1.22.1",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.22.2",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.22.2",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.22.2",
+    black: "/lepas_card/lepas-hero-black.png?v=1.22.2",
+    white: "/lepas_card/lepas-hero-white.png?v=1.22.2",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.22.1";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.22.2";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -1364,7 +1364,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.22.1">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.22.2">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +

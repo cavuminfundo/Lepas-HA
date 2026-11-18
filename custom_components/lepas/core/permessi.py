@@ -81,7 +81,7 @@ CATEGORIA = {
     "skylightControl": 207,
     "chargeStartStopControl": 220,
     "chargeAppointControl": 213,
-    "travelAppointControl": 212,
+    "appointmentTravel": 212,
     "batteryPackHeat": 216,
     "findCar": 202,
     "vehicleLocation": 211,
@@ -395,7 +395,7 @@ def categoria_chiusa(categoria: int | None, perms: dict) -> bool:
 # 7 giorni e la 212 solo il personalizzato. Per questo la tabella è per-endpoint e non una regola.
 CICLO = {
     "chargeAppointControl": (2131, 2132, "cycleData"),
-    "travelAppointControl": (2121, 2122, "travelWeekday"),
+    "appointmentTravel": (2121, 2122, "travelWeekday"),
 }
 
 

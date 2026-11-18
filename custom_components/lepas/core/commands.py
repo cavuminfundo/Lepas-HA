@@ -228,14 +228,16 @@ COMMANDS = [
                        {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 480,
                         "switchStatus": 0, "timeConsuming": 360}]},
                    "name": "Ricarica programmata OFF", "icon": "mdi:calendar-remove", "group": "Ricarica"}),
-    # Partenza programmata NATIVA (travelAppointControl) + preriscaldamento batteria (batteryPackHeat).
+    # Partenza programmata NATIVA (appointmentTravel) + preriscaldamento batteria (batteryPackHeat).
     # Orari in minuti dalla mezzanotte UTC come stringa; travelWeekday = CSV UTC 1..7.
-    ("partenza_prog_on", {"endpoint": "travelAppointControl",
+    # Verificato live su tspconsole-eu: scrittura su `/asc/vehicleControl/appointmentTravel`
+    # (mentre le query read-only vivono sotto `/asd/travelManage/{travelQuery,queryBatteryPackHeat}`).
+    ("partenza_prog_on", {"endpoint": "appointmentTravel",
                    "body": {"mainSwitcher": "1", "appointmentTravelSetVOS": [
                        {"planId": 1, "switcher": "1", "travelTime": "420",
                         "travelWeekday": "1,2,3,4,5"}]},
                    "name": "Partenza programmata ON", "icon": "mdi:calendar-arrow-right", "group": "Clima"}),
-    ("partenza_prog_off", {"endpoint": "travelAppointControl",
+    ("partenza_prog_off", {"endpoint": "appointmentTravel",
                    "body": {"mainSwitcher": "0", "appointmentTravelSetVOS": [
                        {"planId": 1, "switcher": "0", "travelTime": "0",
                         "travelWeekday": ""}]},
@@ -1017,7 +1019,7 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
                 raw = resp.read().decode("utf-8", "replace")
                 status = resp.status
         except urllib.error.HTTPError as e:
-            raw = e.read().decode("utf-8", "replace")
+            raw = e.read().decode("utf-8", "replace") if getattr(e, "fp", None) is not None else str(e)
             status = e.code
         except Exception as e:
             emit(f"errore rete: {e}")
@@ -1054,6 +1056,8 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
     # prudenza: non si inventa un fallimento che il backend non ha dichiarato.
     if esito.fallimento:
         raise CommandError(out, code=esito.code, reason=esito.reason)
+    if status >= 400:
+        raise CommandError(out)
     return out
 
 
@@ -1103,10 +1107,7 @@ def _query_payload(ctx, paths: tuple[str, ...]):
 
 def query_travel_appoint(ctx) -> dict | None:
     """Legge il piano di partenza nativa (READ-ONLY, solo su richiesta/sveglia)."""
-    payload = _query_payload(
-        ctx,
-        ("/asc/vehicleControl/travelAppointQuery", "/asd/travelAppointManage/travelAppointQuery"),
-    )
+    payload = _query_payload(ctx, ("/asd/travelManage/travelQuery",))
     if isinstance(payload, dict):
         return dict(payload)
     if isinstance(payload, list):
@@ -1116,7 +1117,7 @@ def query_travel_appoint(ctx) -> dict | None:
 
 def query_battery_pack_heat(ctx) -> dict | None:
     """Legge stato e orario del preriscaldamento batteria (READ-ONLY, solo su richiesta/sveglia)."""
-    payload = _query_payload(ctx, ("/asc/vehicleControl/queryBatteryPackHeat",))
+    payload = _query_payload(ctx, ("/asd/travelManage/queryBatteryPackHeat",))
     return dict(payload) if isinstance(payload, dict) else None
 
 

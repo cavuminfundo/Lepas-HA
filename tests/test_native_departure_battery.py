@@ -148,9 +148,9 @@ def test_commands_catalog_and_rich_entity_gating(core):
         assert key in commands.CMD_MAP
         assert key in COMMANDS_AS_RICH_ENTITY
 
-    assert commands.CMD_MAP["partenza_prog_on"]["endpoint"] == "travelAppointControl"
+    assert commands.CMD_MAP["partenza_prog_on"]["endpoint"] == "appointmentTravel"
     assert commands.CMD_MAP["partenza_prog_on"]["body"]["mainSwitcher"] == "1"
-    assert commands.CMD_MAP["partenza_prog_off"]["endpoint"] == "travelAppointControl"
+    assert commands.CMD_MAP["partenza_prog_off"]["endpoint"] == "appointmentTravel"
     assert commands.CMD_MAP["partenza_prog_off"]["body"]["mainSwitcher"] == "0"
     assert commands.CMD_MAP["partenza_prog_off"]["body"]["appointmentTravelSetVOS"][0]["travelWeekday"] == ""
 
@@ -165,7 +165,7 @@ def test_query_travel_appoint_and_battery_pack_heat(core, cloud, ctx):
 
     # Primary endpoint succeeds
     cloud.on(
-        "/asc/vehicleControl/travelAppointQuery",
+        "/asd/travelManage/travelQuery",
         code="000000",
         data={
             "mainSwitcher": "1",
@@ -178,31 +178,30 @@ def test_query_travel_appoint_and_battery_pack_heat(core, cloud, ctx):
     assert isinstance(res, dict)
     assert res["appointmentTravelSetVOS"][0]["id"] == 98765
 
-    # Fallback endpoint when primary fails
-    cloud.on("/asc/vehicleControl/travelAppointQuery", raises=TimeoutError("timeout"))
+    # List payload normalization
     cloud.on(
-        "/asd/travelAppointManage/travelAppointQuery",
+        "/asd/travelManage/travelQuery",
         code="000000",
         data=[{"id": 555, "switcher": "1", "travelTime": "360", "travelWeekday": "1,3,5"}],
     )
-    res_fb = commands.query_travel_appoint(ctx)
-    assert isinstance(res_fb, dict)
-    assert res_fb["appointmentTravelSetVOS"][0]["id"] == 555
+    res_list = commands.query_travel_appoint(ctx)
+    assert isinstance(res_list, dict)
+    assert res_list["appointmentTravelSetVOS"][0]["id"] == 555
 
     # Error code -> None
-    cloud.on("/asd/travelAppointManage/travelAppointQuery", code="A00084", data={})
+    cloud.on("/asd/travelManage/travelQuery", code="A00084", data={})
     assert commands.query_travel_appoint(ctx) is None
 
     # Battery pack heat query
     cloud.on(
-        "/asc/vehicleControl/queryBatteryPackHeat",
+        "/asd/travelManage/queryBatteryPackHeat",
         code="000000",
         data={"switchState": "1", "startTime": "390"},
     )
     bh = commands.query_battery_pack_heat(ctx)
     assert bh == {"switchState": "1", "startTime": "390"}
 
-    cloud.on("/asc/vehicleControl/queryBatteryPackHeat", raises=RuntimeError("boom"))
+    cloud.on("/asd/travelManage/queryBatteryPackHeat", raises=RuntimeError("boom"))
     assert commands.query_battery_pack_heat(ctx) is None
 
 
@@ -213,9 +212,9 @@ def test_permessi_travel_and_battery_tables_and_csv_giorni(core):
     P = core["permessi"]
     commands = core["commands"]
 
-    assert P.CATEGORIA["travelAppointControl"] == 212
+    assert P.CATEGORIA["appointmentTravel"] == 212
     assert P.CATEGORIA["batteryPackHeat"] == 216
-    assert P.CICLO["travelAppointControl"] == (2121, 2122, "travelWeekday")
+    assert P.CICLO["appointmentTravel"] == (2121, 2122, "travelWeekday")
 
     # CSV parsing
     body_csv = {
@@ -223,17 +222,17 @@ def test_permessi_travel_and_battery_tables_and_csv_giorni(core):
         "appointmentTravelSetVOS": [{"planId": 1, "switcher": "1", "travelTime": "305", "travelWeekday": "1,3,5"}],
     }
     assert P._giorni(body_csv, "travelWeekday") == [1, 3, 5]
-    assert P.ciclo_non_autorizzato("travelAppointControl", body_csv, {212: 1, 2121: 0, 2122: 1}) is not None
-    assert P.ciclo_non_autorizzato("travelAppointControl", body_csv, {212: 1, 2121: 1, 2122: 0}) is None
+    assert P.ciclo_non_autorizzato("appointmentTravel", body_csv, {212: 1, 2121: 0, 2122: 1}) is not None
+    assert P.ciclo_non_autorizzato("appointmentTravel", body_csv, {212: 1, 2121: 1, 2122: 0}) is None
 
     # All 7 days CSV triggers 2122 check
     body_all = {"appointmentTravelSetVOS": [{"travelWeekday": "1,2,3,4,5,6,7"}]}
-    assert P.ciclo_non_autorizzato("travelAppointControl", body_all, {212: 1, 2121: 1, 2122: 0}) is not None
+    assert P.ciclo_non_autorizzato("appointmentTravel", body_all, {212: 1, 2121: 1, 2122: 0}) is not None
 
     # Empty "" on partenza_prog_off is non-blocking
     off_body = dict(commands.CMD_MAP["partenza_prog_off"]["body"])
     assert P._giorni(off_body, "travelWeekday") is None
-    assert P.ciclo_non_autorizzato("travelAppointControl", off_body, {212: 1, 2121: 0, 2122: 0}) is None
+    assert P.ciclo_non_autorizzato("appointmentTravel", off_body, {212: 1, 2121: 0, 2122: 0}) is None
 
 
 async def test_v5_backfill_and_feature_rules_and_effective_departure_days(hass, cloud):
@@ -660,7 +659,7 @@ async def test_new_services_and_apply_native(hass, cloud, monkeypatch):
 
 async def test_query_caching_and_closing_guards(hass, cloud, monkeypatch):
     cloud.on(
-        "/asc/vehicleControl/travelAppointQuery",
+        "/asd/travelManage/travelQuery",
         code="000000",
         data={"appointmentTravelSetVOS": [{"id": 445566, "travelTime": "360", "travelWeekday": "1,2"}]},
     )
@@ -697,3 +696,34 @@ async def test_query_caching_and_closing_guards(hass, cloud, monkeypatch):
     assert coord._timers.closing is True
     assert coord._departure_busy is False
     assert coord._last_synced_battery_sig is None
+
+
+def test_appointment_travel_endpoint_and_http_error_raises(core, cloud, ctx, monkeypatch):
+    import io
+    import json
+    import urllib.error
+    import urllib.request
+
+    commands = core["commands"]
+    monkeypatch.setattr(commands, "get_taskid", lambda *a, **kw: ("tid_test", "env"))
+    monkeypatch.setattr(core["wake"], "_bff_login", lambda c: ("tok_test", "uid_test"))
+    ctx.permessi = {212: 1, 2121: 1, 2122: 0}
+
+    cloud.on("/asc/vehicleControl/appointmentTravel", code="000000", data={})
+    res = commands.send(
+        ctx,
+        "partenza_prog_off",
+        params={"mainSwitcher": "0", "appointmentTravelSetVOS": [{"planId": 1, "switcher": "0", "travelTime": "0", "travelWeekday": ""}]},
+    )
+    assert "HTTP 200" in res
+    assert cloud.count("/asc/vehicleControl/appointmentTravel") == 1
+
+    # HTTP >= 400 without Chery `code` MUST raise CommandError (no silent success)
+    def fake_urlopen_404(req, timeout=None):
+        url = req.full_url
+        err_body = json.dumps({"status": 404, "error": "Not Found", "path": url}).encode()
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, io.BytesIO(err_body))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen_404)
+    with pytest.raises(commands.CommandError, match="HTTP 404"):
+        commands.send(ctx, "partenza_prog_off")
