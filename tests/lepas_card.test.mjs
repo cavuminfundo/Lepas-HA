@@ -35,6 +35,8 @@ class MiniEvent {
     this.target = null;
     this.currentTarget = null;
     this.key = init.key || "";
+    this.clientX = init.clientX !== undefined ? init.clientX : 0;
+    this.clientY = init.clientY !== undefined ? init.clientY : 0;
   }
   preventDefault() {
     if (this.cancelable) this.defaultPrevented = true;
@@ -515,8 +517,30 @@ class MiniElement extends MiniNodeContainer {
     this._value = "";
     this._checked = false;
     this._disabled = false;
+    this.returnValue = "";
     this.clientWidth = 400;
     this.offsetWidth = 400;
+  }
+  get open() {
+    return this.hasAttribute("open");
+  }
+  set open(v) {
+    if (v) this.setAttribute("open", "");
+    else this.removeAttribute("open");
+  }
+  showModal() {
+    this.open = true;
+  }
+  close(val) {
+    const wasOpen = this.open;
+    if (val !== undefined) this.returnValue = String(val);
+    this.open = false;
+    if (wasOpen) {
+      this.dispatchEvent(new MiniEvent("close", { bubbles: false, cancelable: false }));
+    }
+  }
+  getBoundingClientRect() {
+    return { left: 100, right: 300, top: 100, bottom: 240 };
   }
   get id() {
     return this.getAttribute("id") || "";
@@ -613,7 +637,7 @@ class MiniElement extends MiniNodeContainer {
   }
   get outerHTML() {
     const attrEntries = Object.entries(this._attrs).map(([k, v]) =>
-      v === "" && (k === "checked" || k === "disabled" || k === "selected")
+      v === "" && (k === "checked" || k === "disabled" || k === "selected" || k === "open")
         ? k
         : `${k}="${escapeAttr(v)}"`
     );
@@ -879,15 +903,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
+  assert.equal(h.CARD_VERSION, "1.22.0");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.21.2");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.22.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.21.2`
+      `/lepas_card/lepas-hero-${c}.png?v=1.22.0`
     );
   }
 
@@ -906,7 +931,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.21.2`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.22.0`
     );
   }
 
@@ -1019,61 +1044,145 @@ test("Layout modes and default_tab switching", () => {
   assert.equal(compact.shadowRoot.querySelector('[data-panel="security"]').classList.contains("is-active"), true);
 });
 
-test("4s inline confirmation: 1st tap arms, 2nd tap dispatches, 4s timeout disarms", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
-
+test("v1.22.0 Native <dialog> modal confirmation for all 10 stateless + 5 sensitive stateful actions", async () => {
   const hass = makeFullHass({
     "button.lepas_remote_start": makeState("button.lepas_remote_start", "unknown"),
+    "button.lepas_refresh_full_status": makeState("button.lepas_refresh_full_status", "unknown"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "on"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+    }),
   }, "en");
   const card = createCard({ default_tab: "security" }, hass);
+  const styleText = card.shadowRoot.querySelector("style")?.textContent || "";
 
-  const sensitiveCases = [
-    { selector: '[data-action-id="unlock"]', domain: "lock", service: "unlock", entityId: "lock.lepas_lock" },
-    { selector: '[data-action-id="trunk_open"]', domain: "cover", service: "open_cover", entityId: "cover.lepas_trunk" },
-    { selector: '[data-action-id="windows_open"]', domain: "cover", service: "open_cover", entityId: "cover.lepas_windows" },
-    { selector: '[data-action-id="sunroof_open"]', domain: "cover", service: "open_cover", entityId: "cover.lepas_sunroof" },
-    { selector: '[data-action-id="vent_windows"]', domain: "button", service: "press", entityId: "button.lepas_vent_windows" },
-    { selector: '[data-action-id="vent_sunroof"]', domain: "button", service: "press", entityId: "button.lepas_vent_sunroof" },
-    { selector: '[data-action-id="alarm_toggle"]', domain: "switch", service: "turn_off", entityId: "switch.lepas_alarm" },
-    { selector: '[data-action-id="remote_start"]', domain: "button", service: "press", entityId: "button.lepas_remote_start" },
+  // Obsolete 4s inline confirmation styles must be removed; dialog rules must obey modern-web-guidance
+  assert.equal(styleText.includes(".is-confirming"), false, "Obsolete .is-confirming style must be removed");
+  assert.equal(styleText.includes(".confirm-bar"), false, "Obsolete .confirm-bar style must be removed");
+  assert.ok(styleText.includes("dialog:modal"), "CSS must include dialog:modal");
+  assert.ok(styleText.includes("dialog::backdrop"), "CSS must include dialog::backdrop");
+  assert.ok(styleText.includes("overscroll-behavior: contain"), "CSS must contain scroll on modal/backdrop");
+  assert.ok(styleText.includes("overflow: hidden"), "CSS must set overflow: hidden on dialog::backdrop");
+  assert.ok(styleText.includes(".badge.is-coral"), "CSS must include .badge.is-coral");
+
+  const dlg = card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
+  assert.ok(dlg, "Native <dialog data-bind='confirmDialog'> must exist inside Shadow DOM");
+  assert.equal(dlg.getAttribute("aria-labelledby"), "lp-confirm-title");
+  assert.equal(dlg.hasAttribute("role"), false, "Native <dialog> must NOT have role='dialog'");
+  assert.equal(dlg.hasAttribute("aria-modal"), false, "Native <dialog> must NOT have aria-modal");
+  assert.equal(dlg.querySelector("form"), null, "Dialog must use explicit buttons instead of <form method='dialog'>");
+  assert.equal(dlg.open, false, "Dialog must start closed");
+
+  const cancelBtn = dlg.querySelector('button[type="button"][data-dialog-action="cancel"]');
+  const confirmBtn = dlg.querySelector('button[type="button"][data-dialog-action="confirm"]');
+  const actionTxtEl = dlg.querySelector('[data-bind="confirmDialogAction"]');
+  assert.ok(cancelBtn && confirmBtn && actionTxtEl, "Dialog action controls and label must exist");
+  assert.equal(cancelBtn.hasAttribute("autofocus"), true, "Safe Cancel button must carry autofocus");
+
+  const modalCases = [
+    // 5 sensitive stateful actions (+ quick variants)
+    { selector: '[data-action-id="unlock"]', domain: "lock", service: "unlock", entityId: "lock.lepas_lock", label: "Unlock" },
+    { selector: '[data-action-id="quick_unlock"]', domain: "lock", service: "unlock", entityId: "lock.lepas_lock", label: "Unlock" },
+    { selector: '[data-action-id="trunk_open"]', domain: "cover", service: "open_cover", entityId: "cover.lepas_trunk", label: "Trunk: Open" },
+    { selector: '[data-action-id="quick_trunk_open"]', domain: "cover", service: "open_cover", entityId: "cover.lepas_trunk", label: "Trunk: Open" },
+    { selector: '[data-action-id="windows_open"]', domain: "cover", service: "open_cover", entityId: "cover.lepas_windows", label: "Windows: Open" },
+    { selector: '[data-action-id="sunroof_open"]', domain: "cover", service: "open_cover", entityId: "cover.lepas_sunroof", label: "Sunroof: Open" },
+    { selector: '[data-action-id="alarm_toggle"]', domain: "switch", service: "turn_off", entityId: "switch.lepas_alarm", label: "Alarm: OFF" },
+    // 10 stateless commands (+ sec_flash_lights alias)
+    { selector: '[data-action-id="wake_car"]', domain: "button", service: "press", entityId: "button.lepas_wake_car", label: "Wake car" },
+    { selector: '[data-action-id="refresh_location"]', domain: "button", service: "press", entityId: "button.lepas_refresh_location", label: "Refresh pos." },
+    { selector: '[data-action-id="refresh_full"]', domain: "button", service: "press", entityId: "button.lepas_refresh_full_status", label: "Full status" },
+    { selector: '[data-action-id="locate_gps"]', domain: "button", service: "press", entityId: "button.lepas_locate_car_gps", label: "Locate GPS" },
+    { selector: '[data-action-id="flash_lights"]', domain: "button", service: "press", entityId: "button.lepas_find_car_flash_lights", label: "Flash lights" },
+    { selector: '[data-action-id="sec_flash_lights"]', domain: "button", service: "press", entityId: "button.lepas_find_car_flash_lights", label: "Flash lights" },
+    { selector: '[data-action-id="vent_windows"]', domain: "button", service: "press", entityId: "button.lepas_vent_windows", label: "Vent windows" },
+    { selector: '[data-action-id="vent_sunroof"]', domain: "button", service: "press", entityId: "button.lepas_vent_sunroof", label: "Vent sunroof" },
+    { selector: '[data-action-id="remote_start"]', domain: "button", service: "press", entityId: "button.lepas_remote_start", label: "Remote start" },
+    { selector: '[data-action-id="apply_charging_schedule"]', domain: "button", service: "press", entityId: "button.lepas_apply_charging_schedule", label: "Apply schedule" },
+    { selector: '[data-action-id="apply_departure_schedule"]', domain: "button", service: "press", entityId: "button.lepas_apply_departure_schedule", label: "Apply to car" },
   ];
 
-  for (const sc of sensitiveCases) {
+  for (const mc of modalCases) {
     const beforeCalls = hass.calls.length;
-    const btn = card.shadowRoot.querySelector(sc.selector);
-    assert.ok(btn, `Missing sensitive button ${sc.selector}`);
+    const btn = card.shadowRoot.querySelector(mc.selector);
+    assert.ok(btn, `Missing modal-confirmed button ${mc.selector}`);
 
-    // 1st tap arms inline confirmation without calling service
+    // 1st click opens modal without calling service or adding inline confirming state
     btn.click();
-    assert.equal(hass.calls.length, beforeCalls, `1st tap on ${sc.selector} must NOT callService`);
-    assert.equal(card.shadowRoot.querySelector(sc.selector).getAttribute("data-confirming"), "true");
-    assert.ok(card.shadowRoot.querySelector(sc.selector).textContent.includes("Confirm?"));
+    assert.equal(hass.calls.length, beforeCalls, `Clicking ${mc.selector} must NOT callService before modal confirm`);
+    assert.equal(dlg.open, true, `Dialog must open on ${mc.selector}`);
+    assert.equal(btn.getAttribute("data-confirming"), null, `${mc.selector} must NOT set data-confirming`);
+    assert.equal(btn.querySelector(".confirm-bar"), null, `${mc.selector} must NOT render .confirm-bar`);
+    assert.equal(actionTxtEl.textContent, mc.label);
 
-    // Expire 4s timeout -> disarms without calling service
-    t.mock.timers.tick(4000);
-    assert.equal(hass.calls.length, beforeCalls, `Timeout on ${sc.selector} must NOT callService`);
-    assert.notEqual(card.shadowRoot.querySelector(sc.selector).getAttribute("data-confirming"), "true");
+    // Cancel button closes dialog without calling service and resets returnValue
+    cancelBtn.click();
+    assert.equal(dlg.open, false, `Cancel must close dialog for ${mc.selector}`);
+    assert.equal(dlg.returnValue, "", "Dialog returnValue must reset to '' on close");
+    assert.equal(hass.calls.length, beforeCalls, `Cancel must NOT callService for ${mc.selector}`);
 
-    // Re-arm and tap 2nd time within 4s -> dispatches service
-    card.shadowRoot.querySelector(sc.selector).click();
-    assert.equal(hass.calls.length, beforeCalls);
-    t.mock.timers.tick(1500);
-    card.shadowRoot.querySelector(sc.selector).click();
+    // Re-open and confirm -> closes dialog, resets returnValue, calls service ONCE
+    btn.click();
+    assert.equal(dlg.open, true);
+    confirmBtn.click();
     await Promise.resolve();
-
-    assert.equal(hass.calls.length, beforeCalls + 1, `2nd tap on ${sc.selector} must callService`);
-    assert.equal(hass.calls[beforeCalls].domain, sc.domain);
-    assert.equal(hass.calls[beforeCalls].service, sc.service);
-    assert.equal(hass.calls[beforeCalls].data.entity_id, sc.entityId);
+    assert.equal(dlg.open, false);
+    assert.equal(dlg.returnValue, "");
+    assert.equal(hass.calls.length, beforeCalls + 1, `Confirm must callService once for ${mc.selector}`);
+    assert.equal(hass.calls[beforeCalls].domain, mc.domain);
+    assert.equal(hass.calls[beforeCalls].service, mc.service);
+    assert.equal(hass.calls[beforeCalls].data.entity_id, mc.entityId);
   }
+
+  // Esc ('cancel' event) dismisses dialog without calling service
+  const beforeEsc = hass.calls.length;
+  card.shadowRoot.querySelector('[data-action-id="unlock"]').click();
+  assert.equal(dlg.open, true);
+  const cancelEv = new MiniEvent("cancel", { cancelable: true });
+  dlg.dispatchEvent(cancelEv);
+  assert.equal(cancelEv.defaultPrevented, true);
+  assert.equal(dlg.open, false);
+  assert.equal(hass.calls.length, beforeEsc);
+
+  // Drag-safe light dismiss: pointerdown inside + pointerup outside stays open; outside + outside closes
+  card.shadowRoot.querySelector('[data-action-id="unlock"]').click();
+  assert.equal(dlg.open, true);
+  dlg.dispatchEvent(new MiniEvent("pointerdown", { clientX: 150, clientY: 150 }));
+  dlg.dispatchEvent(new MiniEvent("pointerup", { clientX: 10, clientY: 10 }));
+  assert.equal(dlg.open, true, "Selection drag ending outside dialog must NOT dismiss");
+
+  dlg.dispatchEvent(new MiniEvent("pointerdown", { clientX: 10, clientY: 10 }));
+  dlg.dispatchEvent(new MiniEvent("pointerup", { clientX: 150, clientY: 150 }));
+  assert.equal(dlg.open, true, "Pointer press outside releasing inside must NOT dismiss");
+
+  dlg.dispatchEvent(new MiniEvent("pointerdown", { clientX: 10, clientY: 10 }));
+  dlg.dispatchEvent(new MiniEvent("pointerup", { clientX: 10, clientY: 10 }));
+  assert.equal(dlg.open, false, "Backdrop click outside dialog rect must dismiss");
+  assert.equal(hass.calls.length, beforeEsc);
+
+  // Older Android WebView fallback (no showModal / no close)
+  const fallbackCard = createCard({ default_tab: "security" }, makeFullHass({}, "it"));
+  const fbDlg = fallbackCard.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
+  fbDlg.showModal = undefined;
+  fbDlg.close = undefined;
+  fallbackCard.shadowRoot.querySelector('[data-action-id="unlock"]').click();
+  assert.equal(fbDlg.hasAttribute("open"), true, "Fallback must set open attribute when showModal is missing");
+  assert.equal(fbDlg.open, true);
+  fbDlg.querySelector('[data-dialog-action="confirm"]').click();
+  await Promise.resolve();
+  assert.equal(fbDlg.hasAttribute("open"), false, "Fallback confirm must remove open attribute");
+  assert.equal(fallbackCard._hass.calls.length, 1);
+  assert.equal(fallbackCard._hass.calls[0].service, "unlock");
 });
 
-test("Direct 1-tap actions call hass.callService immediately", async () => {
+test("Direct 1-tap actions call hass.callService immediately (non-destructive stateful controls)", async () => {
   const hass = makeFullHass({
     "lock.lepas_lock": makeState("lock.lepas_lock", "unlocked"),
     "cover.lepas_trunk": makeState("cover.lepas_trunk", "open"),
   }, "en");
   const card = createCard({}, hass);
+  const dlg = card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
 
   // Lock (when unlocked)
   card.shadowRoot.querySelector('[data-action-id="lock_now"]').click();
@@ -1083,8 +1192,6 @@ test("Direct 1-tap actions call hass.callService immediately", async () => {
   card.shadowRoot.querySelector('[data-action-id="temp_up"]').click();
   // Seat toggle
   card.shadowRoot.querySelector('[data-action-id="seat_driver_heat"]').click();
-  // Apply charging schedule
-  card.shadowRoot.querySelector('[data-action-id="apply_charging_schedule"]').click();
   // Quick departure toggle
   card.shadowRoot.querySelector('[data-action-id="quick_departure_toggle"]').click();
   // Number set_value (climate duration 20 or 30)
@@ -1099,13 +1206,13 @@ test("Direct 1-tap actions call hass.callService immediately", async () => {
   daySatChip.click();
 
   await Promise.resolve();
+  assert.equal(dlg.open, false, "Non-destructive 1-tap actions must NEVER open confirm modal");
 
   const sigs = hass.calls.map((c) => `${c.domain}.${c.service}:${c.data.entity_id || ""}`);
   assert.ok(sigs.includes("lock.lock:lock.lepas_lock"));
   assert.ok(sigs.includes("climate.set_hvac_mode:climate.lepas_climate"));
   assert.ok(sigs.includes("climate.set_temperature:climate.lepas_climate"));
   assert.ok(sigs.includes("switch.turn_on:switch.lepas_driver_seat_heating"));
-  assert.ok(sigs.includes("button.press:button.lepas_apply_charging_schedule"));
   assert.ok(sigs.includes("switch.turn_on:switch.lepas_quick_departure"));
   assert.ok(sigs.includes("number.set_value:number.lepas_climate_duration"));
   assert.ok(sigs.includes("time.set_value:time.lepas_charge_start_time"));
@@ -1121,9 +1228,7 @@ test("Direct 1-tap actions call hass.callService immediately", async () => {
   );
 });
 
-test("State, focus preservation on set hass(), and rejected callService error banner", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
-
+test("State, focus preservation on set hass(), and rejected callService error banner", async () => {
   let shouldReject = false;
   const hass = makeFullHass({}, "en");
   hass.callService = (domain, service, data) => {
@@ -1137,9 +1242,11 @@ test("State, focus preservation on set hass(), and rejected callService error ba
   card.shadowRoot.querySelector('[data-tab="charging"]').click();
   card.shadowRoot.querySelector('[data-day-chip="fri"]').click();
 
-  // Arm unlock confirm
+  // Open unlock modal
   card.shadowRoot.querySelector('[data-action-id="unlock"]').click();
-  assert.equal(card.shadowRoot.querySelector('[data-action-id="unlock"]').getAttribute("data-confirming"), "true");
+  const dlg = card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
+  assert.equal(dlg.open, true);
+  assert.equal(card.shadowRoot.querySelector('[data-action-id="unlock"]').getAttribute("data-confirming"), null);
 
   // Focus time input
   const timeInput = card.shadowRoot.querySelector('[data-entity-input="time.lepas_charge_start_time"]');
@@ -1153,12 +1260,16 @@ test("State, focus preservation on set hass(), and rejected callService error ba
   nextHass.callService = hass.callService;
   card.hass = nextHass;
 
-  // Preserved activeTab, expandedDay, confirmState, focus, and in-progress input value
+  // Preserved activeTab, expandedDay, open modal, focus, and in-progress input value
   assert.equal(card.shadowRoot.querySelector('[data-tab="charging"]').classList.contains("is-active"), true);
   assert.ok(card.shadowRoot.querySelector('[data-day-editor="fri"]'), "Expanded Friday must survive set hass()");
-  assert.equal(card.shadowRoot.querySelector('[data-action-id="unlock"]').getAttribute("data-confirming"), "true");
+  assert.equal(card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]').open, true);
   assert.equal(card.shadowRoot.activeElement, timeInput);
   assert.equal(timeInput.value, "04:15");
+
+  // Dismiss modal before proceeding
+  card.shadowRoot.querySelector('[data-dialog-action="cancel"]').click();
+  assert.equal(dlg.open, false);
 
   // Toggle Friday departure switch and time inside expanded day editor
   card.shadowRoot.querySelector('[data-action-id="day_toggle_fri"]').click();
@@ -1169,18 +1280,29 @@ test("State, focus preservation on set hass(), and rejected callService error ba
   assert.ok(hass.calls.some((c) => c.domain === "switch" && c.service === "turn_off" && c.data.entity_id === "switch.lepas_departure_fri_enabled"));
   assert.ok(hass.calls.some((c) => c.domain === "time" && c.service === "set_value" && c.data.entity_id === "time.lepas_departure_fri_time" && c.data.time === "08:45:00"));
 
-  // Rejected service call clears pending and shows inline non-blocking error banner
+  // Rejected service call clears pending and shows inline non-blocking error banner + coral cmdResultBadge
   shouldReject = true;
   card.shadowRoot.querySelector('[data-action-id="apply_charging_schedule"]').click();
+  assert.equal(dlg.open, true);
+  card.shadowRoot.querySelector('[data-dialog-action="confirm"]').click();
   await Promise.resolve();
   await Promise.resolve();
 
   const errBanner = card.shadowRoot.querySelector('[role="alert"].error-banner');
   assert.ok(errBanner, "Error banner must render on rejected callService");
   assert.ok(errBanner.textContent.includes("Vehicle timeout"));
+  const cmdBadge = card.shadowRoot.querySelector('[data-bind="cmdResultBadge"]');
+  assert.equal(cmdBadge.classList.contains("hidden"), false);
+  assert.equal(cmdBadge.classList.contains("is-coral"), true);
+  assert.equal(cmdBadge.classList.contains("is-emerald"), false);
+  assert.ok(cmdBadge.textContent.startsWith("Command failed · "));
+  assert.ok(cmdBadge.textContent.endsWith("✕"));
 
-  // Cleanup timer on disconnect
+  // Cleanup dialog/pending state on disconnect
+  card.shadowRoot.querySelector('[data-action-id="unlock"]').click();
+  assert.equal(dlg.open, true);
   card.disconnectedCallback();
+  assert.equal(dlg.open, false, "disconnectedCallback must close open dialog");
 });
 
 test("Entity mapping: SVG blueprint, TPMS, SoC ring + progress, 4+1 seats, charging timeline, departure strip, graceful omission", () => {
@@ -1333,13 +1455,17 @@ test("v1.20.0 SVG icons on tabs & 4 panels, aria-selected sync, and zero stark w
   assert.equal(card.shadowRoot.querySelector('[data-tab="overview"]').getAttribute("aria-selected"), "false");
   assert.equal(card.shadowRoot.querySelector('[data-tab="charging"]').getAttribute("aria-selected"), "true");
 
-  // Dynamic button preserves icon & exact textContent across _applyBindings and confirmation
+  // Dynamic button preserves icon & exact textContent across _applyBindings and opens modal without mutating button label
   const unlockBtn = card.shadowRoot.querySelector('[data-action-id="unlock"]');
   assert.ok(unlockBtn.querySelector("svg"), "Dynamic unlock button must keep SVG icon after _applyBindings");
   assert.equal(unlockBtn.textContent, "Sblocca");
   unlockBtn.click();
-  assert.ok(unlockBtn.querySelector("svg"), "Dynamic unlock button must keep SVG icon during confirm");
-  assert.equal(unlockBtn.textContent, "Conferma?");
+  assert.ok(unlockBtn.querySelector("svg"), "Dynamic unlock button must keep SVG icon when modal opens");
+  assert.equal(unlockBtn.textContent, "Sblocca");
+  assert.equal(unlockBtn.getAttribute("data-confirming"), null);
+  assert.equal(card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]').open, true);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="confirmDialogAction"]').textContent, "Sblocca");
+  card.shadowRoot.querySelector('[data-dialog-action="cancel"]').click();
   card.disconnectedCallback();
 });
 
@@ -1642,16 +1768,25 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
   assert.equal(card.shadowRoot.querySelector('[data-action-id="native_departure_sync_toggle"]'), null, "Sync su auto toggle must be omitted from card");
   assert.equal(card.shadowRoot.querySelector('[data-bind="depSyncBadge"]'), null, "Ambiguous sync badge must be omitted from card");
 
+  const nextTxt = card.shadowRoot.querySelector('[data-bind="nextDepText"]');
   const schedTxt = card.shadowRoot.querySelector('[data-bind="schedDepText"]');
   const applyBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
-  assert.ok(schedTxt && applyBtn);
+  assert.ok(nextTxt && schedTxt && applyBtn);
+  assert.equal(nextTxt.textContent, "Attiva", "Prossima partenza must show 'Attiva' when car has active plan and HA has none");
   assert.equal(applyBtn.classList.contains("hidden"), false);
   assert.ok(schedTxt.textContent.includes("06:35"), `Expected next car departure time 06:35, got: ${schedTxt.textContent}`);
+  assert.equal(schedTxt.textContent.includes("lun, mar"), false, `Car departure readout must show next occurrence instead of full weekday list, got: ${schedTxt.textContent}`);
   assert.ok(applyBtn.textContent.includes("Disattiva su auto"), `Expected 'Disattiva su auto' when HA has no active departures, got: ${applyBtn.textContent}`);
 
-  // Clicking button calls button.press
+  // Clicking button opens confirm dialog with "Disattiva su auto", then confirming calls button.press
+  const dlg = card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
   applyBtn.click();
+  assert.equal(hassOff.calls.length, 0);
+  assert.equal(dlg.open, true);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="confirmDialogAction"]').textContent, "Disattiva su auto");
+  card.shadowRoot.querySelector('[data-dialog-action="confirm"]').click();
   await Promise.resolve();
+  assert.equal(dlg.open, false);
   assert.deepEqual(hassOff.calls[0], {
     domain: "button",
     service: "press",
@@ -1677,6 +1812,7 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
   const bothOffBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
   assert.ok(bothOffBtn);
   assert.equal(bothOffBtn.classList.contains("hidden"), true, "Button must be hidden when both HA and car have no active plan");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="nextDepText"]').textContent, "Disattivata");
   assert.equal(card.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Nessuna partenza programmata");
 
   // When HA has an active departure & car plan is disabled -> shows "Nessuna partenza programmata" & "Applica su auto"
@@ -1870,9 +2006,28 @@ test("v1.21.0 Battery preheat sub-box visibility and controls (cat. 216)", async
   });
 });
 
+test("v1.21.3 formatCarNextDeparture computes concise next occurrence (Oggi/Domani/Weekday) across IT/EN/NL", () => {
+  const h = LepasCard._helpers;
+  assert.equal(typeof h.formatCarNextDeparture, "function");
+
+  const wedMorning = new Date(2026, 10, 18, 5, 30, 0); // Wed 05:30 local
+  const wedEvening = new Date(2026, 10, 18, 20, 10, 0); // Wed 20:10 local
+
+  assert.equal(h.formatCarNextDeparture("06:35", [1, 2, 3, 4, 5, 6, 7], wedMorning, h.getTexts("it")), "Oggi 06:35");
+  assert.equal(h.formatCarNextDeparture("06:35", [1, 2, 3, 4, 5, 6, 7], wedEvening, h.getTexts("it")), "Domani 06:35");
+  assert.equal(h.formatCarNextDeparture("06:35", [1, 2, 3, 4, 5, 6, 7], wedEvening, h.getTexts("en")), "Tomorrow 06:35");
+  assert.equal(h.formatCarNextDeparture("06:35", [1, 2, 3, 4, 5, 6, 7], wedEvening, h.getTexts("nl")), "Morgen 06:35");
+  assert.equal(h.formatCarNextDeparture("06:35", [5], wedEvening, h.getTexts("it")), "Ven 06:35");
+  assert.equal(h.formatCarNextDeparture("06:35", [3], wedEvening, h.getTexts("it")), "Mer 06:35");
+  assert.equal(h.formatCarNextDeparture("06:35", [], wedEvening, h.getTexts("it")), "06:35");
+});
+
 test("v1.21.0 IT/EN/NL i18n labels for native departure, battery heat, and all 12 climate extras", () => {
   const h = LepasCard._helpers;
   const requiredKeys = [
+    "today",
+    "tomorrow",
+    "departureActive",
     "noScheduledDeparture",
     "disableOnCar",
     "applyDeparture",
@@ -1969,4 +2124,193 @@ test("v1.21.1 Compact departure panel: unified header, compact summary, 2-col so
   const h = LepasCard._helpers;
   assert.ok(h.getTexts("en").climateExtraLabels.driver_seat_heating.toLowerCase().includes("seat"));
   assert.ok(h.getTexts("nl").climateExtraLabels.driver_seat_heating.toLowerCase().includes("stoel"));
+});
+
+test("v1.22.0 CONFIRM_ACTIONS helper contract, dynamic departure label, fail-closed rebuild, and 1-tap non-destructive controls", async () => {
+  const h = LepasCard._helpers;
+  assert.ok(h.CONFIRM_ACTIONS && typeof h.CONFIRM_ACTIONS === "object", "CONFIRM_ACTIONS must be exported on _helpers");
+  assert.equal(Object.isFrozen(h.CONFIRM_ACTIONS), true, "CONFIRM_ACTIONS must be immutable");
+  assert.equal(h.isSensitiveAction, undefined, "Obsolete isSensitiveAction must be removed");
+
+  const expectedModalActions = [
+    "wake_car",
+    "refresh_location",
+    "refresh_full",
+    "locate_gps",
+    "flash_lights",
+    "sec_flash_lights",
+    "vent_windows",
+    "vent_sunroof",
+    "remote_start",
+    "apply_charging_schedule",
+    "apply_departure_schedule",
+    "unlock",
+    "quick_unlock",
+    "trunk_open",
+    "quick_trunk_open",
+    "windows_open",
+    "sunroof_open",
+    "alarm_toggle",
+  ];
+  assert.deepEqual(Object.keys(h.CONFIRM_ACTIONS).sort(), expectedModalActions.slice().sort());
+
+  for (const lang of ["it", "en", "nl"]) {
+    const dict = h.getTexts(lang);
+    for (const key of ["confirmModalTitle", "confirmModalHint", "confirmCancel", "confirmSend", "lastCommand", "commandSendError"]) {
+      assert.equal(typeof dict[key], "string", `Missing I18N.${lang}.${key}`);
+      assert.ok(dict[key].trim().length > 0, `Empty I18N.${lang}.${key}`);
+    }
+  }
+
+  // Dynamic apply_departure_schedule modal label when HA has active departure -> "Applica su auto"
+  const hassDepOn = makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "on"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", { attiva: false }),
+  }, "it");
+  const depCard = createCard({ default_tab: "charging" }, hassDepOn);
+  const depDlg = depCard.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
+  depCard.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]').click();
+  assert.equal(depDlg.open, true);
+  assert.equal(depCard.shadowRoot.querySelector('[data-bind="confirmDialogAction"]').textContent, "Applica su auto");
+
+  // structKey rebuild while modal is open (e.g. language change or new entity) clears modal fail-closed
+  depCard.hass = makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "on"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", { attiva: false }),
+  }, "en");
+  assert.equal(depCard.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]').open, false, "structKey rebuild must fail-closed close modal");
+  assert.equal(hassDepOn.calls.length, 0);
+
+  // Remaining non-destructive stateful switches/macros stay 1-tap immediate
+  const hassStateful = makeFullHass({
+    "switch.lepas_battery_pack_heat": makeState("switch.lepas_battery_pack_heat", "off"),
+    "switch.lepas_sync_battery_heat_to_departure": makeState("switch.lepas_sync_battery_heat_to_departure", "off"),
+  }, "it");
+  const stCard = createCard({}, hassStateful);
+  const stDlg = stCard.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
+  stCard.shadowRoot.querySelector('[data-action-id="cool_everything"]').click();
+  stCard.shadowRoot.querySelector('[data-action-id="heat_everything"]').click();
+  stCard.shadowRoot.querySelector('[data-action-id="charging_toggle"]').click();
+  stCard.shadowRoot.querySelector('[data-action-id="scheduled_charging_toggle"]').click();
+  stCard.shadowRoot.querySelector('[data-action-id="battery_pack_heat_toggle"]').click();
+  stCard.shadowRoot.querySelector('[data-action-id="sync_battery_heat_toggle"]').click();
+  await Promise.resolve();
+  assert.equal(stDlg.open, false);
+  assert.equal(hassStateful.calls.length, 6);
+});
+
+test("v1.22.0 formatCommandOutcome and cmdResultBadge concise outcome in IT/EN/NL without raw debug strings", async () => {
+  const h = LepasCard._helpers;
+  assert.equal(typeof h.formatCommandOutcome, "function", "formatCommandOutcome must be exported on _helpers");
+
+  const tsIso = new Date(2026, 10, 18, 20, 10, 0).toISOString();
+  const tsNewerIso = new Date(2026, 10, 18, 20, 15, 0).toISOString();
+  const enTime = new Date(tsIso).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" });
+
+  // Absent / dead state with no local feedback -> null
+  assert.equal(h.formatCommandOutcome(null, null, "it"), null);
+  assert.equal(h.formatCommandOutcome(makeState("sensor.lepas_command_result", "unavailable"), null, "it"), null);
+  assert.equal(h.formatCommandOutcome(makeState("sensor.lepas_command_result", "unknown"), null, "en"), null);
+
+  // Success backend states across IT/EN/NL
+  const okObj = { state: "Comando eseguito e confermato dall'auto ✅", last_changed: tsIso };
+  assert.deepEqual(h.formatCommandOutcome(okObj, null, "it"), { text: "Ultimo comando · 20:10 ✓", ok: true });
+  assert.deepEqual(h.formatCommandOutcome(okObj, null, "en"), { text: `Last command · ${enTime} ✓`, ok: true });
+  assert.deepEqual(h.formatCommandOutcome(okObj, null, "nl"), { text: "Laatste opdracht · 20:10 ✓", ok: true });
+
+  // Single-climate notice is explicitly non-fatal per backend contract
+  const climateNotice = {
+    state: "Comando ricevuto dall'auto — unica segnalazione: clima. Da sola non indica un guasto.",
+    last_changed: tsIso,
+  };
+  assert.deepEqual(h.formatCommandOutcome(climateNotice, null, "it"), { text: "Ultimo comando · 20:10 ✓", ok: true });
+
+  // Pending ⏳ counts as non-error
+  const inProgress = { state: "Comando in esecuzione sull'auto… ⏳", last_changed: tsIso };
+  assert.deepEqual(h.formatCommandOutcome(inProgress, null, "it"), { text: "Ultimo comando · 20:10 ✓", ok: true });
+
+  // Backend errors / partial failures / rejections across IT/EN/NL
+  for (const errState of [
+    "Eseguito solo in parte ⚠️ — l'auto segnala un problema su: sedili",
+    "Comando rifiutato dal backend ❌",
+    "Errore di connessione",
+    "Command failed",
+    "Richiesta scaduta",
+    "Veicolo bloccato",
+  ]) {
+    const resIt = h.formatCommandOutcome({ state: errState, last_changed: tsIso }, null, "it");
+    assert.deepEqual(resIt, { text: "Errore invio comando · 20:10 ✕", ok: false }, `Expected failure for '${errState}'`);
+  }
+  assert.deepEqual(
+    h.formatCommandOutcome({ state: "Comando rifiutato ❌", last_changed: tsIso }, null, "en"),
+    { text: `Command failed · ${enTime} ✕`, ok: false }
+  );
+  assert.deepEqual(
+    h.formatCommandOutcome({ state: "Comando rifiutato ❌", last_changed: tsIso }, null, "nl"),
+    { text: "Opdracht mislukt · 20:10 ✕", ok: false }
+  );
+
+  // Local feedback overrides older backend state, and yields once newer backend state arrives
+  const localErr = { ok: false, ts: new Date(2026, 10, 18, 20, 12, 0).getTime() };
+  assert.deepEqual(
+    h.formatCommandOutcome(okObj, localErr, "it"),
+    { text: "Errore invio comando · 20:12 ✕", ok: false }
+  );
+  const newerBackendOk = { state: "Comando eseguito e confermato dall'auto ✅", last_changed: tsNewerIso };
+  assert.deepEqual(
+    h.formatCommandOutcome(newerBackendOk, localErr, "it"),
+    { text: "Ultimo comando · 20:15 ✓", ok: true }
+  );
+
+  // DOM cmdResultBadge test: hides raw debug text, toggles .is-emerald/.is-coral, and shows local rejection even when sensor is unavailable
+  const hassOk = makeFullHass({
+    "sensor.lepas_command_result": Object.assign(
+      makeState("sensor.lepas_command_result", "Comando eseguito e confermato dall'auto ✅"),
+      { last_changed: tsIso }
+    ),
+  }, "it");
+  const card = createCard({}, hassOk);
+  const badge = card.shadowRoot.querySelector('[data-bind="cmdResultBadge"]');
+  assert.ok(badge);
+  assert.equal(badge.classList.contains("hidden"), false);
+  assert.equal(badge.classList.contains("is-emerald"), true);
+  assert.equal(badge.classList.contains("is-coral"), false);
+  assert.equal(badge.textContent, "Ultimo comando · 20:10 ✓");
+  assert.equal(card.shadowRoot.innerHTML.includes("Comando eseguito e confermato dall'auto"), false, "Raw debug text must NEVER render in DOM");
+
+  // When sensor is unavailable/absent and a command fails locally -> badge still renders in coral
+  let rejectCmd = true;
+  const hassUnavail = makeFullHass({
+    "sensor.lepas_command_result": makeState("sensor.lepas_command_result", "unavailable"),
+  }, "it");
+  hassUnavail.callService = (domain, service, data) => {
+    hassUnavail.calls.push({ domain, service, data });
+    if (rejectCmd) return Promise.reject(new Error("PIN error"));
+    return Promise.resolve();
+  };
+  const cardUnavail = createCard({}, hassUnavail);
+  const badgeUnavail = cardUnavail.shadowRoot.querySelector('[data-bind="cmdResultBadge"]');
+  assert.equal(badgeUnavail.classList.contains("hidden"), true, "Badge hidden when sensor unavailable and no local feedback");
+
+  cardUnavail.shadowRoot.querySelector('[data-action-id="flash_lights"]').click();
+  cardUnavail.shadowRoot.querySelector('[data-dialog-action="confirm"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(badgeUnavail.classList.contains("hidden"), false, "Local failure feedback must show badge even if sensor unavailable");
+  assert.equal(badgeUnavail.classList.contains("is-coral"), true);
+  assert.equal(badgeUnavail.classList.contains("is-emerald"), false);
+  assert.ok(badgeUnavail.textContent.startsWith("Errore invio comando · "));
+  assert.ok(badgeUnavail.textContent.endsWith("✕"));
+
+  // Subsequent resolved command flips badge back to emerald
+  rejectCmd = false;
+  cardUnavail.shadowRoot.querySelector('[data-action-id="climate_quick"]').click();
+  await Promise.resolve();
+  assert.equal(badgeUnavail.classList.contains("is-emerald"), true);
+  assert.equal(badgeUnavail.classList.contains("is-coral"), false);
+  assert.ok(badgeUnavail.textContent.startsWith("Ultimo comando · "));
+  assert.ok(badgeUnavail.textContent.endsWith("✓"));
 });

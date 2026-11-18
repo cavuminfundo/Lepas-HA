@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.22.0 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Native `<dialog>` Confirmation Modal for Commands & Sensitive Actions (`custom:lepas-card`)**: Replaced the 4-second inline button double-tap confirmation with an explicit native Shadow DOM `<dialog>` modal (`Confermare comando?` / `Confirm command?` / `Opdracht bevestigen?`) across all 10 stateless one-shot commands (`wake_car`, `refresh_location`, `refresh_full`, `locate_gps`, `flash_lights`, `vent_windows`, `vent_sunroof`, `remote_start`, `apply_charging_schedule`, `apply_departure_schedule`) and all 5 sensitive stateful actions (`unlock`, `trunk_open`, `windows_open`, `sunroof_open`, `alarm_toggle`), keeping non-destructive stateful switches 1-tap immediate and maintaining older WebView compatibility (`showModal` fallback + drag-safe backdrop dismiss).
+- **Concise Command Outcome Badge (`custom:lepas-card`)**: Replaced raw `sensor.lepas_command_result` debug strings in the Overview footer with a clean two-state localized badge (`Last command · HH:MM ✓` / `Command failed · HH:MM ✕` across IT/EN/NL) via `formatCommandOutcome`, including immediate local feedback on command resolution/failure before backend state updates.
+- **Concise Next Car Departure & Active Status Consistency (`custom:lepas-card`)**: Replaced the full 7-day weekday list on *Next scheduled departure* with the exact next car occurrence (`Today 06:35`, `Tomorrow 06:35`, `Fri 06:35`, across IT/EN/NL) via `formatCarNextDeparture`, and updated *Next departure* to show `Active` (`Attiva` / `Active` / `Actief`) rather than `Disabled` when HA has no active schedule yet while the car/app schedule is active, bumping `?v=1.22.0`.
+
+### 🇮🇹 Italiano
+
+- **Modale `<dialog>` Nativo di Conferma per Comandi & Azioni Sensibili (`custom:lepas-card`)**: Sostituita la vecchia doppia pressione inline da 4 secondi con un modale nativo `<dialog>` nello Shadow DOM (`Confermare comando?` / `Annulla` / `Invia`) per tutti i 10 comandi one-shot stateless (`wake_car`, `refresh_location`, `refresh_full`, `locate_gps`, `flash_lights`, `vent_windows`, `vent_sunroof`, `remote_start`, `apply_charging_schedule`, `apply_departure_schedule`) e le 5 azioni sensibili stateful (`unlock`, `trunk_open`, `windows_open`, `sunroof_open`, `alarm_toggle`), lasciando immediati a 1 tap gli switch stateful non distruttivi e garantendo piena compatibilità con WebView datate (fallback `showModal` + light-dismiss anti-drag).
+- **Badge Sintetico Esito Comando (`custom:lepas-card`)**: Sostituiti i testi di debug grezzi di `sensor.lepas_command_result` nel footer della Plancia con un badge compatto a due stati localizzato (`Ultimo comando · HH:MM ✓` / `Errore invio comando · HH:MM ✕` in IT/EN/NL) tramite `formatCommandOutcome`, con feedback locale immediato alla risoluzione o al rifiuto di `callService` prima dell'aggiornamento dal backend.
+- **Prossima Partenza Pianificata Concisa & Stato Coerente (`custom:lepas-card`)**: Sostituita la lista completa dei giorni su *Prossima partenza pianificata* con la prossima occorrenza effettiva sull'auto (es. `Oggi 06:35`, `Domani 06:35`, `Ven 06:35`, in IT/EN/NL) tramite `formatCarNextDeparture`, e aggiornata *Prossima partenza* per mostrare `Attiva` (`Attiva` / `Active` / `Actief`) invece di `Disattivata` quando su HA non è ancora pianificata alcuna partenza ma il piano in auto/app è attivo (senza mostrare dettagli di pianificazione HA), con bump `?v=1.22.0`.
+
 ## v1.21.2 — 2026-11-18
 
 ### 🇬🇧 English

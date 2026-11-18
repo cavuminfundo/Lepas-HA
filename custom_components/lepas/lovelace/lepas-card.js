@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.21.2).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.22.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,8 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.21.2";
-  var CONFIRM_MS = 4000;
+  var CARD_VERSION = "1.22.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -83,26 +82,48 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.21.2",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.21.2",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.21.2",
-    black: "/lepas_card/lepas-hero-black.png?v=1.21.2",
-    white: "/lepas_card/lepas-hero-white.png?v=1.21.2",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.22.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.22.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.22.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.22.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.22.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.21.2";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.22.0";
 
-  var SENSITIVE_ACTIONS = {
+  var CONFIRM_ACTIONS = Object.freeze({
+    wake_car: true,
+    refresh_location: true,
+    refresh_full: true,
+    locate_gps: true,
+    flash_lights: true,
+    sec_flash_lights: true,
+    vent_windows: true,
+    vent_sunroof: true,
+    remote_start: true,
+    apply_charging_schedule: true,
+    apply_departure_schedule: true,
     unlock: true,
     quick_unlock: true,
     trunk_open: true,
     quick_trunk_open: true,
     windows_open: true,
     sunroof_open: true,
-    vent_windows: true,
-    vent_sunroof: true,
     alarm_toggle: true,
-    remote_start: true,
-  };
+  });
+
+  var CMD_ERROR_PATTERNS = [
+    "❌",
+    "⚠",
+    "rifiut",
+    "errore",
+    "error",
+    "fallit",
+    "failed",
+    "non riuscit",
+    "scadut",
+    "bloccat",
+    "eseguito solo in parte",
+  ];
 
   var I18N = {
     it: {
@@ -125,7 +146,12 @@
       closed: "Chiuso",
       openCmd: "Apri",
       closeCmd: "Chiudi",
-      confirm: "Conferma?",
+      confirmModalTitle: "Confermare comando?",
+      confirmModalHint: "Il comando verrà inviato al veicolo.",
+      confirmCancel: "Annulla",
+      confirmSend: "Invia",
+      lastCommand: "Ultimo comando",
+      commandSendError: "Errore invio comando",
       climateOn: "Clima ON",
       climateOff: "Clima OFF",
       charging: "In carica",
@@ -207,6 +233,9 @@
       on: "ON",
       off: "OFF",
       active: "Attivo",
+      departureActive: "Attiva",
+      today: "Oggi",
+      tomorrow: "Domani",
       inactive: "Spento",
       enableDay: "Attiva giorno",
       timeLbl: "Orario",
@@ -284,7 +313,12 @@
       closed: "Closed",
       openCmd: "Open",
       closeCmd: "Close",
-      confirm: "Confirm?",
+      confirmModalTitle: "Confirm command?",
+      confirmModalHint: "This command will be sent to the vehicle.",
+      confirmCancel: "Cancel",
+      confirmSend: "Send",
+      lastCommand: "Last command",
+      commandSendError: "Command failed",
       climateOn: "Climate ON",
       climateOff: "Climate OFF",
       charging: "Charging",
@@ -366,6 +400,9 @@
       on: "ON",
       off: "OFF",
       active: "Active",
+      departureActive: "Active",
+      today: "Today",
+      tomorrow: "Tomorrow",
       inactive: "Off",
       enableDay: "Enable day",
       timeLbl: "Time",
@@ -443,7 +480,12 @@
       closed: "Gesloten",
       openCmd: "Open",
       closeCmd: "Sluit",
-      confirm: "Bevestig?",
+      confirmModalTitle: "Opdracht bevestigen?",
+      confirmModalHint: "De opdracht wordt naar het voertuig gestuurd.",
+      confirmCancel: "Annuleren",
+      confirmSend: "Verzenden",
+      lastCommand: "Laatste opdracht",
+      commandSendError: "Opdracht mislukt",
       climateOn: "Klimaat AAN",
       climateOff: "Klimaat UIT",
       charging: "Opladen",
@@ -525,6 +567,9 @@
       on: "AAN",
       off: "UIT",
       active: "Actief",
+      departureActive: "Actief",
+      today: "Vandaag",
+      tomorrow: "Morgen",
       inactive: "Uit",
       enableDay: "Dag inschakelen",
       timeLbl: "Tijd",
@@ -645,8 +690,8 @@
     return HERO_IMAGES[color] || DEFAULT_HERO;
   }
 
-  function isSensitiveAction(actionId) {
-    return Boolean(SENSITIVE_ACTIONS[String(actionId || "")]);
+  function requiresConfirmation(actionId) {
+    return Boolean(CONFIRM_ACTIONS[String(actionId || "")]);
   }
 
   function hhmmToMinutes(hhmm) {
@@ -670,6 +715,69 @@
       var mm = String(dt.getMinutes()).padStart(2, "0");
       return hh + ":" + mm;
     }
+  }
+
+  function parseOutcomeTsMs(raw) {
+    if (raw == null || raw === "") return NaN;
+    if (typeof raw === "number") return isFinite(raw) ? raw : NaN;
+    var parsed = Date.parse(String(raw));
+    return isNaN(parsed) ? NaN : parsed;
+  }
+
+  function isDeadStateObj(s) {
+    if (!s || s.state == null) return true;
+    var st = String(s.state).trim();
+    return !st || st === "unavailable" || st === "unknown";
+  }
+
+  function formatCommandOutcome(cmdStateObj, localFeedback, lang) {
+    var code = String(lang || "en").slice(0, 2).toLowerCase();
+    var resolvedLang = I18N[code] ? code : "en";
+    var t = getTexts(resolvedLang);
+    var cmdAlive = !isDeadStateObj(cmdStateObj);
+    var hasLocal = Boolean(localFeedback && typeof localFeedback === "object" && typeof localFeedback.ok === "boolean");
+    if (!cmdAlive && !hasLocal) return null;
+
+    var cmdRawTs = cmdAlive ? (cmdStateObj.last_changed || cmdStateObj.last_updated || null) : null;
+    var cmdMs = parseOutcomeTsMs(cmdRawTs);
+    var fbRawTs = hasLocal && localFeedback.ts != null ? localFeedback.ts : null;
+    var fbMs = parseOutcomeTsMs(fbRawTs);
+
+    var useLocal = false;
+    if (hasLocal) {
+      if (!cmdAlive) {
+        useLocal = true;
+      } else if (!isNaN(fbMs)) {
+        useLocal = isNaN(cmdMs) || fbMs >= cmdMs;
+      }
+    }
+
+    var ok;
+    var chosenTs;
+    if (useLocal) {
+      ok = Boolean(localFeedback.ok);
+      chosenTs = fbRawTs;
+    } else {
+      var rawState = String(cmdStateObj.state || "");
+      var lowerState = rawState.toLowerCase();
+      var isErr = false;
+      for (var i = 0; i < CMD_ERROR_PATTERNS.length; i += 1) {
+        if (lowerState.indexOf(CMD_ERROR_PATTERNS[i]) >= 0) {
+          isErr = true;
+          break;
+        }
+      }
+      ok = !isErr;
+      chosenTs = cmdRawTs;
+    }
+
+    var prefix = ok ? t.lastCommand : t.commandSendError;
+    var glyph = ok ? "✓" : "✕";
+    var timeStr = chosenTs != null ? formatTimestamp(chosenTs, resolvedLang) : "—";
+    var text = (timeStr && timeStr !== "—")
+      ? prefix + " · " + timeStr + " " + glyph
+      : prefix + " " + glyph;
+    return { text: text, ok: ok };
   }
 
   var SVG_PATHS = {
@@ -810,6 +918,31 @@
     return cur.concat([d]).sort(function (a, b) { return a - b; });
   }
 
+  function formatCarNextDeparture(orario, giorni, now, t) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(orario || "").trim());
+    if (!m) return orario ? String(orario) : "";
+    var hh = parseInt(m[1], 10);
+    var mm = parseInt(m[2], 10);
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return String(orario);
+    var hhmm = ("0" + hh).slice(-2) + ":" + m[2];
+    var normDays = normalizeDaysList(giorni);
+    if (!normDays) return hhmm;
+    var ref = now instanceof Date && !isNaN(now.getTime()) ? now : new Date();
+    var isoToday = ref.getDay() === 0 ? 7 : ref.getDay();
+    var nowMin = ref.getHours() * 60 + ref.getMinutes();
+    var depMin = hh * 60 + mm;
+    for (var delta = 0; delta <= 7; delta += 1) {
+      var wd = ((isoToday - 1 + delta) % 7) + 1;
+      if (normDays.indexOf(wd) < 0) continue;
+      if (delta === 0 && depMin <= nowMin) continue;
+      if (delta === 0) return t.today + " " + hhmm;
+      if (delta === 1) return t.tomorrow + " " + hhmm;
+      var dLbl = (t.dayNames && t.dayNames[DAY_SLUGS[wd - 1]]) ? t.dayNames[DAY_SLUGS[wd - 1]] : DAY_SLUGS[wd - 1];
+      return dLbl + " " + hhmm;
+    }
+    return hhmm;
+  }
+
   // Filter strictly against the 12-key allowlist so untrusted attributes cannot reach the DOM.
   function filterAllowedClimateExtras(raw) {
     if (!Array.isArray(raw)) return [];
@@ -931,9 +1064,7 @@
       ".ctrl-btn.is-emerald { border-color: rgba(52, 211, 153, 0.45); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.12); }",
       ".ctrl-btn.is-glacier { border-color: rgba(96, 165, 250, 0.45); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.12); }",
       ".ctrl-btn.is-amber { border-color: rgba(245, 158, 11, 0.45); color: var(--lp-amber); background: rgba(245, 158, 11, 0.12); }",
-      ".ctrl-btn.is-confirming { border-color: rgba(239, 68, 68, 0.72); color: #FECACA; background: rgba(239, 68, 68, 0.24); }",
       ".btn-compact { min-height: 40px; padding: 7px 8px; font-size: 0.76rem; }",
-      ".confirm-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--lp-coral); transform-origin: left center; pointer-events: none; }",
       ".stepper { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 4px; }",
       ".step-val { font-size: 1.15rem; font-weight: 700; color: var(--lp-text); }",
       ".chip-row { display: flex; flex-wrap: wrap; gap: 6px; }",
@@ -1022,6 +1153,17 @@
       ".badge.is-emerald { border-color: rgba(52, 211, 153, 0.4); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.1); }",
       ".badge.is-glacier { border-color: rgba(96, 165, 250, 0.4); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.1); }",
       ".badge.is-amber { border-color: rgba(245, 158, 11, 0.4); color: var(--lp-amber); background: rgba(245, 158, 11, 0.1); }",
+      ".badge.is-coral { border-color: rgba(239, 68, 68, 0.45); color: #FCA5A5; background: rgba(239, 68, 68, 0.14); }",
+      ".confirm-dialog { padding: 0; border: 1px solid var(--lp-border-strong); border-radius: 14px; background: var(--lp-surface); color: var(--lp-text); width: min(360px, calc(100vw - 32px)); max-width: 100%; margin: auto; box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56); }",
+      ".confirm-dialog[open] { display: flex; flex-direction: column; position: fixed; inset: 0; margin: auto; z-index: 999; }",
+      "dialog:modal { overscroll-behavior: contain; }",
+      "dialog::backdrop { overflow: hidden; overscroll-behavior: contain; background: rgba(10, 12, 16, 0.72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
+      ".confirm-dialog-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; }",
+      ".confirm-dialog-title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--lp-text); }",
+      ".confirm-dialog-action { margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--lp-emerald); }",
+      ".confirm-dialog-hint { margin: 0; font-size: 0.8rem; color: var(--lp-text-secondary); line-height: 1.35; }",
+      ".confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }",
+      ".confirm-dialog-actions .ctrl-btn { flex: 1; }",
       ".info-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; min-height: 44px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); cursor: pointer; font-size: 0.84rem; }",
       ".info-row:hover { border-color: var(--lp-border-strong); }",
       ".info-val { font-weight: 600; color: var(--lp-text); }",
@@ -1065,7 +1207,6 @@
       "  .soc-ring-fg { transition: stroke-dashoffset 0.35s ease-out, stroke 0.2s ease; }",
       "  .bp-part { transition: opacity 0.2s ease, transform 0.25s ease-out, stroke 0.2s ease, fill 0.2s ease; }",
       "  .panel.is-active { animation: lp-fade 0.18s ease-out; }",
-      "  .confirm-bar { animation: lp-drain 4s linear forwards; }",
       "  .bp-part.is-moving { animation: lp-pulse-soft 1.2s ease-in-out infinite alternate; }",
       "  .soc-btn.is-charging .soc-ring-fg { animation: lp-pulse-soft 1.8s ease-in-out infinite alternate; }",
       "  .ctrl-btn.is-spinning .lp-ico { animation: lp-spin 2.4s linear infinite; }",
@@ -1076,7 +1217,6 @@
       "}",
       "button:focus-visible, input:focus-visible, select:focus-visible, [role=\"button\"]:focus-visible { outline: 2px solid rgba(243, 244, 246, 0.72); outline-offset: -2px; }",
       "@keyframes lp-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }",
-      "@keyframes lp-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }",
       "@keyframes lp-pulse-soft { from { opacity: 0.45; } to { opacity: 0.95; } }",
       "@keyframes lp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
       "@keyframes lp-flow { from { transform: translateX(-100%); } to { transform: translateX(250%); } }",
@@ -1223,7 +1363,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.21.2">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.22.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -1255,8 +1395,10 @@
       this._hass = null;
       this._activeTab = "overview";
       this._expandedDay = null;
-      this._confirmState = null;
-      this._confirmTimer = null;
+      this._pendingDialogAction = null;
+      this._dialogOutsidePress = false;
+      this._lastCmdFeedback = null;
+      this._boundDialogEl = null;
       this._pendingKeys = new Set();
       this._errorMsg = null;
       this._lastStructKey = "";
@@ -1277,6 +1419,10 @@
       this._onClick = this._handleClick.bind(this);
       this._onChange = this._handleChange.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
+      this._onDialogClose = this._handleDialogClose.bind(this);
+      this._onDialogCancel = this._handleDialogCancel.bind(this);
+      this._onDialogPointerDown = this._handleDialogPointerDown.bind(this);
+      this._onDialogPointerUp = this._handleDialogPointerUp.bind(this);
       var isTimeInput = function (el) {
         return Boolean(el && el.tagName === "INPUT" && (el.type === "time" || (el.getAttribute && el.getAttribute("type") === "time")));
       };
@@ -1325,12 +1471,16 @@
       if (this._hass) this._render(this._hass);
     }
 
+    connectedCallback() {
+      this._ensureShellListeners();
+      this._bindDialogListeners();
+    }
+
     disconnectedCallback() {
-      if (this._confirmTimer) {
-        clearTimeout(this._confirmTimer);
-        this._confirmTimer = null;
-      }
-      this._confirmState = null;
+      this._closeConfirmDialog();
+      this._unbindDialogListeners();
+      this._pendingDialogAction = null;
+      this._dialogOutsidePress = false;
     }
 
     _dead(s) {
@@ -1479,6 +1629,18 @@
       var target = ev.target;
       if (!target || !target.closest) return;
 
+      var dialogActEl = target.closest("[data-dialog-action]");
+      if (dialogActEl) {
+        ev.stopPropagation();
+        var dAction = dialogActEl.getAttribute("data-dialog-action");
+        if (dAction === "confirm") {
+          this._confirmPendingDialogAction();
+        } else {
+          this._closeConfirmDialog("cancel");
+        }
+        return;
+      }
+
       var dismiss = target.closest("[data-dismiss-error]");
       if (dismiss) {
         this._errorMsg = null;
@@ -1613,12 +1775,142 @@
       }
     }
 
-    _clearConfirm() {
-      if (this._confirmTimer) {
-        clearTimeout(this._confirmTimer);
-        this._confirmTimer = null;
+    _bindDialogListeners() {
+      var dlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null;
+      if (!dlg || dlg === this._boundDialogEl) return;
+      this._unbindDialogListeners();
+      dlg.addEventListener("close", this._onDialogClose);
+      dlg.addEventListener("cancel", this._onDialogCancel);
+      dlg.addEventListener("pointerdown", this._onDialogPointerDown);
+      dlg.addEventListener("pointerup", this._onDialogPointerUp);
+      this._boundDialogEl = dlg;
+    }
+
+    _unbindDialogListeners() {
+      if (!this._boundDialogEl) return;
+      this._boundDialogEl.removeEventListener("close", this._onDialogClose);
+      this._boundDialogEl.removeEventListener("cancel", this._onDialogCancel);
+      this._boundDialogEl.removeEventListener("pointerdown", this._onDialogPointerDown);
+      this._boundDialogEl.removeEventListener("pointerup", this._onDialogPointerUp);
+      this._boundDialogEl = null;
+    }
+
+    _isPointerOutsideDialog(ev, dlg) {
+      if (!ev || !dlg || typeof dlg.getBoundingClientRect !== "function") return false;
+      var r = dlg.getBoundingClientRect();
+      if (!r) return false;
+      var x = ev.clientX;
+      var y = ev.clientY;
+      if (typeof x !== "number" || typeof y !== "number") return false;
+      return x < r.left || x > r.right || y < r.top || y > r.bottom;
+    }
+
+    _handleDialogClose() {
+      var dlg = this._boundDialogEl || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null);
+      if (dlg && (dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open")))) return;
+      if (dlg && "returnValue" in dlg) dlg.returnValue = "";
+      this._pendingDialogAction = null;
+      this._dialogOutsidePress = false;
+    }
+
+    _handleDialogCancel(ev) {
+      if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+      this._closeConfirmDialog("cancel");
+    }
+
+    _handleDialogPointerDown(ev) {
+      var dlg = this._boundDialogEl || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null);
+      var isOpen = Boolean(dlg && (dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open"))));
+      this._dialogOutsidePress = isOpen ? this._isPointerOutsideDialog(ev, dlg) : false;
+    }
+
+    _handleDialogPointerUp(ev) {
+      var wasOutside = this._dialogOutsidePress;
+      this._dialogOutsidePress = false;
+      if (!wasOutside) return;
+      var dlg = this._boundDialogEl || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null);
+      if (dlg && this._isPointerOutsideDialog(ev, dlg)) {
+        this._closeConfirmDialog("cancel");
       }
-      this._confirmState = null;
+    }
+
+    _syncConfirmDialogTexts(t, actionLabel) {
+      if (!this.shadowRoot) return;
+      var dlg = this.shadowRoot.querySelector('[data-bind="confirmDialog"]');
+      if (!dlg) return;
+      var titleEl = dlg.querySelector('[data-bind="confirmDialogTitle"]');
+      var actEl = dlg.querySelector('[data-bind="confirmDialogAction"]');
+      var hintEl = dlg.querySelector('[data-bind="confirmDialogHint"]');
+      var cancelBtn = dlg.querySelector('[data-dialog-action="cancel"]');
+      var confirmBtn = dlg.querySelector('[data-dialog-action="confirm"]');
+      if (titleEl && titleEl.textContent !== t.confirmModalTitle) titleEl.textContent = t.confirmModalTitle;
+      if (actEl && typeof actionLabel === "string" && actEl.textContent !== actionLabel) actEl.textContent = actionLabel;
+      if (hintEl && hintEl.textContent !== t.confirmModalHint) hintEl.textContent = t.confirmModalHint;
+      if (cancelBtn && cancelBtn.textContent !== t.confirmCancel) cancelBtn.textContent = t.confirmCancel;
+      if (confirmBtn && confirmBtn.textContent !== t.confirmSend) confirmBtn.textContent = t.confirmSend;
+    }
+
+    _openConfirmDialog(spec, confirmKey, actionEl) {
+      if (!this.shadowRoot) return;
+      var dlg = this.shadowRoot.querySelector('[data-bind="confirmDialog"]');
+      if (!dlg) return;
+      this._bindDialogListeners();
+      var lang = getLang(this._hass);
+      var t = getTexts(lang);
+      var actionLabel = (spec && spec.confirmLabel)
+        ? String(spec.confirmLabel)
+        : ((actionEl && actionEl.textContent) ? actionEl.textContent.trim() : confirmKey);
+
+      this._pendingDialogAction = {
+        domain: spec.domain,
+        service: spec.service,
+        data: spec.data,
+        pendingKey: confirmKey,
+        confirmLabel: actionLabel,
+      };
+      this._dialogOutsidePress = false;
+      this._syncConfirmDialogTexts(t, actionLabel);
+
+      var isAlreadyOpen = Boolean(dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open")));
+      if (!isAlreadyOpen) {
+        if (typeof dlg.showModal === "function") {
+          try {
+            dlg.showModal();
+          } catch (e) {
+            dlg.setAttribute("open", "");
+          }
+        } else {
+          dlg.setAttribute("open", "");
+        }
+      }
+    }
+
+    _closeConfirmDialog(returnVal) {
+      this._pendingDialogAction = null;
+      this._dialogOutsidePress = false;
+      var dlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null;
+      if (!dlg) return;
+      var isOpen = Boolean(dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open")));
+      if (isOpen) {
+        if (typeof dlg.close === "function") {
+          try {
+            dlg.close(returnVal || "");
+          } catch (e) {
+            dlg.removeAttribute("open");
+          }
+        } else {
+          dlg.removeAttribute("open");
+        }
+      }
+      if ("returnValue" in dlg) dlg.returnValue = "";
+    }
+
+    _confirmPendingDialogAction() {
+      var pending = this._pendingDialogAction;
+      this._closeConfirmDialog("confirm");
+      if (pending && this._hass) {
+        this._callService(pending.domain, pending.service, pending.data, pending.pendingKey);
+      }
     }
 
     _triggerAction(actionId, actionEl) {
@@ -1630,24 +1922,8 @@
       if (!spec || !this._hass) return;
 
       var confirmKey = spec.confirmKey || actionId;
-      if (spec.sensitive) {
-        if (this._confirmState && this._confirmState.key === confirmKey) {
-          this._clearConfirm();
-          this._callService(spec.domain, spec.service, spec.data, confirmKey);
-          return;
-        }
-        this._clearConfirm();
-        var self = this;
-        this._confirmState = {
-          key: confirmKey,
-          expiresAt: Date.now() + CONFIRM_MS,
-        };
-        this._confirmTimer = setTimeout(function () {
-          self._confirmTimer = null;
-          self._confirmState = null;
-          if (self._hass) self._render(self._hass);
-        }, CONFIRM_MS);
-        this._render(this._hass);
+      if (spec.needsConfirm) {
+        this._openConfirmDialog(spec, confirmKey, actionEl);
         return;
       }
 
@@ -1667,17 +1943,20 @@
         Promise.resolve(this._hass.callService(domain, service, data)).then(
           function () {
             self._pendingKeys.delete(pendingKey);
+            self._lastCmdFeedback = { ok: true, ts: Date.now() };
             if (self._hass) self._render(self._hass);
           },
           function (err) {
             self._pendingKeys.delete(pendingKey);
             self._errorMsg = (err && err.message) ? String(err.message) : t.commandFailed;
+            self._lastCmdFeedback = { ok: false, ts: Date.now() };
             if (self._hass) self._render(self._hass);
           }
         );
       } catch (syncErr) {
         this._pendingKeys.delete(pendingKey);
         this._errorMsg = (syncErr && syncErr.message) ? String(syncErr.message) : t.commandFailed;
+        this._lastCmdFeedback = { ok: false, ts: Date.now() };
         this._render(this._hass);
       }
     }
@@ -1953,22 +2232,38 @@
         warns.push({ id: lock.id, text: t.ajarLocked, amber: true });
       }
 
+      var carActive = false;
+      if (schedDep && schedDep.s && !this._dead(schedDep.s)) {
+        var sdRawAttrs = schedDep.s.attributes || {};
+        if (typeof sdRawAttrs.attiva === "boolean") {
+          carActive = sdRawAttrs.attiva;
+        } else {
+          var sdStateStr = String(schedDep.s.state || "").trim();
+          carActive = Boolean(sdStateStr && sdStateStr !== "Disattivata");
+        }
+      }
+      var hasDaySwitches = Boolean(quickDep) || weekDays.some(function (wd) { return Boolean(wd.sw); });
+      var haHasActiveDep = hasDaySwitches
+        ? (this._isOn(quickDep) || weekDays.some(function (wd) { return self._isOn(wd.sw); }))
+        : Boolean(nextDep && nextDep.s && nextDep.s.attributes && nextDep.s.attributes.departure_at);
+
       // Build action map for the current render
       var actions = Object.create(null);
-      var regAction = function (actionId, domain, service, data, sensitive, confirmKey) {
+      var regAction = function (actionId, domain, service, data, needsConfirm, confirmKey, confirmLabel) {
         actions[actionId] = {
           domain: domain,
           service: service,
           data: data,
-          sensitive: Boolean(sensitive),
+          needsConfirm: Boolean(needsConfirm),
           confirmKey: confirmKey || actionId,
+          confirmLabel: confirmLabel || "",
         };
       };
 
       if (lock) {
         if (lockIsLocked) {
-          regAction("unlock", "lock", "unlock", { entity_id: lock.id }, true, "unlock");
-          regAction("quick_unlock", "lock", "unlock", { entity_id: lock.id }, true, "unlock");
+          regAction("unlock", "lock", "unlock", { entity_id: lock.id }, true, "unlock", t.unlock);
+          regAction("quick_unlock", "lock", "unlock", { entity_id: lock.id }, true, "unlock", t.unlock);
         } else {
           regAction("lock_now", "lock", "lock", { entity_id: lock.id }, false, "lock_now");
           regAction("quick_lock_now", "lock", "lock", { entity_id: lock.id }, false, "lock_now");
@@ -2002,8 +2297,8 @@
       if (trunk) {
         var trunkClosed = trunk.s && trunk.s.state === "closed";
         if (trunkClosed) {
-          regAction("trunk_open", "cover", "open_cover", { entity_id: trunk.id }, true, "trunk_open");
-          regAction("quick_trunk_open", "cover", "open_cover", { entity_id: trunk.id }, true, "trunk_open");
+          regAction("trunk_open", "cover", "open_cover", { entity_id: trunk.id }, true, "trunk_open", t.trunk + ": " + t.openCmd);
+          regAction("quick_trunk_open", "cover", "open_cover", { entity_id: trunk.id }, true, "trunk_open", t.trunk + ": " + t.openCmd);
         } else {
           regAction("trunk_close", "cover", "close_cover", { entity_id: trunk.id }, false, "trunk_close");
           regAction("quick_trunk_close", "cover", "close_cover", { entity_id: trunk.id }, false, "trunk_close");
@@ -2011,35 +2306,46 @@
       }
       if (windowsCov) {
         if (windowsCov.s && windowsCov.s.state === "closed") {
-          regAction("windows_open", "cover", "open_cover", { entity_id: windowsCov.id }, true, "windows_open");
+          regAction("windows_open", "cover", "open_cover", { entity_id: windowsCov.id }, true, "windows_open", t.windows + ": " + t.openCmd);
         } else {
           regAction("windows_close", "cover", "close_cover", { entity_id: windowsCov.id }, false, "windows_close");
         }
       }
       if (sunroofCov) {
         if (sunroofCov.s && sunroofCov.s.state === "closed") {
-          regAction("sunroof_open", "cover", "open_cover", { entity_id: sunroofCov.id }, true, "sunroof_open");
+          regAction("sunroof_open", "cover", "open_cover", { entity_id: sunroofCov.id }, true, "sunroof_open", t.sunroof + ": " + t.openCmd);
         } else {
           regAction("sunroof_close", "cover", "close_cover", { entity_id: sunroofCov.id }, false, "sunroof_close");
         }
       }
-      if (ventWinBtn) regAction("vent_windows", "button", "press", { entity_id: ventWinBtn.id }, true, "vent_windows");
-      if (ventSunBtn) regAction("vent_sunroof", "button", "press", { entity_id: ventSunBtn.id }, true, "vent_sunroof");
+      if (ventWinBtn) regAction("vent_windows", "button", "press", { entity_id: ventWinBtn.id }, true, "vent_windows", t.ventWindows);
+      if (ventSunBtn) regAction("vent_sunroof", "button", "press", { entity_id: ventSunBtn.id }, true, "vent_sunroof", t.ventSunroof);
       if (alarmSw) {
-        var alarmSvc = this._isOn(alarmSw) ? "turn_off" : "turn_on";
-        regAction("alarm_toggle", "switch", alarmSvc, { entity_id: alarmSw.id }, true, "alarm_toggle");
+        var alarmOnNow = this._isOn(alarmSw);
+        var alarmSvc = alarmOnNow ? "turn_off" : "turn_on";
+        regAction("alarm_toggle", "switch", alarmSvc, { entity_id: alarmSw.id }, true, "alarm_toggle", t.alarm + ": " + (alarmOnNow ? t.off : t.on));
       }
-      if (remoteStartBtn) regAction("remote_start", "button", "press", { entity_id: remoteStartBtn.id }, true, "remote_start");
+      if (remoteStartBtn) regAction("remote_start", "button", "press", { entity_id: remoteStartBtn.id }, true, "remote_start", t.remoteStart);
       if (flashBtn) {
-        regAction("flash_lights", "button", "press", { entity_id: flashBtn.id }, false, "flash_lights");
-        regAction("sec_flash_lights", "button", "press", { entity_id: flashBtn.id }, false, "flash_lights");
+        regAction("flash_lights", "button", "press", { entity_id: flashBtn.id }, true, "flash_lights", t.flashLights);
+        regAction("sec_flash_lights", "button", "press", { entity_id: flashBtn.id }, true, "flash_lights", t.flashLights);
       }
-      if (wakeBtn) regAction("wake_car", "button", "press", { entity_id: wakeBtn.id }, false, "wake_car");
-      if (refreshLocBtn) regAction("refresh_location", "button", "press", { entity_id: refreshLocBtn.id }, false, "refresh_location");
-      if (refreshFullBtn) regAction("refresh_full", "button", "press", { entity_id: refreshFullBtn.id }, false, "refresh_full");
-      if (locateBtn) regAction("locate_gps", "button", "press", { entity_id: locateBtn.id }, false, "locate_gps");
-      if (applySchedBtn) regAction("apply_charging_schedule", "button", "press", { entity_id: applySchedBtn.id }, false, "apply_charging_schedule");
-      if (applyDepBtn) regAction("apply_departure_schedule", "button", "press", { entity_id: applyDepBtn.id }, false, "apply_departure_schedule");
+      if (wakeBtn) regAction("wake_car", "button", "press", { entity_id: wakeBtn.id }, true, "wake_car", t.wakeCar);
+      if (refreshLocBtn) regAction("refresh_location", "button", "press", { entity_id: refreshLocBtn.id }, true, "refresh_location", t.refreshLoc);
+      if (refreshFullBtn) regAction("refresh_full", "button", "press", { entity_id: refreshFullBtn.id }, true, "refresh_full", t.refreshFull);
+      if (locateBtn) regAction("locate_gps", "button", "press", { entity_id: locateBtn.id }, true, "locate_gps", t.locateGps);
+      if (applySchedBtn) regAction("apply_charging_schedule", "button", "press", { entity_id: applySchedBtn.id }, true, "apply_charging_schedule", t.applySchedule);
+      if (applyDepBtn) {
+        regAction(
+          "apply_departure_schedule",
+          "button",
+          "press",
+          { entity_id: applyDepBtn.id },
+          true,
+          "apply_departure_schedule",
+          haHasActiveDep ? t.applyDeparture : t.disableOnCar
+        );
+      }
 
       var regSwitchToggle = function (actionId, ent) {
         if (!ent) return;
@@ -2101,6 +2407,11 @@
         var activeEl = this.shadowRoot.activeElement;
         var activeUid = activeEl && activeEl.getAttribute ? activeEl.getAttribute("data-uid") : null;
         var activeVal = (activeEl && activeEl.tagName === "INPUT") ? activeEl.value : null;
+
+        this._closeConfirmDialog();
+        this._unbindDialogListeners();
+        this._pendingDialogAction = null;
+        this._dialogOutsidePress = false;
 
         this.shadowRoot.innerHTML = this._buildSkeletonHtml({
           lang: lang,
@@ -2182,8 +2493,9 @@
           }
         }
       }
+      this._bindDialogListeners();
 
-      // Always patch live values, classes, SVG offsets, confirm states, and non-focused inputs
+      // Always patch live values, classes, SVG offsets, pending states, and non-focused inputs
       this._applyBindings(hass, {
         lang: lang,
         t: t,
@@ -2239,6 +2551,8 @@
         syncCharge: syncCharge,
         depCliMode: depCliMode,
         applyDepBtn: applyDepBtn,
+        carActive: carActive,
+        haHasActiveDep: haHasActiveDep,
         allowedClimateExtras: allowedClimateExtras,
         batteryHeat: batteryHeat,
         batteryHeatTime: batteryHeatTime,
@@ -2747,6 +3061,17 @@
             chargingHtml +
             securityHtml +
           "</div>" +
+          '<dialog class="confirm-dialog" data-bind="confirmDialog" aria-labelledby="lp-confirm-title">' +
+            '<div class="confirm-dialog-body">' +
+              '<h2 id="lp-confirm-title" class="confirm-dialog-title" data-bind="confirmDialogTitle">' + self._h(t.confirmModalTitle) + "</h2>" +
+              '<p class="confirm-dialog-action" data-bind="confirmDialogAction"></p>' +
+              '<p class="confirm-dialog-hint" data-bind="confirmDialogHint">' + self._h(t.confirmModalHint) + "</p>" +
+              '<div class="confirm-dialog-actions">' +
+                '<button type="button" class="ctrl-btn" data-dialog-action="cancel" data-bind="confirmDialogCancel" autofocus>' + self._h(t.confirmCancel) + "</button>" +
+                '<button type="button" class="ctrl-btn is-primary" data-dialog-action="confirm" data-bind="confirmDialogConfirm">' + self._h(t.confirmSend) + "</button>" +
+              "</div>" +
+            "</div>" +
+          "</dialog>" +
         "</ha-card>";
     }
 
@@ -2756,30 +3081,17 @@
       btn.setAttribute("data-confirm-key", confirmKey);
       var ico = iconName || (btn.getAttribute ? btn.getAttribute("data-icon") : "") || "";
       if (iconName) btn.setAttribute("data-icon", iconName);
-      var isConfirming = Boolean(this._confirmState && this._confirmState.key === confirmKey);
       var isPending = this._pendingKeys.has(confirmKey);
 
-      btn.classList.remove("is-primary", "is-emerald", "is-glacier", "is-amber", "is-confirming", "is-pending");
+      btn.classList.remove("is-primary", "is-emerald", "is-glacier", "is-amber", "is-pending");
       if (variantClass) btn.classList.add(variantClass);
       if (isPending) btn.classList.add("is-pending");
       btn.disabled = isPending;
 
-      var sig;
-      if (isConfirming) {
-        btn.setAttribute("data-confirming", "true");
-        btn.classList.add("is-confirming");
-        sig = ico + "|" + t.confirm + "|1";
-        if (btn.getAttribute("data-btn-sig") !== sig) {
-          btn.setAttribute("data-btn-sig", sig);
-          btn.innerHTML = (ico ? svgIcon(ico, "btn-ico") : "") + "<span>" + this._h(t.confirm) + '</span><span class="confirm-bar"></span>';
-        }
-      } else {
-        btn.removeAttribute("data-confirming");
-        sig = ico + "|" + label + "|0";
-        if (btn.getAttribute("data-btn-sig") !== sig) {
-          btn.setAttribute("data-btn-sig", sig);
-          btn.innerHTML = (ico ? svgIcon(ico, "btn-ico") : "") + "<span>" + this._h(label) + "</span>";
-        }
+      var sig = ico + "|" + label;
+      if (btn.getAttribute("data-btn-sig") !== sig) {
+        btn.setAttribute("data-btn-sig", sig);
+        btn.innerHTML = (ico ? svgIcon(ico, "btn-ico") : "") + "<span>" + this._h(label) + "</span>";
       }
     }
 
@@ -3084,11 +3396,17 @@
       }
       var cmdBadge = root.querySelector('[data-bind="cmdResultBadge"]');
       if (cmdBadge) {
-        if (vm.cmdResult && !this._dead(vm.cmdResult.s)) {
+        var cmdStateAlive = (vm.cmdResult && !this._dead(vm.cmdResult.s)) ? vm.cmdResult.s : null;
+        var outcome = formatCommandOutcome(cmdStateAlive, this._lastCmdFeedback, vm.lang);
+        if (outcome) {
           cmdBadge.classList.remove("hidden");
-          cmdBadge.textContent = vm.cmdResult.s.state;
+          cmdBadge.classList.toggle("is-emerald", Boolean(outcome.ok));
+          cmdBadge.classList.toggle("is-coral", !outcome.ok);
+          cmdBadge.textContent = outcome.text;
         } else {
           cmdBadge.classList.add("hidden");
+          cmdBadge.classList.remove("is-emerald", "is-coral");
+          cmdBadge.textContent = "";
         }
       }
       var extraValEls = root.querySelectorAll("[data-extra-entity]");
@@ -3334,8 +3652,19 @@
       if (chgDurEl && vm.chgDur) chgDurEl.textContent = this._dead(vm.chgDur.s) ? "—" : this._disp(vm.chgDur.s);
 
       // Departures
+      var carActive = Boolean(vm.carActive);
+      var haHasActiveDep = Boolean(vm.haHasActiveDep);
+
       var nextDepEl = root.querySelector('[data-bind="nextDepText"]');
-      if (nextDepEl && vm.nextDep) nextDepEl.textContent = this._dead(vm.nextDep.s) ? "—" : vm.nextDep.s.state;
+      if (nextDepEl && vm.nextDep) {
+        if (this._dead(vm.nextDep.s)) {
+          nextDepEl.textContent = "—";
+        } else if (!haHasActiveDep && carActive) {
+          nextDepEl.textContent = t.departureActive;
+        } else {
+          nextDepEl.textContent = vm.nextDep.s.state;
+        }
+      }
       var depHintEl = root.querySelector('[data-bind="depChargeHint"]');
       if (depHintEl) {
         var pStart = vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes && vm.nextDep.s.attributes.planned_charge_start;
@@ -3376,33 +3705,24 @@
       }
 
       // Car scheduled departure readout & adaptive Apply/Disable on car button
-      var carActive = false;
-      if (vm.schedDep && vm.schedDep.s && !this._dead(vm.schedDep.s)) {
-        var sdRawAttrs = vm.schedDep.s.attributes || {};
-        if (typeof sdRawAttrs.attiva === "boolean") {
-          carActive = sdRawAttrs.attiva;
-        } else {
-          var sdStateStr = String(vm.schedDep.s.state || "").trim();
-          carActive = Boolean(sdStateStr && sdStateStr !== "Disattivata");
-        }
-      }
       var schedDepTxt = root.querySelector('[data-bind="schedDepText"]');
       if (schedDepTxt && vm.schedDep) {
         if (this._dead(vm.schedDep.s)) {
           schedDepTxt.textContent = "—";
         } else if (carActive) {
           var sdAttrsActive = vm.schedDep.s.attributes || {};
-          schedDepTxt.textContent = sdAttrsActive.riepilogo
-            ? String(sdAttrsActive.riepilogo)
-            : (sdAttrsActive.orario ? String(sdAttrsActive.orario) : String(vm.schedDep.s.state));
+          var rawOrario = sdAttrsActive.orario
+            ? String(sdAttrsActive.orario)
+            : (typeof vm.schedDep.s.state === "string" && /^\d{1,2}:\d{2}$/.test(vm.schedDep.s.state.trim())
+              ? vm.schedDep.s.state.trim()
+              : "");
+          schedDepTxt.textContent = rawOrario
+            ? formatCarNextDeparture(rawOrario, sdAttrsActive.giorni, new Date(), t)
+            : (sdAttrsActive.riepilogo ? String(sdAttrsActive.riepilogo) : String(vm.schedDep.s.state));
         } else {
           schedDepTxt.textContent = t.noScheduledDeparture;
         }
       }
-      var hasDaySwitches = Boolean(vm.quickDep) || vm.weekDays.some(function (wd) { return Boolean(wd.sw); });
-      var haHasActiveDep = hasDaySwitches
-        ? (this._isOn(vm.quickDep) || vm.weekDays.some(function (wd) { return self._isOn(wd.sw); }))
-        : Boolean(vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes && vm.nextDep.s.attributes.departure_at);
       var applyDepBtnEl = root.querySelector('[data-bind="applyDepBtn"]');
       if (applyDepBtnEl && vm.applyDepBtn) {
         if (haHasActiveDep) {
@@ -3554,6 +3874,9 @@
         else if (st === "not_home") trkEl.textContent = t.away;
         else trkEl.textContent = this._dead(vm.tracker.s) ? "—" : st;
       }
+      if (this._pendingDialogAction) {
+        this._syncConfirmDialogTexts(t, this._pendingDialogAction.confirmLabel);
+      }
     }
   }
 
@@ -3563,11 +3886,13 @@
     COLOR_ALIASES: Object.assign({}, COLOR_ALIASES),
     VALID_TABS: VALID_TABS.slice(),
     VALID_LAYOUTS: VALID_LAYOUTS.slice(),
+    CONFIRM_ACTIONS: CONFIRM_ACTIONS,
     resolveColor: resolveColor,
     resolveHeroImage: resolveHeroImage,
     sanitizeUrl: sanitizeUrl,
     escapeHtml: escapeHtml,
-    isSensitiveAction: isSensitiveAction,
+    requiresConfirmation: requiresConfirmation,
+    formatCommandOutcome: formatCommandOutcome,
     getTexts: getTexts,
     formatMetric: formatMetric,
     translateOption: translateOption,
@@ -3577,6 +3902,7 @@
     ALLOWED_CLIMATE_EXTRAS: ALLOWED_CLIMATE_EXTRAS.slice(),
     filterAllowedClimateExtras: filterAllowedClimateExtras,
     computeToggleClimateExtras: computeToggleClimateExtras,
+    formatCarNextDeparture: formatCarNextDeparture,
     svgIcon: svgIcon,
   };
 

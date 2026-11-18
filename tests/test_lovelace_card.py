@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -123,10 +123,10 @@ def test_hero_png_assets_exist_valid_and_tracked() -> None:
 
 
 def test_card_version_and_matte_titanium_design_tokens() -> None:
-    """Verify v1.21.2 cache-busting query, customCards tag, and Matte Titanium OEM tokens."""
+    """Verify v1.22.0 cache-busting query, customCards tag, and Matte Titanium OEM tokens."""
     source = CARD_JS.read_text(encoding="utf-8")
 
-    assert re.search(r"\?v=1\.21\.2\b", source), "Expected ?v=1.21.2 cache-busting query in lepas-card.js"
+    assert re.search(r"\?v=1\.22\.0\b", source), "Expected ?v=1.22.0 cache-busting query in lepas-card.js"
     assert re.search(r"\?v=\d+\.\d+\.\d+\b", source), "Expected semver ?v=X.Y.Z query in lepas-card.js"
     assert 'type: "lepas-card"' in source, "window.customCards must register type: 'lepas-card' (no custom: prefix)"
     assert ":host-context" not in source, "lepas-card.js must NOT use :host-context()"
