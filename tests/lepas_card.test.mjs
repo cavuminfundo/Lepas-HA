@@ -881,13 +881,13 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   assert.ok(h, "LepasCard._helpers must be exposed");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.21.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.21.1");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.21.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.21.1`
     );
   }
 
@@ -906,7 +906,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.21.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.21.1`
     );
   }
 
@@ -1893,4 +1893,60 @@ test("v1.21.0 IT/EN/NL i18n labels for native departure, battery heat, and all 1
   }
   assert.notEqual(h.getTexts("it").batteryPreheat, h.getTexts("en").batteryPreheat);
   assert.notEqual(h.getTexts("en").batteryPreheat, h.getTexts("nl").batteryPreheat);
+});
+
+test("v1.21.1 Compact departure panel: unified header, compact summary, 2-col sorted seat climate extras", () => {
+  const hass = makeFullHass({
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", {
+      allowed_climate_extras: [
+        "windshield_defog",
+        "passenger_seat_ventilation",
+        "driver_seat_heating",
+        "rear_window_heating",
+        "passenger_seat_heating",
+        "driver_seat_ventilation",
+      ],
+      climate_extras: [],
+    }),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      riepilogo: "06:35 · lun, mar, mer, gio, ven, sab, dom",
+      synced_with_ha: false,
+    }),
+    "switch.lepas_native_departure_sync": makeState("switch.lepas_native_departure_sync", "off"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it");
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hass);
+  const depSurface = card.shadowRoot.querySelector('[data-bind="depSurface"]');
+  assert.ok(depSurface, "Departure surface must expose data-bind='depSurface'");
+
+  // Unified header: depSyncBadge sits inside the top depSurface header
+  const topHdr = depSurface.querySelector(".sec-hdr");
+  assert.ok(topHdr && topHdr.querySelector('[data-bind="depSyncBadge"]'), "depSyncBadge must live in the unified top departure header");
+
+  // Compact summary holds both nextDepText and schedDepText inside one .dep-summary container
+  const summary = depSurface.querySelector(".dep-summary");
+  assert.ok(summary, "Departure summary must group nextDep and schedDep into .dep-summary");
+  assert.ok(summary.querySelector('[data-bind="nextDepText"]'));
+  assert.ok(summary.querySelector('[data-bind="schedDepText"]'));
+
+  // 2-column grid with canonical seat-first ordering and explicit seat labels
+  const grid = depSurface.querySelector(".climate-extras-grid");
+  assert.ok(grid, "Climate extras must render inside .climate-extras-grid");
+  const keys = Array.from(grid.querySelectorAll("[data-climate-extra]")).map((el) => el.getAttribute("data-climate-extra"));
+  assert.deepEqual(keys, [
+    "driver_seat_heating",
+    "driver_seat_ventilation",
+    "passenger_seat_heating",
+    "passenger_seat_ventilation",
+    "rear_window_heating",
+    "windshield_defog",
+  ]);
+  const driverHeatLbl = grid.querySelector('[data-climate-extra="driver_seat_heating"] span').textContent.toLowerCase();
+  assert.ok(driverHeatLbl.includes("sedile"), `Expected 'sedile' in Italian seat label, got: ${driverHeatLbl}`);
+
+  const h = LepasCard._helpers;
+  assert.ok(h.getTexts("en").climateExtraLabels.driver_seat_heating.toLowerCase().includes("seat"));
+  assert.ok(h.getTexts("nl").climateExtraLabels.driver_seat_heating.toLowerCase().includes("stoel"));
 });

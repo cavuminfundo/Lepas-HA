@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.21.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.21.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.21.0";
+  var CARD_VERSION = "1.21.1";
   var CONFIRM_MS = 4000;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -83,13 +83,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.21.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.21.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.21.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.21.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.21.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.21.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.21.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.21.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.21.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.21.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.21.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.21.1";
 
   var SENSITIVE_ACTIONS = {
     unlock: true,
@@ -238,14 +238,14 @@
       syncBatteryHeat: "Allinea alla partenza",
       batteryHeatHint: "Avvio batteria",
       climateExtraLabels: {
-        driver_seat_heating: "Risc. guida",
-        driver_seat_ventilation: "Vent. guida",
-        passenger_seat_heating: "Risc. pass.",
-        passenger_seat_ventilation: "Vent. pass.",
-        rear_left_seat_heating: "Risc. post. SX",
-        rear_left_seat_ventilation: "Vent. post. SX",
-        rear_right_seat_heating: "Risc. post. DX",
-        rear_right_seat_ventilation: "Vent. post. DX",
+        driver_seat_heating: "Sedile guida caldo",
+        driver_seat_ventilation: "Sedile guida aria",
+        passenger_seat_heating: "Sedile pass. caldo",
+        passenger_seat_ventilation: "Sedile pass. aria",
+        rear_left_seat_heating: "Sed. post. SX caldo",
+        rear_left_seat_ventilation: "Sed. post. SX aria",
+        rear_right_seat_heating: "Sed. post. DX caldo",
+        rear_right_seat_ventilation: "Sed. post. DX aria",
         rear_window_heating: "Lunotto termico",
         windshield_defrost: "Sbrina parabrezza",
         windshield_defog: "Disappanna vetro",
@@ -397,14 +397,14 @@
       syncBatteryHeat: "Align to departure",
       batteryHeatHint: "Battery heat",
       climateExtraLabels: {
-        driver_seat_heating: "Driver heat",
-        driver_seat_ventilation: "Driver vent",
-        passenger_seat_heating: "Pass. heat",
-        passenger_seat_ventilation: "Pass. vent",
-        rear_left_seat_heating: "Rear L heat",
-        rear_left_seat_ventilation: "Rear L vent",
-        rear_right_seat_heating: "Rear R heat",
-        rear_right_seat_ventilation: "Rear R vent",
+        driver_seat_heating: "Driver seat heat",
+        driver_seat_ventilation: "Driver seat vent",
+        passenger_seat_heating: "Pass. seat heat",
+        passenger_seat_ventilation: "Pass. seat vent",
+        rear_left_seat_heating: "Rear L seat heat",
+        rear_left_seat_ventilation: "Rear L seat vent",
+        rear_right_seat_heating: "Rear R seat heat",
+        rear_right_seat_ventilation: "Rear R seat vent",
         rear_window_heating: "Rear defrost",
         windshield_defrost: "Windshield defrost",
         windshield_defog: "Windshield defog",
@@ -556,14 +556,14 @@
       syncBatteryHeat: "Afstemmen op vertrek",
       batteryHeatHint: "Accu start",
       climateExtraLabels: {
-        driver_seat_heating: "Best. verw.",
-        driver_seat_ventilation: "Best. vent.",
-        passenger_seat_heating: "Pass. verw.",
-        passenger_seat_ventilation: "Pass. vent.",
-        rear_left_seat_heating: "Achter L verw.",
-        rear_left_seat_ventilation: "Achter L vent.",
-        rear_right_seat_heating: "Achter R verw.",
-        rear_right_seat_ventilation: "Achter R vent.",
+        driver_seat_heating: "Stoel best. verw.",
+        driver_seat_ventilation: "Stoel best. vent.",
+        passenger_seat_heating: "Stoel pass. verw.",
+        passenger_seat_ventilation: "Stoel pass. vent.",
+        rear_left_seat_heating: "Stoel A-L verw.",
+        rear_left_seat_ventilation: "Stoel A-L vent.",
+        rear_right_seat_heating: "Stoel A-R verw.",
+        rear_right_seat_ventilation: "Stoel A-R vent.",
         rear_window_heating: "Achterruit",
         windshield_defrost: "Voorruit ontdooien",
         windshield_defog: "Voorruit ontwasemen",
@@ -982,7 +982,14 @@
       ".day-time { font-size: 0.62rem; font-weight: 600; color: var(--lp-text-secondary); line-height: 1; min-height: 0.75em; }",
       ".day-chip.is-enabled .day-time { color: var(--lp-emerald); }",
       ".day-editor { background: var(--lp-elevated); border: 1px solid var(--lp-border-strong); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }",
-      ".dep-subbox { border-top: 1px solid var(--lp-border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }",
+      ".dep-hdr-badges { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }",
+      ".dep-summary { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; overflow: hidden; }",
+      ".dep-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; min-height: 36px; cursor: pointer; font-size: 0.81rem; }",
+      ".dep-summary-row + .dep-summary-row { border-top: 1px solid var(--lp-border); }",
+      ".dep-summary-row:hover { background: var(--lp-elevated-hover); }",
+      ".dep-subbox { border-top: 1px solid var(--lp-border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }",
+      ".climate-extras-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }",
+      ".climate-extra-chip { width: 100%; justify-content: flex-start; text-align: left; font-size: 0.75rem; line-height: 1.2; padding: 6px 8px; }",
       ".chip-btn.is-pending { opacity: 0.58; cursor: wait; }",
       ".climate-extra-chip.is-active { background: #2A313D; color: var(--lp-emerald); border-color: rgba(52, 211, 153, 0.55); }",
       ".bp-stage { display: grid; grid-template-columns: minmax(88px, 1fr) minmax(108px, 124px) minmax(88px, 1fr); gap: 8px; align-items: center; }",
@@ -1216,7 +1223,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.21.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.21.1">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -2572,29 +2579,30 @@
         "</div>"
       ) : "";
 
-      var depNativeHtml = (ctx.nativeDepSync || ctx.applyDepBtn || ctx.schedDep) ? (
-        '<div class="dep-subbox" data-bind="depNativeBox">' +
-          '<div class="sec-hdr">' +
-            '<span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.nativeDepartureTitle) + "</span></span>" +
-            (ctx.schedDep ? '<span class="badge hidden" data-bind="depSyncBadge"></span>' : "") +
-          "</div>" +
-          (ctx.schedDep
-            ? '<div class="info-row" role="button" tabindex="0" data-e="' + self._h(ctx.schedDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.carDeparturePlan) + '</span></span><span class="info-val num" data-bind="schedDepText"></span></div>'
-            : "") +
-          ((ctx.nativeDepSync || ctx.applyDepBtn)
-            ? '<div class="btn-row">' +
-                (ctx.nativeDepSync ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="native_departure_sync_toggle" data-confirm-key="native_departure_sync_toggle" data-bind="nativeDepSyncBtn"></button>' : "") +
-                (ctx.applyDepBtn ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_departure_schedule" data-confirm-key="apply_departure_schedule" data-bind="applyDepBtn"></button>' : "") +
-              "</div>"
-            : "") +
+      var depSummaryHtml = (ctx.nextDep || ctx.schedDep) ? (
+        '<div class="dep-summary">' +
+          (ctx.nextDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.nextDeparture) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
+          (ctx.schedDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.schedDep.id) + '"><span class="meta-inline">' + svgIcon("calendar", "meta-ico") + "<span>" + self._h(t.carDeparturePlan) + '</span></span><span class="info-val num" data-bind="schedDepText"></span></div>' : "") +
         "</div>"
       ) : "";
 
-      var depExtrasHtml = (ctx.allowedClimateExtras && ctx.allowedClimateExtras.length) ? (
+      var depSyncBtnsHtml = (ctx.nativeDepSync || ctx.applyDepBtn) ? (
+        '<div class="btn-row">' +
+          (ctx.nativeDepSync ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="native_departure_sync_toggle" data-confirm-key="native_departure_sync_toggle" data-bind="nativeDepSyncBtn"></button>' : "") +
+          (ctx.applyDepBtn ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_departure_schedule" data-confirm-key="apply_departure_schedule" data-bind="applyDepBtn"></button>' : "") +
+        "</div>"
+      ) : "";
+
+      var sortedClimateExtras = (ctx.allowedClimateExtras && ctx.allowedClimateExtras.length)
+        ? ctx.allowedClimateExtras.slice().sort(function (a, b) {
+            return ALLOWED_CLIMATE_EXTRAS.indexOf(a) - ALLOWED_CLIMATE_EXTRAS.indexOf(b);
+          })
+        : [];
+      var depExtrasHtml = sortedClimateExtras.length ? (
         '<div class="dep-subbox" data-bind="depExtrasBox">' +
           '<div class="sec-hdr"><span>' + self._h(t.depClimateExtras) + "</span></div>" +
-          '<div class="chip-row" role="group" aria-label="' + self._h(t.depClimateExtras) + '">' +
-            ctx.allowedClimateExtras.map(function (extraKey) {
+          '<div class="climate-extras-grid" role="group" aria-label="' + self._h(t.depClimateExtras) + '">' +
+            sortedClimateExtras.map(function (extraKey) {
               var meta = CLIMATE_EXTRA_META[extraKey];
               var extraLbl = (t.climateExtraLabels && t.climateExtraLabels[extraKey])
                 ? t.climateExtraLabels[extraKey]
@@ -2630,9 +2638,15 @@
       );
 
       var depHtml = hasDepSection ? (
-        '<div class="surface">' +
-          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.departures) + '</span></span><span class="badge hidden num" data-bind="depChargeHint"></span></div>' +
-          (ctx.nextDep ? '<div class="info-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.nextDeparture) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
+        '<div class="surface" data-bind="depSurface">' +
+          '<div class="sec-hdr">' +
+            '<span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.departures) + "</span></span>" +
+            '<span class="dep-hdr-badges">' +
+              (ctx.schedDep ? '<span class="badge hidden" data-bind="depSyncBadge"></span>' : "") +
+              '<span class="badge hidden num" data-bind="depChargeHint"></span>' +
+            "</span>" +
+          "</div>" +
+          depSummaryHtml +
           ((ctx.quickDep || ctx.quickDepTime)
             ? '<div class="btn-row">' +
                 (ctx.quickDep ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="quick_departure_toggle" data-confirm-key="quick_departure_toggle" data-bind="quickDepBtn"></button>' : "") +
@@ -2646,7 +2660,7 @@
                   "<span>" + self._h(wd.letter) + '</span><span class="day-dot"></span><span class="day-time num" data-day-time="' + wd.slug + '"></span></button>';
               }).join("") + "</div>" + dayEditorHtml
             : "") +
-          depNativeHtml +
+          depSyncBtnsHtml +
           depExtrasHtml +
           batteryHeatHtml +
         "</div>"

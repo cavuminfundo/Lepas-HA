@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.21.1 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Compact Scheduled Departure Panel & Clear Seat Labels (`custom:lepas-card`)**: Unified the *Scheduled departures* header with the `synced_with_ha` badge, grouped *Next departure* and *Car schedule* into a single compact `.dep-summary` box, moved the sync controls cleanly beneath the weekday chips, arranged *Departure climate extras* into a canonically ordered 2-column `.climate-extras-grid`, and clarified seat heating/ventilation chip labels across IT/EN/NL (`Sedile guida caldo`, `Driver seat heat`, `Stoel best. verw.`, etc.), bumping `?v=1.21.1`.
+
+### 🇮🇹 Italiano
+
+- **Pannello Partenze Programmate Compatto & Etichette Esplicite Sedili (`custom:lepas-card`)**: Unificata l'intestazione *Partenze programmate* con il badge di sincronia `synced_with_ha`, raccolti *Prossima partenza* e *Piano su auto* in un unico riquadro compatto `.dep-summary`, integrati i pulsanti *Sync su auto* e *Applica partenza* sotto i giorni `L–D`, ordinati gli *Extra clima alla partenza* in una griglia simmetrica a 2 colonne `.climate-extras-grid` con etichette esplicite per i sedili in IT/EN/NL (`Sedile guida caldo/aria`, `Sedile pass. caldo/aria`, ecc.) e query anti-cache `?v=1.21.1`.
+
 ## v1.21.0 — 2026-11-18
 
 ### 🇬🇧 English
