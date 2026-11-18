@@ -424,6 +424,11 @@ class MiniNodeContainer {
     for (const child of [...this.childNodes]) this.removeChild(child);
     for (const n of nodes) this.appendChild(n);
   }
+  getRootNode() {
+    let cur = this;
+    while (cur.parentNode) cur = cur.parentNode;
+    return cur;
+  }
   addEventListener(type, fn) {
     if (!this._listeners[type]) this._listeners[type] = [];
     this._listeners[type].push(fn);
@@ -520,6 +525,9 @@ class MiniElement extends MiniNodeContainer {
     this.returnValue = "";
     this.clientWidth = 400;
     this.offsetWidth = 400;
+    this.scrollTop = 0;
+    this.scrollHeight = 0;
+    this.clientHeight = 0;
   }
   get open() {
     return this.hasAttribute("open");
@@ -903,16 +911,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.22.0");
+  assert.equal(h.CARD_VERSION, "1.22.1");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.22.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.22.1");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.22.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.22.1`
     );
   }
 
@@ -931,7 +939,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.22.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.22.1`
     );
   }
 
@@ -2313,4 +2321,78 @@ test("v1.22.0 formatCommandOutcome and cmdResultBadge concise outcome in IT/EN/N
   assert.equal(badgeUnavail.classList.contains("is-coral"), false);
   assert.ok(badgeUnavail.textContent.startsWith("Ultimo comando · "));
   assert.ok(badgeUnavail.textContent.endsWith("✓"));
+});
+
+test("v1.22.1 stopPropagation on internal controls, incremental dayEditor without rebuild, scrollTop preservation, overflow-anchor", async () => {
+  const hass = makeFullHass({
+    "switch.lepas_sync_charge_to_departure": makeState("switch.lepas_sync_charge_to_departure", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", {
+      climate_extras: ["driver_seat_heating"],
+      allowed_climate_extras: ["driver_seat_heating", "steering_wheel_heating"],
+    }),
+  }, "it");
+
+  const outerHost = new MiniElement("div");
+  outerHost.scrollHeight = 1400;
+  outerHost.clientHeight = 600;
+  outerHost.scrollTop = 360;
+  const outerShadow = outerHost.attachShadow({ mode: "open" });
+  const wrapper = new MiniElement("div");
+  outerShadow.appendChild(wrapper);
+
+  const card = createCard({ layout: "compact", default_tab: "overview" }, hass);
+  wrapper.appendChild(card);
+
+  let leakedClicks = 0;
+  outerHost.addEventListener("click", () => { leakedClicks += 1; });
+
+  // 1. overflow-anchor: none on :host and ha-card
+  const styleText = card.shadowRoot.querySelector("style")?.textContent || "";
+  assert.match(styleText, /:host\s*\{[^}]*overflow-anchor:\s*none/);
+  assert.match(styleText, /ha-card\s*\{[^}]*overflow-anchor:\s*none/);
+
+  // 2. stopPropagation on tabEl, dayChip, chgDayEl, chgPresetEl, chgModeEl, cliExtraEl
+  card.shadowRoot.querySelector('[data-tab="charging"]').click();
+  card.shadowRoot.querySelector('[data-day-chip="fri"]').click();
+  card.shadowRoot.querySelector('[data-charge-day="2"]').click();
+  card.shadowRoot.querySelector('[data-charge-preset="weekdays"]').click();
+  card.shadowRoot.querySelector('[data-charge-mode="departure"]').click();
+  card.shadowRoot.querySelector('[data-climate-extra="steering_wheel_heating"]').click();
+  assert.equal(leakedClicks, 0, "Internal card clicks must NOT propagate out of shadow DOM");
+
+  // 3. Incremental dayEditor toggle (same ha-card & editor node reference, zero innerHTML rebuild)
+  const haCardBefore = card.shadowRoot.querySelector("ha-card");
+  const friEditor = card.shadowRoot.querySelector('[data-day-editor="fri"]');
+  const monEditor = card.shadowRoot.querySelector('[data-day-editor="mon"]');
+  assert.ok(friEditor && monEditor, "Day editor panels must be pre-mounted");
+  assert.equal(friEditor.classList.contains("hidden"), false, "Expanded fri editor must be visible");
+  assert.equal(monEditor.classList.contains("hidden"), true, "Collapsed mon editor must stay hidden");
+
+  card.shadowRoot.querySelector('[data-day-chip="mon"]').click();
+  assert.equal(card.shadowRoot.querySelector("ha-card"), haCardBefore, "dayChip toggle must NOT rebuild ha-card DOM");
+  assert.equal(friEditor.classList.contains("hidden"), true);
+  assert.equal(monEditor.classList.contains("hidden"), false);
+
+  card.shadowRoot.querySelector('[data-day-chip="mon"]').click();
+  assert.equal(monEditor.classList.contains("hidden"), true);
+
+  // 4. scrollTop preserved across Shadow DOM ancestor even when innerHTML resets scrollTop
+  let proto = card.shadowRoot;
+  let targetDesc = null;
+  while (proto && !targetDesc) {
+    targetDesc = Object.getOwnPropertyDescriptor(proto, "innerHTML");
+    proto = Object.getPrototypeOf(proto);
+  }
+  Object.defineProperty(card.shadowRoot, "innerHTML", {
+    configurable: true,
+    get() { return targetDesc.get.call(this); },
+    set(v) {
+      targetDesc.set.call(this, v);
+      outerHost.scrollTop = 0; // Simulate browser resetting ancestor scroll on DOM wipe
+    },
+  });
+  outerHost.scrollTop = 415;
+  card.hass = makeFullHass({}, "en"); // Triggers structKey rebuild
+  assert.equal(outerHost.scrollTop, 415, "scrollTop of Shadow DOM scrollable ancestor must be preserved across _render");
+  await Promise.resolve();
 });

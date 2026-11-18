@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.22.1 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Scroll Preservation & Incremental Day Editor (`custom:lepas-card`)**: Added `ev.stopPropagation()` on internal controls (`tab`, `day-chip`, `charge-day`, `charge-preset`, `charge-mode`, `climate-extra`), removed `_expandedDay` from `structKey` so toggling weekday chips updates `.day-editor` incrementally without rebuilding `shadowRoot.innerHTML`, preserved `scrollTop` of the nearest scrollable ancestor across Shadow DOM boundaries (`getRootNode().host`) around `_render` and `_applyBindings` (with `focus({ preventScroll: true })`), and added `overflow-anchor: none` on `:host` and `ha-card`, bumping `?v=1.22.1`.
+
+### 🇮🇹 Italiano
+
+- **Preservazione Scroll & Editor Giorni Incrementale (`custom:lepas-card`)**: Aggiunto `ev.stopPropagation()` sui controlli interni (`tab`, `day-chip`, `charge-day`, `charge-preset`, `charge-mode`, `climate-extra`), rimosso `_expandedDay` da `structKey` per gestire i pannelli `.day-editor` incrementalmente senza ricostruire `shadowRoot.innerHTML` al click sui chip `L–D`, preservato `scrollTop` del primo antenato scrollabile anche attraverso Shadow DOM (`getRootNode().host`) attorno a `_render` e `_applyBindings` (con `focus({ preventScroll: true })`), e aggiunto `overflow-anchor: none` su `:host` e `ha-card`, con bump `?v=1.22.1`.
+
 ## v1.22.0 — 2026-11-18
 
 ### 🇬🇧 English

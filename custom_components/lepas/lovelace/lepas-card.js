@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.22.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.22.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.22.0";
+  var CARD_VERSION = "1.22.1";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.22.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.22.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.22.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.22.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.22.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.22.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.22.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.22.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.22.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.22.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.22.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.22.1";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -977,6 +977,7 @@
       ":host {",
       "  display: block;",
       "  container-type: inline-size;",
+      "  overflow-anchor: none;",
       "  font-family: var(--ha-card-font-family, inherit);",
       "  --lp-canvas: #111317;",
       "  --lp-surface: #181B20;",
@@ -1001,7 +1002,7 @@
       ".tab-ico { width: 18px; height: 18px; }",
       ".kpi-ico, .sec-ico, .stat-ico, .meta-ico, .tpms-ico { width: 14px; height: 14px; color: var(--lp-text-secondary); }",
       ".btn-ico { width: 16px; height: 16px; }",
-      "ha-card { display: block; width: 100%; background: var(--lp-canvas); border: 1px solid var(--lp-border); border-radius: 16px; overflow: hidden; color: var(--lp-text); box-shadow: none; }",
+      "ha-card { display: block; width: 100%; background: var(--lp-canvas); border: 1px solid var(--lp-border); border-radius: 16px; overflow: hidden; overflow-anchor: none; color: var(--lp-text); box-shadow: none; }",
       ".cockpit-grid { display: flex; flex-direction: column; gap: 10px; padding: 10px; }",
       ".hero-region { display: flex; flex-direction: column; gap: 8px; }",
       ".hero-card { border-radius: 12px; overflow: hidden; background: var(--lp-surface); border: 1px solid var(--lp-border); display: flex; flex-direction: column; }",
@@ -1363,7 +1364,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.22.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.22.1">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -1643,6 +1644,7 @@
 
       var dismiss = target.closest("[data-dismiss-error]");
       if (dismiss) {
+        ev.stopPropagation();
         this._errorMsg = null;
         if (this._hass) this._render(this._hass);
         return;
@@ -1650,6 +1652,7 @@
 
       var tabEl = target.closest("[data-tab]");
       if (tabEl) {
+        ev.stopPropagation();
         var nextTab = tabEl.getAttribute("data-tab");
         if (VALID_TABS.indexOf(nextTab) >= 0 && nextTab !== this._activeTab) {
           this._activeTab = nextTab;
@@ -1660,6 +1663,7 @@
 
       var dayChip = target.closest("[data-day-chip]");
       if (dayChip) {
+        ev.stopPropagation();
         var slug = dayChip.getAttribute("data-day-chip");
         this._expandedDay = this._expandedDay === slug ? null : slug;
         if (this._hass) this._render(this._hass);
@@ -1668,6 +1672,7 @@
 
       var chgDayEl = target.closest("[data-charge-day]");
       if (chgDayEl) {
+        ev.stopPropagation();
         var dayNum = parseInt(chgDayEl.getAttribute("data-charge-day"), 10);
         var nextDays = computeToggleDays(this._currentChargeDays || [1, 2, 3, 4, 5, 6, 7], dayNum);
         this._handleChargeDaysSelect(nextDays);
@@ -1676,6 +1681,7 @@
 
       var chgPresetEl = target.closest("[data-charge-preset]");
       if (chgPresetEl) {
+        ev.stopPropagation();
         var presetKey = chgPresetEl.getAttribute("data-charge-preset");
         var presetDays = presetDaysForKey(presetKey);
         if (presetDays) this._handleChargeDaysSelect(presetDays);
@@ -1684,6 +1690,7 @@
 
       var chgModeEl = target.closest("[data-charge-mode]");
       if (chgModeEl) {
+        ev.stopPropagation();
         var mode = chgModeEl.getAttribute("data-charge-mode");
         var sc = this._syncChargeState;
         if (sc && sc.id) {
@@ -1698,6 +1705,7 @@
 
       var cliExtraEl = target.closest("[data-climate-extra]");
       if (cliExtraEl) {
+        ev.stopPropagation();
         this._handleClimateExtraToggle(cliExtraEl.getAttribute("data-climate-extra"));
         return;
       }
@@ -2074,7 +2082,52 @@
       return Boolean(ent && ent.s && ent.s.state === "on");
     }
 
+    _findScrollParent() {
+      var node = this;
+      while (node) {
+        if (node.nodeType === 1 && node !== this && node.scrollHeight > node.clientHeight + 1) {
+          var style = typeof getComputedStyle === "function" ? getComputedStyle(node) : null;
+          var ovY = style
+            ? style.overflowY
+            : (node.style && node.style.getPropertyValue ? node.style.getPropertyValue("overflow-y") : "");
+          if (ovY === "auto" || ovY === "scroll" || ovY === "overlay" || (!style && !ovY)) {
+            return node;
+          }
+        }
+        if (node.parentNode) {
+          node = node.parentNode;
+        } else {
+          var root = node.getRootNode ? node.getRootNode() : null;
+          node = (root && root.host) ? root.host : (node.host || null);
+        }
+      }
+      if (typeof document !== "undefined" && document.scrollingElement) {
+        return document.scrollingElement;
+      }
+      return null;
+    }
+
+    _captureScroll() {
+      var scroller = this._findScrollParent();
+      return scroller ? { el: scroller, top: scroller.scrollTop } : null;
+    }
+
+    _restoreScroll(snap) {
+      if (snap && snap.el && snap.el.scrollTop !== snap.top) {
+        snap.el.scrollTop = snap.top;
+      }
+    }
+
     _render(hass) {
+      var scrollSnap = this._captureScroll();
+      try {
+        this._renderInner(hass);
+      } finally {
+        this._restoreScroll(scrollSnap);
+      }
+    }
+
+    _renderInner(hass) {
       if (!this.shadowRoot) return;
       var cfg = this.config;
       var lang = getLang(hass);
@@ -2385,7 +2438,7 @@
 
       this._latestActions = actions;
 
-      // Structural signature: rebuild DOM only when structure/entities/warnings/expandedDay/lang change
+      // Structural signature: rebuild DOM only when structure/entities/warnings/lang change
       var entityIdsSig = items.map(function (r) { return r.id; }).sort().join(",");
       var extraSig = Array.isArray(cfg.entities)
         ? cfg.entities.map(function (e) { return typeof e === "string" ? e : (e && e.entity ? e.entity : ""); }).join(",")
@@ -2397,7 +2450,6 @@
         cfg.layout,
         cfg.show_all ? "1" : "0",
         extraSig,
-        this._expandedDay || "",
         warnSig,
         allowedExtrasSig,
         entityIdsSig,
@@ -2488,7 +2540,9 @@
         if (activeUid) {
           var restored = this.shadowRoot.querySelector('[data-uid="' + activeUid + '"]');
           if (restored) {
-            if (typeof restored.focus === "function") restored.focus();
+            if (typeof restored.focus === "function") {
+              try { restored.focus({ preventScroll: true }); } catch (e) { restored.focus(); }
+            }
             if (activeVal !== null && restored.tagName === "INPUT") restored.value = activeVal;
           }
         }
@@ -2878,16 +2932,16 @@
       }
 
       var hasWeekDays = ctx.weekDays.some(function (w) { return Boolean(w.sw || w.tm); });
-      var expandedDayObj = this._expandedDay
-        ? ctx.weekDays.find(function (w) { return w.slug === self._expandedDay; })
-        : null;
-      var dayEditorHtml = (expandedDayObj && (expandedDayObj.sw || expandedDayObj.tm)) ? (
-        '<div class="day-editor" data-day-editor="' + expandedDayObj.slug + '">' +
-          '<div class="sec-hdr"><span>' + self._h(expandedDayObj.name) + "</span></div>" +
-          (expandedDayObj.sw ? '<button type="button" class="ctrl-btn" data-action-id="day_toggle_' + expandedDayObj.slug + '" data-bind="expandedDayToggle"></button>' : "") +
-          (expandedDayObj.tm ? '<div class="field-row"><label class="field-lbl">' + self._h(t.timeLbl) + '</label><input type="time" inputmode="none" class="ctrl-input num" data-entity-input="' + self._h(expandedDayObj.tm.id) + '" data-uid="input:' + self._h(expandedDayObj.tm.id) + '"></div>' : "") +
-        "</div>"
-      ) : "";
+      var dayEditorHtml = ctx.weekDays.map(function (wd) {
+        if (!wd.sw && !wd.tm) return "";
+        return (
+          '<div class="day-editor hidden" data-day-editor="' + wd.slug + '" hidden>' +
+            '<div class="sec-hdr"><span>' + self._h(wd.name) + "</span></div>" +
+            (wd.sw ? '<button type="button" class="ctrl-btn" data-action-id="day_toggle_' + wd.slug + '" data-bind="expandedDayToggle"></button>' : "") +
+            (wd.tm ? '<div class="field-row"><label class="field-lbl">' + self._h(t.timeLbl) + '</label><input type="time" inputmode="none" class="ctrl-input num" data-entity-input="' + self._h(wd.tm.id) + '" data-uid="input:' + self._h(wd.tm.id) + '"></div>' : "") +
+          "</div>"
+        );
+      }).join("");
 
       var depSummaryHtml = (ctx.nextDep || ctx.schedDep) ? (
         '<div class="dep-summary">' +
@@ -3096,6 +3150,15 @@
     }
 
     _applyBindings(hass, vm) {
+      var scrollSnap = this._captureScroll();
+      try {
+        this._applyBindingsInner(hass, vm);
+      } finally {
+        this._restoreScroll(scrollSnap);
+      }
+    }
+
+    _applyBindingsInner(hass, vm) {
       var root = this.shadowRoot;
       if (!root) return;
       var t = vm.t;
@@ -3683,24 +3746,30 @@
       }
       for (var wi = 0; wi < vm.weekDays.length; wi += 1) {
         var wd = vm.weekDays[wi];
+        var isExp = this._expandedDay === wd.slug;
         var dChip = root.querySelector('[data-day-chip="' + wd.slug + '"]');
         var dEnabled = this._isOn(wd.sw);
         if (dChip) {
           dChip.classList.toggle("is-enabled", dEnabled);
-          dChip.classList.toggle("is-expanded", this._expandedDay === wd.slug);
+          dChip.classList.toggle("is-expanded", isExp);
         }
         var dTimeEl = root.querySelector('[data-day-time="' + wd.slug + '"]');
         if (dTimeEl) {
           var rawTm = (dEnabled && wd.tm && !this._dead(wd.tm.s)) ? String(wd.tm.s.state || "").slice(0, 5) : "";
           dTimeEl.textContent = rawTm;
         }
-        if (this._expandedDay === wd.slug) {
-          var expBtn = root.querySelector('[data-bind="expandedDayToggle"]');
-          if (expBtn && wd.sw) {
-            var dOn = this._isOn(wd.sw);
-            this._applyBtnState(expBtn, t.enableDay + ": " + (dOn ? t.on : t.off), "day_toggle_" + wd.slug, "day_toggle_" + wd.slug, dOn ? "is-emerald" : "", t, "calendar");
+        var dEditor = root.querySelector('[data-day-editor="' + wd.slug + '"]');
+        if (dEditor) {
+          dEditor.classList.toggle("hidden", !isExp);
+          dEditor.hidden = !isExp;
+          if (isExp) {
+            var expBtn = dEditor.querySelector('[data-bind="expandedDayToggle"]');
+            if (expBtn && wd.sw) {
+              var dOn = this._isOn(wd.sw);
+              this._applyBtnState(expBtn, t.enableDay + ": " + (dOn ? t.on : t.off), "day_toggle_" + wd.slug, "day_toggle_" + wd.slug, dOn ? "is-emerald" : "", t, "calendar");
+            }
+            syncInputVal(wd.tm, true);
           }
-          syncInputVal(wd.tm, true);
         }
       }
 
