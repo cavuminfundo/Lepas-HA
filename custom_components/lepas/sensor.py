@@ -902,14 +902,18 @@ class LepasDeparturePlan(_LepasRestoreSensor):
             return piani[0]
         return None
 
+    def _is_piano_attivo(self, piano: dict) -> bool:
+        rt = (self.coordinator.data or {}).get("realtime") or {}
+        if isinstance(rt, dict) and field_on(rt.get("mainSwitcher")) is False:
+            return False
+        return str(piano.get("switcher", "0")).strip() not in ("", "0", "None", "False")
+
     def _live_value(self):
         piano = self._piano()
         if piano is None:
             return None
-        # `switcher` 0 = piano memorizzato ma spento. Si dice "Disattivata" invece dell'orario:
-        # mostrare un'ora per un piano che non scatterà è peggio che non mostrarla.
-        # Stessa parola già usata da `APPT_CHARGE_STATE_MAP`, per non avere due vocabolari.
-        if str(piano.get("switcher", "0")).strip() in ("", "0", "None", "False"):
+        # `switcher` 0 o `mainSwitcher` 0 = piano memorizzato ma spento.
+        if not self._is_piano_attivo(piano):
             return "Disattivata"
         orario, _ = _orario_locale(piano.get("travelTime"), getattr(self, "hass", None))
         return orario
@@ -976,7 +980,7 @@ class LepasDeparturePlan(_LepasRestoreSensor):
             return None
         giorni = piano.get("travelDate")
         giorni = list(giorni) if isinstance(giorni, list) else []
-        attrs: dict = {"attiva": str(piano.get("switcher", "0")).strip() not in ("", "0", "None", "False")}
+        attrs: dict = {"attiva": self._is_piano_attivo(piano)}
         orario, day_delta = _orario_locale(piano.get("travelTime"), getattr(self, "hass", None))
         if orario:
             attrs["orario"] = orario

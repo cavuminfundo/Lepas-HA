@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.21.1).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.21.2).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.21.1";
+  var CARD_VERSION = "1.21.2";
   var CONFIRM_MS = 4000;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -83,13 +83,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.21.1",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.21.1",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.21.1",
-    black: "/lepas_card/lepas-hero-black.png?v=1.21.1",
-    white: "/lepas_card/lepas-hero-white.png?v=1.21.1",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.21.2",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.21.2",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.21.2",
+    black: "/lepas_card/lepas-hero-black.png?v=1.21.2",
+    white: "/lepas_card/lepas-hero-white.png?v=1.21.2",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.21.1";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.21.2";
 
   var SENSITIVE_ACTIONS = {
     unlock: true,
@@ -228,10 +228,10 @@
       noDeparturePlanned: "Nessuna partenza attiva: abilita un giorno sotto.",
       closuresGroup: "Aperture e accessi",
       securityGroup: "Sicurezza e posizione",
-      nativeDepartureTitle: "Sync partenza su auto",
-      nativeDepSync: "Sync su auto",
-      applyDeparture: "Applica partenza",
-      carDeparturePlan: "Piano su auto",
+      applyDeparture: "Applica su auto",
+      disableOnCar: "Disattiva su auto",
+      carDeparturePlan: "Prossima partenza pianificata",
+      noScheduledDeparture: "Nessuna partenza programmata",
       depClimateExtras: "Extra clima alla partenza",
       batteryPreheat: "Preriscaldamento batteria",
       batteryPreheatTime: "Orario preriscaldamento batteria",
@@ -387,10 +387,10 @@
       noDeparturePlanned: "No active departure: enable a day below.",
       closuresGroup: "Closures and access",
       securityGroup: "Security and location",
-      nativeDepartureTitle: "Car departure sync",
-      nativeDepSync: "Sync to car",
-      applyDeparture: "Apply departure",
-      carDeparturePlan: "Car schedule",
+      applyDeparture: "Apply to car",
+      disableOnCar: "Disable on car",
+      carDeparturePlan: "Next scheduled departure",
+      noScheduledDeparture: "No scheduled departure",
       depClimateExtras: "Departure climate extras",
       batteryPreheat: "Battery preheating",
       batteryPreheatTime: "Battery preheat time",
@@ -546,10 +546,10 @@
       noDeparturePlanned: "Geen actief vertrek: schakel hieronder een dag in.",
       closuresGroup: "Sluitingen en toegang",
       securityGroup: "Beveiliging en locatie",
-      nativeDepartureTitle: "Vertrek op auto",
-      nativeDepSync: "Sync met auto",
-      applyDeparture: "Vertrek toepassen",
-      carDeparturePlan: "Autoschema",
+      applyDeparture: "Toepassen op auto",
+      disableOnCar: "Uitschakelen op auto",
+      carDeparturePlan: "Volgend gepland vertrek",
+      noScheduledDeparture: "Geen gepland vertrek",
       depClimateExtras: "Extra vertrekklimaat",
       batteryPreheat: "Batterij voorverwarming",
       batteryPreheatTime: "Tijd batterij voorverwarming",
@@ -1223,7 +1223,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.21.1">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.21.2">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -1884,7 +1884,6 @@
       var quickDepTime = this._findDomain(items, "time", "quick_departure_time");
       var syncCharge = this._findDomain(items, "switch", "sync_charge_to_departure");
       var depCliMode = this._findDomain(items, "select", "departure_climate_mode");
-      var nativeDepSync = this._findDomain(items, "switch", "native_departure_sync");
       var applyDepBtn = this._findDomain(items, "button", "apply_departure_schedule");
       var batteryHeat = this._findDomain(items, "switch", "battery_pack_heat");
       var batteryHeatTime = this._findDomain(items, "time", "battery_pack_heat_time");
@@ -2061,7 +2060,6 @@
       regSwitchToggle("scheduled_charging_toggle", schedSwitch);
       regSwitchToggle("quick_departure_toggle", quickDep);
       regSwitchToggle("sync_charge_toggle", syncCharge);
-      regSwitchToggle("native_departure_sync_toggle", nativeDepSync);
       regSwitchToggle("battery_pack_heat_toggle", batteryHeat);
       regSwitchToggle("sync_battery_heat_toggle", syncBatteryHeat);
 
@@ -2158,7 +2156,6 @@
           quickDepTime: quickDepTime,
           syncCharge: syncCharge,
           depCliMode: depCliMode,
-          nativeDepSync: nativeDepSync,
           applyDepBtn: applyDepBtn,
           allowedClimateExtras: allowedClimateExtras,
           batteryHeat: batteryHeat,
@@ -2241,7 +2238,6 @@
         quickDepTime: quickDepTime,
         syncCharge: syncCharge,
         depCliMode: depCliMode,
-        nativeDepSync: nativeDepSync,
         applyDepBtn: applyDepBtn,
         allowedClimateExtras: allowedClimateExtras,
         batteryHeat: batteryHeat,
@@ -2586,12 +2582,9 @@
         "</div>"
       ) : "";
 
-      var depSyncBtnsHtml = (ctx.nativeDepSync || ctx.applyDepBtn) ? (
-        '<div class="btn-row">' +
-          (ctx.nativeDepSync ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="native_departure_sync_toggle" data-confirm-key="native_departure_sync_toggle" data-bind="nativeDepSyncBtn"></button>' : "") +
-          (ctx.applyDepBtn ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_departure_schedule" data-confirm-key="apply_departure_schedule" data-bind="applyDepBtn"></button>' : "") +
-        "</div>"
-      ) : "";
+      var depSyncBtnsHtml = ctx.applyDepBtn
+        ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_departure_schedule" data-confirm-key="apply_departure_schedule" data-bind="applyDepBtn"></button>'
+        : "";
 
       var sortedClimateExtras = (ctx.allowedClimateExtras && ctx.allowedClimateExtras.length)
         ? ctx.allowedClimateExtras.slice().sort(function (a, b) {
@@ -2632,7 +2625,7 @@
 
       var hasDepSection = Boolean(
         ctx.nextDep || ctx.quickDep || hasWeekDays ||
-        ctx.nativeDepSync || ctx.applyDepBtn || ctx.schedDep ||
+        ctx.applyDepBtn || ctx.schedDep ||
         (ctx.allowedClimateExtras && ctx.allowedClimateExtras.length) ||
         ctx.batteryHeat || ctx.batteryHeatTime || ctx.syncBatteryHeat
       );
@@ -2642,7 +2635,6 @@
           '<div class="sec-hdr">' +
             '<span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.departures) + "</span></span>" +
             '<span class="dep-hdr-badges">' +
-              (ctx.schedDep ? '<span class="badge hidden" data-bind="depSyncBadge"></span>' : "") +
               '<span class="badge hidden num" data-bind="depChargeHint"></span>' +
             "</span>" +
           "</div>" +
@@ -3383,52 +3375,61 @@
         }
       }
 
-      // Native departure sync & scheduled_departure status
-      var depSyncBadge = root.querySelector('[data-bind="depSyncBadge"]');
-      if (depSyncBadge && vm.schedDep && vm.schedDep.s) {
-        var sdAttrs = vm.schedDep.s.attributes || {};
-        if (sdAttrs.synced_with_ha === true || sdAttrs.synced_with_ha === false) {
-          depSyncBadge.classList.remove("hidden");
-          depSyncBadge.classList.toggle("is-emerald", sdAttrs.synced_with_ha === true);
-          depSyncBadge.classList.toggle("is-amber", sdAttrs.synced_with_ha === false);
-          depSyncBadge.textContent = sdAttrs.synced_with_ha ? t.synced : t.pendingSync;
+      // Car scheduled departure readout & adaptive Apply/Disable on car button
+      var carActive = false;
+      if (vm.schedDep && vm.schedDep.s && !this._dead(vm.schedDep.s)) {
+        var sdRawAttrs = vm.schedDep.s.attributes || {};
+        if (typeof sdRawAttrs.attiva === "boolean") {
+          carActive = sdRawAttrs.attiva;
         } else {
-          depSyncBadge.classList.add("hidden");
+          var sdStateStr = String(vm.schedDep.s.state || "").trim();
+          carActive = Boolean(sdStateStr && sdStateStr !== "Disattivata");
         }
-      } else if (depSyncBadge) {
-        depSyncBadge.classList.add("hidden");
       }
       var schedDepTxt = root.querySelector('[data-bind="schedDepText"]');
       if (schedDepTxt && vm.schedDep) {
-        var sdRawAttrs = vm.schedDep.s && vm.schedDep.s.attributes ? vm.schedDep.s.attributes : {};
-        schedDepTxt.textContent = this._dead(vm.schedDep.s)
-          ? "—"
-          : (sdRawAttrs.riepilogo ? String(sdRawAttrs.riepilogo) : vm.schedDep.s.state);
+        if (this._dead(vm.schedDep.s)) {
+          schedDepTxt.textContent = "—";
+        } else if (carActive) {
+          var sdAttrsActive = vm.schedDep.s.attributes || {};
+          schedDepTxt.textContent = sdAttrsActive.riepilogo
+            ? String(sdAttrsActive.riepilogo)
+            : (sdAttrsActive.orario ? String(sdAttrsActive.orario) : String(vm.schedDep.s.state));
+        } else {
+          schedDepTxt.textContent = t.noScheduledDeparture;
+        }
       }
-      var nativeDepSyncBtn = root.querySelector('[data-bind="nativeDepSyncBtn"]');
-      if (nativeDepSyncBtn && vm.nativeDepSync) {
-        var ndsOn = this._isOn(vm.nativeDepSync);
-        this._applyBtnState(
-          nativeDepSyncBtn,
-          t.nativeDepSync + ": " + (ndsOn ? t.on : t.off),
-          "native_departure_sync_toggle",
-          "native_departure_sync_toggle",
-          ndsOn ? "is-emerald" : "",
-          t,
-          "calendar"
-        );
-      }
+      var hasDaySwitches = Boolean(vm.quickDep) || vm.weekDays.some(function (wd) { return Boolean(wd.sw); });
+      var haHasActiveDep = hasDaySwitches
+        ? (this._isOn(vm.quickDep) || vm.weekDays.some(function (wd) { return self._isOn(wd.sw); }))
+        : Boolean(vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes && vm.nextDep.s.attributes.departure_at);
       var applyDepBtnEl = root.querySelector('[data-bind="applyDepBtn"]');
       if (applyDepBtnEl && vm.applyDepBtn) {
-        this._applyBtnState(
-          applyDepBtnEl,
-          t.applyDeparture,
-          "apply_departure_schedule",
-          "apply_departure_schedule",
-          "is-primary",
-          t,
-          "check"
-        );
+        if (haHasActiveDep) {
+          applyDepBtnEl.classList.remove("hidden");
+          this._applyBtnState(
+            applyDepBtnEl,
+            t.applyDeparture,
+            "apply_departure_schedule",
+            "apply_departure_schedule",
+            "is-primary",
+            t,
+            "check"
+          );
+        } else if (carActive) {
+          applyDepBtnEl.classList.remove("hidden");
+          this._applyBtnState(
+            applyDepBtnEl,
+            t.disableOnCar,
+            "apply_departure_schedule",
+            "apply_departure_schedule",
+            "",
+            t,
+            "wake"
+          );
+        } else {
+          applyDepBtnEl.classList.add("hidden");
+        }
       }
 
       // Dynamic departure climate extras (allowlisted + optimistic reconciliation)

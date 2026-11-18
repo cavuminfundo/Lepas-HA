@@ -881,13 +881,13 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   assert.ok(h, "LepasCard._helpers must be exposed");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.21.1");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.21.2");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.21.1`
+      `/lepas_card/lepas-hero-${c}.png?v=1.21.2`
     );
   }
 
@@ -906,7 +906,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.21.1`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.21.2`
     );
   }
 
@@ -1616,78 +1616,97 @@ test("v1.20.1 Time inputs block manual keyboard typing and open picker on click"
   assert.equal(pickerCalls, 2, "Pressing Enter on time input must open picker");
 });
 
-test("v1.21.0 Native departure sync, apply button, and synced_with_ha status indicator", async () => {
-  const hass = makeFullHass({
+test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car button", async () => {
+  // When car has an active plan and HA has no departures -> shows car time & "Disattiva su auto"
+  const hassOff = makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "off"),
+    "switch.lepas_departure_mon_enabled": makeState("switch.lepas_departure_mon_enabled", "off"),
+    "switch.lepas_departure_wed_enabled": makeState("switch.lepas_departure_wed_enabled", "off"),
+    "switch.lepas_departure_fri_enabled": makeState("switch.lepas_departure_fri_enabled", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", {
+      departure_at: null,
+    }),
     "switch.lepas_native_departure_sync": makeState("switch.lepas_native_departure_sync", "off"),
     "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
-    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "07:30", {
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
       attiva: true,
-      riepilogo: "07:30 · Lun, Mer, Ven",
+      orario: "06:35",
+      giorni: [1, 2, 3, 4, 5, 6, 7],
+      riepilogo: "06:35 · lun, mar, mer, gio, ven, sab, dom",
       synced_with_ha: false,
     }),
   }, "it");
 
-  const card = createCard({ layout: "compact", default_tab: "charging" }, hass);
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hassOff);
 
-  const syncBtn = card.shadowRoot.querySelector('[data-action-id="native_departure_sync_toggle"]');
+  assert.equal(card.shadowRoot.querySelector('[data-action-id="native_departure_sync_toggle"]'), null, "Sync su auto toggle must be omitted from card");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="depSyncBadge"]'), null, "Ambiguous sync badge must be omitted from card");
+
+  const schedTxt = card.shadowRoot.querySelector('[data-bind="schedDepText"]');
   const applyBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
-  const syncBadge = card.shadowRoot.querySelector('[data-bind="depSyncBadge"]');
-  assert.ok(syncBtn, "Native departure sync button must render");
-  assert.ok(applyBtn, "Apply departure schedule button must render");
-  assert.ok(syncBadge, "Scheduled departure sync badge must render");
-  assert.equal(syncBadge.classList.contains("hidden"), false);
-  assert.equal(syncBadge.classList.contains("is-amber"), true);
-  assert.equal(syncBadge.textContent, "Da sincronizzare");
+  assert.ok(schedTxt && applyBtn);
+  assert.equal(applyBtn.classList.contains("hidden"), false);
+  assert.ok(schedTxt.textContent.includes("06:35"), `Expected next car departure time 06:35, got: ${schedTxt.textContent}`);
+  assert.ok(applyBtn.textContent.includes("Disattiva su auto"), `Expected 'Disattiva su auto' when HA has no active departures, got: ${applyBtn.textContent}`);
 
-  // Click native departure sync toggle -> switch.turn_on
-  syncBtn.click();
-  await Promise.resolve();
-  assert.deepEqual(hass.calls[0], {
-    domain: "switch",
-    service: "turn_on",
-    data: { entity_id: "switch.lepas_native_departure_sync" },
-  });
-
-  // Click apply departure schedule -> button.press
+  // Clicking button calls button.press
   applyBtn.click();
   await Promise.resolve();
-  assert.deepEqual(hass.calls[1], {
+  assert.deepEqual(hassOff.calls[0], {
     domain: "button",
     service: "press",
     data: { entity_id: "button.lepas_apply_departure_schedule" },
   });
 
-  // Update sensor.lepas_scheduled_departure -> synced_with_ha: true turns badge emerald
+  // When BOTH HA and car have no active departure -> button is hidden and schedDepText shows noScheduledDeparture
   card.hass = makeFullHass({
-    "switch.lepas_native_departure_sync": makeState("switch.lepas_native_departure_sync", "on"),
-    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
-    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "07:30", {
-      attiva: true,
-      synced_with_ha: true,
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "off"),
+    "switch.lepas_departure_mon_enabled": makeState("switch.lepas_departure_mon_enabled", "off"),
+    "switch.lepas_departure_wed_enabled": makeState("switch.lepas_departure_wed_enabled", "off"),
+    "switch.lepas_departure_fri_enabled": makeState("switch.lepas_departure_fri_enabled", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", {
+      departure_at: null,
     }),
-  }, "en");
-  const updatedBadge = card.shadowRoot.querySelector('[data-bind="depSyncBadge"]');
-  assert.equal(updatedBadge.classList.contains("hidden"), false);
-  assert.equal(updatedBadge.classList.contains("is-emerald"), true);
-  assert.equal(updatedBadge.textContent, "Synced");
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+      orario: "06:35",
+      riepilogo: "Disattivata (06:35 · lun)",
+    }),
+  }, "it");
+  const bothOffBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
+  assert.ok(bothOffBtn);
+  assert.equal(bothOffBtn.classList.contains("hidden"), true, "Button must be hidden when both HA and car have no active plan");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Nessuna partenza programmata");
 
-  // Fallback entity key: sensor.lepas_partenza_programmata also binds depSyncBadge
-  const itAliasCard = createCard({ default_tab: "charging" }, makeFullHass({
-    "sensor.lepas_partenza_programmata": makeState("sensor.lepas_partenza_programmata", "07:30", {
-      attiva: true,
-      synced_with_ha: true,
+  // When HA has an active departure & car plan is disabled -> shows "Nessuna partenza programmata" & "Applica su auto"
+  card.hass = makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "on"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+      orario: "06:35",
+      riepilogo: "Disattivata (06:35 · lun)",
+    }),
+  }, "it");
+  const schedOffTxt = card.shadowRoot.querySelector('[data-bind="schedDepText"]');
+  const applyOnBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
+  assert.equal(schedOffTxt.textContent, "Nessuna partenza programmata");
+  assert.equal(applyOnBtn.classList.contains("hidden"), false);
+  assert.ok(applyOnBtn.textContent.includes("Applica su auto"), `Expected 'Applica su auto' when HA has active departure, got: ${applyOnBtn.textContent}`);
+
+  // Also works with IT entity alias sensor.lepas_partenza_programmata in nl
+  const nlCard = createCard({ default_tab: "charging" }, makeFullHass({
+    "sensor.lepas_partenza_programmata": makeState("sensor.lepas_partenza_programmata", "Disattivata", {
+      attiva: false,
     }),
   }, "nl"));
-  const nlBadge = itAliasCard.shadowRoot.querySelector('[data-bind="depSyncBadge"]');
-  assert.ok(nlBadge);
-  assert.equal(nlBadge.classList.contains("hidden"), false);
-  assert.equal(nlBadge.textContent, "Gesynchroniseerd");
+  assert.equal(nlCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Geen gepland vertrek");
 
-  // Graceful omission when native departure entities are absent
+  // Graceful omission when entities absent
   const minimalCard = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
-  assert.equal(minimalCard.shadowRoot.querySelector('[data-action-id="native_departure_sync_toggle"]'), null);
   assert.equal(minimalCard.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]'), null);
-  assert.equal(minimalCard.shadowRoot.querySelector('[data-bind="depSyncBadge"]'), null);
+  assert.equal(minimalCard.shadowRoot.querySelector('[data-bind="schedDepText"]'), null);
 });
 
 test("v1.21.0 Dynamic departure climate extras: strict allowlist, XSS escaping, service call, mutual exclusion, and failure rollback", async () => {
@@ -1854,8 +1873,8 @@ test("v1.21.0 Battery preheat sub-box visibility and controls (cat. 216)", async
 test("v1.21.0 IT/EN/NL i18n labels for native departure, battery heat, and all 12 climate extras", () => {
   const h = LepasCard._helpers;
   const requiredKeys = [
-    "nativeDepartureTitle",
-    "nativeDepSync",
+    "noScheduledDeparture",
+    "disableOnCar",
     "applyDeparture",
     "carDeparturePlan",
     "depClimateExtras",
@@ -1921,9 +1940,10 @@ test("v1.21.1 Compact departure panel: unified header, compact summary, 2-col so
   const depSurface = card.shadowRoot.querySelector('[data-bind="depSurface"]');
   assert.ok(depSurface, "Departure surface must expose data-bind='depSurface'");
 
-  // Unified header: depSyncBadge sits inside the top depSurface header
+  // Unified header: depSurface renders top .sec-hdr without ambiguous depSyncBadge
   const topHdr = depSurface.querySelector(".sec-hdr");
-  assert.ok(topHdr && topHdr.querySelector('[data-bind="depSyncBadge"]'), "depSyncBadge must live in the unified top departure header");
+  assert.ok(topHdr, "depSurface must render top .sec-hdr");
+  assert.equal(topHdr.querySelector('[data-bind="depSyncBadge"]'), null);
 
   // Compact summary holds both nextDepText and schedDepText inside one .dep-summary container
   const summary = depSurface.querySelector(".dep-summary");

@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.21.2 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Clearer Scheduled Departure Controls (`custom:lepas-card`, `LepasDeparturePlan`)**: Renamed *Car schedule* to *Next scheduled departure* across IT/EN/NL (`Prossima partenza pianificata` / `Next scheduled departure` / `Volgend gepland vertrek`), showing the active car departure or *No scheduled departure* (*Nessuna partenza programmata* / *Geen gepland vertrek*), aligned `LepasDeparturePlan` with `mainSwitcher == "0"`, removed the redundant *Sync to car* toggle and *Pending sync* badge from the card UI (keeping `switch.lepas_native_departure_sync` in Home Assistant), and replaced the button with an adaptive *Apply to car* / *Disable on car* control that hides automatically when both HA and the car have no active departure, bumping `?v=1.21.2`.
+
+### 🇮🇹 Italiano
+
+- **Controlli Partenza Programmata Più Chiari (`custom:lepas-card`, `LepasDeparturePlan`)**: Rinominato *Piano su auto* in *Prossima partenza pianificata* (IT/EN/NL), mostrando l'orario attivo o *Nessuna partenza programmata*, allineato `LepasDeparturePlan` a `mainSwitcher == "0"`, rimossi dalla card il toggle *Sync su auto* e il badge *Da sincronizzare* (mantenendo `switch.lepas_native_departure_sync` in Home Assistant), e reso adattivo il pulsante *Applica su auto* / *Disattiva su auto* (nascosto quando sia HA sia l'auto non hanno partenze attive), con bump `?v=1.21.2`.
+
 ## v1.21.1 — 2026-11-18
 
 ### 🇬🇧 English
