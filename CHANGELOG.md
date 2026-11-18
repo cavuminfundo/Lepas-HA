@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.20.3 — 2026-11-18
+
+### 🇬🇧 English
+
+- **Sync `climate.lepas_climate` Target Temperature from Vehicle Telemetry (`frontSetTempLeft`)**: `LepasClimate` now synchronizes its `target_temperature` (and `coordinator.climate_target_temp`) whenever the vehicle reports a changed setpoint via `frontSetTempLeft`/`frontSetTempRight` in `realtime` telemetry (validated within `[min_temp, max_temp]`), eliminating the mismatch between the card temperature stepper (`21 °C`) and the live left/right cabin setpoints (`23 °C`). Unchanged background polls never clobber a manual Home Assistant override or active optimistic command. Bumped card cache-busting query to `?v=1.20.3`.
+
+### 🇮🇹 Italiano
+
+- **Sincronizzazione Temperatura Target Clima dall'Auto (`frontSetTempLeft`)**: `LepasClimate` allinea ora `target_temperature` (e `coordinator.climate_target_temp`) ogni volta che il veicolo riporta un nuovo setpoint valido (`frontSetTempLeft`/`frontSetTempRight`, dentro `[min_temp, max_temp]`) nel canale `realtime`, eliminando lo scostamento nella card tra il selettore `21 °C` e la temperatura reale impostata in abitacolo (`SX/DX: 23 °C`). I poll successivi con dato invariato non sovrascrivono eventuali modifiche manuali appena impostate da Home Assistant o comandi ottimistici in corso. Aggiornata la query anti-cache della card a `?v=1.20.3`.
+
 ## v1.20.2 — 2026-11-17
 
 ### 🇬🇧 English

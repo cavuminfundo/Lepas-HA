@@ -68,3 +68,10 @@
 - **Invariant**: `LepasCoordinator.set_poll_enabled(on)` MUST call `self.async_update_listeners()` when `not self._timers.closing`, so availability-dependent entities (`LepasAtHome`, `LepasChargedEnergy`) immediately reflect the restored or toggled `poll_enabled` state regardless of platform setup order.
 - **onFailure Mandate**: Guard with `if not self._timers.closing:` so teardown never dispatches listener updates during unload.
 - **Forbidden Regex**: `def set_poll_enabled\([^)]*\):(?![\s\S]*async_update_listeners)`
+
+### [AB-LEP-011] `LepasClimate.target_temperature` Sync from `realtime.frontSetTempLeft`
+- **Target Files**: `custom_components/lepas/climate.py`
+- **Root Cause**: `LepasClimate._target` was initialized to `DEFAULT_TEMP` (`21.0`) or restored via `RestoreEntity` and updated only by HA `async_set_temperature`, ignoring `frontSetTempLeft`/`frontSetTempRight` in `coordinator.data["realtime"]`; changing temperature inside the vehicle (`23 °C`) updated `sensor.lepas_set_temperature_left`/`right` but left `climate.lepas_climate` (`21.0 °C`) out of sync.
+- **Invariant**: On boot and coordinator updates (`_opt_on is None`), sync `self._target` and `coordinator.climate_target_temp` whenever `frontSetTempLeft` (fallback `frontSetTempRight`) changes to a valid number within `[min_temp, max_temp]`, tracking `_last_rt_temp` so repeated identical realtime payloads never clobber a manual HA override while `OFF`.
+- **onFailure Mandate**: Ignore non-dict `realtime`, non-numeric values, or sentinel temperatures outside `[min_temp, max_temp]`.
+- **Forbidden Regex**: `def _handle_coordinator_update\(self\) -> None:(?![\s\S]*_sync_target_from_realtime)`

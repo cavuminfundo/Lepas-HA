@@ -355,6 +355,59 @@ async def test_number_notify_schedule_and_climate_target_temp_sync(
         await hass.async_block_till_done()
 
 
+async def test_climate_target_temp_syncs_from_realtime_without_clobbering_ha_override(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    _patch_io(monkeypatch)
+    mock_restore_cache(
+        hass,
+        [State("climate.lepas_climate", "off", {ATTR_TEMPERATURE: 21.0})],
+    )
+    entry = await _setup_entry(hass)
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        assert hass.states.get("climate.lepas_climate").attributes[ATTR_TEMPERATURE] == 21.0
+
+        # Auto riporta 23 °C su frontSetTempLeft -> climate.lepas_climate e coordinator si allineano
+        coord.async_set_updated_data(
+            {**coord.data, "realtime": {"frontSetTempLeft": "23.0", "frontSetTempRight": "23.0"}}
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("climate.lepas_climate").attributes[ATTR_TEMPERATURE] == 23.0
+        assert coord.climate_target_temp == 23.0
+
+        # Cambio manuale da HA (clima OFF) -> successivo poll identico dell'auto non sovrascrive
+        await hass.services.async_call(
+            "climate",
+            "set_temperature",
+            {"entity_id": "climate.lepas_climate", ATTR_TEMPERATURE: 22.0},
+            blocking=True,
+        )
+        coord.async_set_updated_data(
+            {**coord.data, "realtime": {"frontSetTempLeft": "23.0", "frontSetTempRight": "23.0"}}
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("climate.lepas_climate").attributes[ATTR_TEMPERATURE] == 22.0
+
+        # Nuovo cambio reale in auto (24 °C) -> HA si aggiorna; sentinella fuori range ("0") -> ignorata
+        coord.async_set_updated_data(
+            {**coord.data, "realtime": {"frontSetTempLeft": "24.0", "frontSetTempRight": "24.0"}}
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("climate.lepas_climate").attributes[ATTR_TEMPERATURE] == 24.0
+        assert coord.climate_target_temp == 24.0
+
+        coord.async_set_updated_data(
+            {**coord.data, "realtime": {"frontSetTempLeft": "0", "frontSetTempRight": "0"}}
+        )
+        await hass.async_block_till_done()
+        assert hass.states.get("climate.lepas_climate").attributes[ATTR_TEMPERATURE] == 24.0
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
 # ───────────────────────── scheduled charging fallback & apply button ─────────────────────────
 
 

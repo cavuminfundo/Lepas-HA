@@ -79,6 +79,7 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
         self._attr_max_temp = hi
         self._attr_target_temperature_step = step
         self._target = min(hi, max(lo, DEFAULT_TEMP))
+        self._last_rt_temp: float | None = None
         coord.climate_target_temp = self._target
         self._opt_on: bool | None = None
         self._opt_anchor = None
@@ -94,11 +95,40 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
                     self._target = min(self._attr_max_temp, max(self._attr_min_temp, float(t)))
             except (TypeError, ValueError):
                 pass
+        self._sync_target_from_realtime()
         self.coordinator.climate_target_temp = self._target
 
     # ── stato ──
     def _live_on(self) -> bool | None:
         return field_on(self.coordinator.data.get("fields", {}).get(CAMPO_CLIMA))
+
+    def _rt_target_temp(self) -> float | None:
+        """Legge la temperatura target reale da `realtime` se valida nel range clima."""
+        rt = self.coordinator.data.get("realtime")
+        if not isinstance(rt, dict):
+            return None
+        raw = rt.get("frontSetTempLeft")
+        if raw is None:
+            raw = rt.get("frontSetTempRight")
+        if raw is None:
+            return None
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if not (self._attr_min_temp <= val <= self._attr_max_temp):
+            return None
+        return round(val, 1)
+
+    def _sync_target_from_realtime(self) -> None:
+        """Allinea il setpoint HA quando l'auto riporta una nuova temperatura in `realtime`."""
+        if self._opt_on is not None:
+            return
+        rt_temp = self._rt_target_temp()
+        if rt_temp is not None and rt_temp != self._last_rt_temp:
+            self._last_rt_temp = rt_temp
+            self._target = rt_temp
+            self.coordinator.climate_target_temp = rt_temp
 
     @property
     def target_temperature(self) -> float:
@@ -127,6 +157,7 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
             self._opt_on = None
             self._opt_anchor = None
             self._opt_at = None
+        self._sync_target_from_realtime()
         super()._handle_coordinator_update()
 
     def _set_optimistic(self, on: bool) -> None:
