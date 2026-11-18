@@ -25,6 +25,36 @@
     tue_thu_sat: [2, 4, 6],
   };
 
+  var ALLOWED_CLIMATE_EXTRAS = [
+    "driver_seat_heating",
+    "driver_seat_ventilation",
+    "passenger_seat_heating",
+    "passenger_seat_ventilation",
+    "rear_left_seat_heating",
+    "rear_left_seat_ventilation",
+    "rear_right_seat_heating",
+    "rear_right_seat_ventilation",
+    "rear_window_heating",
+    "windshield_defrost",
+    "windshield_defog",
+    "steering_wheel_heating",
+  ];
+
+  var CLIMATE_EXTRA_META = {
+    driver_seat_heating: { icon: "flame", opposite: "driver_seat_ventilation" },
+    driver_seat_ventilation: { icon: "fan", opposite: "driver_seat_heating" },
+    passenger_seat_heating: { icon: "flame", opposite: "passenger_seat_ventilation" },
+    passenger_seat_ventilation: { icon: "fan", opposite: "passenger_seat_heating" },
+    rear_left_seat_heating: { icon: "flame", opposite: "rear_left_seat_ventilation" },
+    rear_left_seat_ventilation: { icon: "fan", opposite: "rear_left_seat_heating" },
+    rear_right_seat_heating: { icon: "flame", opposite: "rear_right_seat_ventilation" },
+    rear_right_seat_ventilation: { icon: "fan", opposite: "rear_right_seat_heating" },
+    rear_window_heating: { icon: "rear_defrost", opposite: null },
+    windshield_defrost: { icon: "windshield", opposite: null },
+    windshield_defog: { icon: "windshield", opposite: null },
+    steering_wheel_heating: { icon: "steering", opposite: null },
+  };
+
   var COLOR_ALIASES = {
     grey: "grey",
     gray: "grey",
@@ -198,6 +228,29 @@
       noDeparturePlanned: "Nessuna partenza attiva: abilita un giorno sotto.",
       closuresGroup: "Aperture e accessi",
       securityGroup: "Sicurezza e posizione",
+      nativeDepartureTitle: "Sync partenza su auto",
+      nativeDepSync: "Sync su auto",
+      applyDeparture: "Applica partenza",
+      carDeparturePlan: "Piano su auto",
+      depClimateExtras: "Extra clima alla partenza",
+      batteryPreheat: "Preriscaldamento batteria",
+      batteryPreheatTime: "Orario preriscaldamento batteria",
+      syncBatteryHeat: "Allinea alla partenza",
+      batteryHeatHint: "Avvio batteria",
+      climateExtraLabels: {
+        driver_seat_heating: "Risc. guida",
+        driver_seat_ventilation: "Vent. guida",
+        passenger_seat_heating: "Risc. pass.",
+        passenger_seat_ventilation: "Vent. pass.",
+        rear_left_seat_heating: "Risc. post. SX",
+        rear_left_seat_ventilation: "Vent. post. SX",
+        rear_right_seat_heating: "Risc. post. DX",
+        rear_right_seat_ventilation: "Vent. post. DX",
+        rear_window_heating: "Lunotto termico",
+        windshield_defrost: "Sbrina parabrezza",
+        windshield_defog: "Disappanna vetro",
+        steering_wheel_heating: "Volante caldo",
+      },
       tpmsLabels: { front_left: "ANT SX", front_right: "ANT DX", rear_left: "POST SX", rear_right: "POST DX" },
       options: {
         departure_climate_mode: { at_home: "Solo a casa", anywhere: "Ovunque", off: "Disattivato" },
@@ -334,6 +387,29 @@
       noDeparturePlanned: "No active departure: enable a day below.",
       closuresGroup: "Closures and access",
       securityGroup: "Security and location",
+      nativeDepartureTitle: "Car departure sync",
+      nativeDepSync: "Sync to car",
+      applyDeparture: "Apply departure",
+      carDeparturePlan: "Car schedule",
+      depClimateExtras: "Departure climate extras",
+      batteryPreheat: "Battery preheating",
+      batteryPreheatTime: "Battery preheat time",
+      syncBatteryHeat: "Align to departure",
+      batteryHeatHint: "Battery heat",
+      climateExtraLabels: {
+        driver_seat_heating: "Driver heat",
+        driver_seat_ventilation: "Driver vent",
+        passenger_seat_heating: "Pass. heat",
+        passenger_seat_ventilation: "Pass. vent",
+        rear_left_seat_heating: "Rear L heat",
+        rear_left_seat_ventilation: "Rear L vent",
+        rear_right_seat_heating: "Rear R heat",
+        rear_right_seat_ventilation: "Rear R vent",
+        rear_window_heating: "Rear defrost",
+        windshield_defrost: "Windshield defrost",
+        windshield_defog: "Windshield defog",
+        steering_wheel_heating: "Steering wheel",
+      },
       tpmsLabels: { front_left: "FL", front_right: "FR", rear_left: "RL", rear_right: "RR" },
       options: {
         departure_climate_mode: { at_home: "Home only", anywhere: "Anywhere", off: "Off" },
@@ -470,6 +546,29 @@
       noDeparturePlanned: "Geen actief vertrek: schakel hieronder een dag in.",
       closuresGroup: "Sluitingen en toegang",
       securityGroup: "Beveiliging en locatie",
+      nativeDepartureTitle: "Vertrek op auto",
+      nativeDepSync: "Sync met auto",
+      applyDeparture: "Vertrek toepassen",
+      carDeparturePlan: "Autoschema",
+      depClimateExtras: "Extra vertrekklimaat",
+      batteryPreheat: "Batterij voorverwarming",
+      batteryPreheatTime: "Tijd batterij voorverwarming",
+      syncBatteryHeat: "Afstemmen op vertrek",
+      batteryHeatHint: "Accu start",
+      climateExtraLabels: {
+        driver_seat_heating: "Best. verw.",
+        driver_seat_ventilation: "Best. vent.",
+        passenger_seat_heating: "Pass. verw.",
+        passenger_seat_ventilation: "Pass. vent.",
+        rear_left_seat_heating: "Achter L verw.",
+        rear_left_seat_ventilation: "Achter L vent.",
+        rear_right_seat_heating: "Achter R verw.",
+        rear_right_seat_ventilation: "Achter R vent.",
+        rear_window_heating: "Achterruit",
+        windshield_defrost: "Voorruit ontdooien",
+        windshield_defog: "Voorruit ontwasemen",
+        steering_wheel_heating: "Stuurverwarming",
+      },
       tpmsLabels: { front_left: "LV", front_right: "RV", rear_left: "LA", rear_right: "RA" },
       options: {
         departure_climate_mode: { at_home: "Alleen thuis", anywhere: "Overal", off: "Uitgeschakeld" },
@@ -711,6 +810,35 @@
     return cur.concat([d]).sort(function (a, b) { return a - b; });
   }
 
+  // Filter strictly against the 12-key allowlist so untrusted attributes cannot reach the DOM.
+  function filterAllowedClimateExtras(raw) {
+    if (!Array.isArray(raw)) return [];
+    var seen = Object.create(null);
+    var out = [];
+    for (var i = 0; i < raw.length; i += 1) {
+      if (typeof raw[i] !== "string") continue;
+      var key = raw[i].trim();
+      if (!Object.prototype.hasOwnProperty.call(CLIMATE_EXTRA_META, key) || seen[key]) continue;
+      seen[key] = true;
+      out.push(key);
+    }
+    return out;
+  }
+
+  function computeToggleClimateExtras(currentExtras, toggleKey) {
+    var cur = filterAllowedClimateExtras(currentExtras);
+    if (!Object.prototype.hasOwnProperty.call(CLIMATE_EXTRA_META, toggleKey)) {
+      return cur;
+    }
+    if (cur.indexOf(toggleKey) >= 0) {
+      return cur.filter(function (k) { return k !== toggleKey; });
+    }
+    var opposite = CLIMATE_EXTRA_META[toggleKey].opposite;
+    var next = opposite ? cur.filter(function (k) { return k !== opposite; }) : cur.slice();
+    next.push(toggleKey);
+    return next;
+  }
+
   function buildStyles() {
     return [
       ":host {",
@@ -854,6 +982,9 @@
       ".day-time { font-size: 0.62rem; font-weight: 600; color: var(--lp-text-secondary); line-height: 1; min-height: 0.75em; }",
       ".day-chip.is-enabled .day-time { color: var(--lp-emerald); }",
       ".day-editor { background: var(--lp-elevated); border: 1px solid var(--lp-border-strong); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }",
+      ".dep-subbox { border-top: 1px solid var(--lp-border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }",
+      ".chip-btn.is-pending { opacity: 0.58; cursor: wait; }",
+      ".climate-extra-chip.is-active { background: #2A313D; color: var(--lp-emerald); border-color: rgba(52, 211, 153, 0.55); }",
       ".bp-stage { display: grid; grid-template-columns: minmax(88px, 1fr) minmax(108px, 124px) minmax(88px, 1fr); gap: 8px; align-items: center; }",
       ".tpms-col { display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }",
       ".tpms-box { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 7px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 54px; }",
@@ -1130,6 +1261,12 @@
       this._currentChargeDaysBaseSig = "";
       this._chargeDaysEntityId = null;
       this._syncChargeState = null;
+      this._optimisticClimateExtras = null;
+      this._currentClimateExtras = [];
+      this._currentClimateExtrasBaseSig = "";
+      this._allowedClimateExtras = [];
+      this._currentEntryId = null;
+      this._climateExtrasReqSeq = 0;
       this._onClick = this._handleClick.bind(this);
       this._onChange = this._handleChange.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
@@ -1289,6 +1426,22 @@
       return null;
     }
 
+    _entryId(hass, items, preferredEnt) {
+      var reg = hass && hass.entities;
+      if (!reg) return null;
+      if (preferredEnt && reg[preferredEnt.id]) {
+        var pref = reg[preferredEnt.id];
+        if (pref.config_entry_id) return String(pref.config_entry_id);
+        if (pref.entry_id) return String(pref.entry_id);
+      }
+      for (var i = 0; i < items.length; i += 1) {
+        var entry = reg[items[i].id];
+        if (entry && entry.config_entry_id) return String(entry.config_entry_id);
+        if (entry && entry.entry_id) return String(entry.entry_id);
+      }
+      return null;
+    }
+
     _moreInfo(id) {
       if (!id) return;
       this.dispatchEvent(new CustomEvent("hass-more-info", {
@@ -1371,6 +1524,12 @@
             this._callService("switch", "turn_off", { entity_id: sc.id }, "sync_charge_toggle");
           }
         }
+        return;
+      }
+
+      var cliExtraEl = target.closest("[data-climate-extra]");
+      if (cliExtraEl) {
+        this._handleClimateExtraToggle(cliExtraEl.getAttribute("data-climate-extra"));
         return;
       }
 
@@ -1563,6 +1722,53 @@
       }
     }
 
+    _handleClimateExtraToggle(extraKey) {
+      if (!this._hass || !Object.prototype.hasOwnProperty.call(CLIMATE_EXTRA_META, extraKey)) return;
+      if (!Array.isArray(this._allowedClimateExtras) || this._allowedClimateExtras.indexOf(extraKey) < 0) return;
+      var pendingKey = "climate_extra:" + extraKey;
+      if (this._pendingKeys.has(pendingKey)) return;
+
+      var curExtras = this._currentClimateExtras || [];
+      var nextExtras = computeToggleClimateExtras(curExtras, extraKey);
+      var baseSig = this._currentClimateExtrasBaseSig || "";
+      var self = this;
+      var lang = getLang(this._hass);
+      var t = getTexts(lang);
+
+      // Sequence token prevents stale async failures from clearing newer selections.
+      this._climateExtrasReqSeq = (this._climateExtrasReqSeq || 0) + 1;
+      var reqSeq = this._climateExtrasReqSeq;
+
+      this._errorMsg = null;
+      this._optimisticClimateExtras = { extras: nextExtras.slice(), baseSig: baseSig };
+      this._pendingKeys.add(pendingKey);
+      this._render(this._hass);
+
+      var svcData = { extras: nextExtras.slice() };
+      if (this._currentEntryId) svcData.entry_id = this._currentEntryId;
+
+      var onFail = function (err) {
+        self._pendingKeys.delete(pendingKey);
+        if (reqSeq === self._climateExtrasReqSeq) {
+          self._optimisticClimateExtras = null;
+          self._errorMsg = (err && err.message) ? String(err.message) : t.commandFailed;
+        }
+        if (self._hass) self._render(self._hass);
+      };
+
+      try {
+        Promise.resolve(this._hass.callService("lepas", "set_departure_climate_extras", svcData)).then(
+          function () {
+            self._pendingKeys.delete(pendingKey);
+            if (self._hass) self._render(self._hass);
+          },
+          onFail
+        );
+      } catch (syncErr) {
+        onFail(syncErr);
+      }
+    }
+
     set hass(hass) {
       this._hass = hass;
       this._ensureShellListeners();
@@ -1666,10 +1872,22 @@
       var applySchedBtn = this._findDomain(items, "button", "apply_charging_schedule");
 
       var nextDep = this._findDomain(items, "sensor", "next_departure");
+      var schedDep = this._findDomain(items, "sensor", "scheduled_departure", "partenza_programmata");
       var quickDep = this._findDomain(items, "switch", "quick_departure");
       var quickDepTime = this._findDomain(items, "time", "quick_departure_time");
       var syncCharge = this._findDomain(items, "switch", "sync_charge_to_departure");
       var depCliMode = this._findDomain(items, "select", "departure_climate_mode");
+      var nativeDepSync = this._findDomain(items, "switch", "native_departure_sync");
+      var applyDepBtn = this._findDomain(items, "button", "apply_departure_schedule");
+      var batteryHeat = this._findDomain(items, "switch", "battery_pack_heat");
+      var batteryHeatTime = this._findDomain(items, "time", "battery_pack_heat_time");
+      var syncBatteryHeat = this._findDomain(items, "switch", "sync_battery_heat_to_departure");
+      var rawAllowedExtras = (nextDep && nextDep.s && nextDep.s.attributes)
+        ? nextDep.s.attributes.allowed_climate_extras
+        : null;
+      var allowedClimateExtras = filterAllowedClimateExtras(rawAllowedExtras);
+      this._allowedClimateExtras = allowedClimateExtras.slice();
+      this._currentEntryId = this._entryId(hass, items, nextDep);
       var weekDays = DAY_SLUGS.map(function (slug, idx) {
         return {
           slug: slug,
@@ -1815,6 +2033,7 @@
       if (refreshFullBtn) regAction("refresh_full", "button", "press", { entity_id: refreshFullBtn.id }, false, "refresh_full");
       if (locateBtn) regAction("locate_gps", "button", "press", { entity_id: locateBtn.id }, false, "locate_gps");
       if (applySchedBtn) regAction("apply_charging_schedule", "button", "press", { entity_id: applySchedBtn.id }, false, "apply_charging_schedule");
+      if (applyDepBtn) regAction("apply_departure_schedule", "button", "press", { entity_id: applyDepBtn.id }, false, "apply_departure_schedule");
 
       var regSwitchToggle = function (actionId, ent) {
         if (!ent) return;
@@ -1835,6 +2054,9 @@
       regSwitchToggle("scheduled_charging_toggle", schedSwitch);
       regSwitchToggle("quick_departure_toggle", quickDep);
       regSwitchToggle("sync_charge_toggle", syncCharge);
+      regSwitchToggle("native_departure_sync_toggle", nativeDepSync);
+      regSwitchToggle("battery_pack_heat_toggle", batteryHeat);
+      regSwitchToggle("sync_battery_heat_toggle", syncBatteryHeat);
 
       if (chgDur) {
         var chAttrs = chgDur.s.attributes || {};
@@ -1858,6 +2080,7 @@
         ? cfg.entities.map(function (e) { return typeof e === "string" ? e : (e && e.entity ? e.entity : ""); }).join(",")
         : "";
       var warnSig = warns.map(function (w) { return w.id + ":" + w.text; }).join("|");
+      var allowedExtrasSig = allowedClimateExtras.join(",");
       var structKey = [
         lang,
         cfg.layout,
@@ -1865,6 +2088,7 @@
         extraSig,
         this._expandedDay || "",
         warnSig,
+        allowedExtrasSig,
         entityIdsSig,
       ].join("#");
 
@@ -1922,10 +2146,17 @@
           chgDays: chgDays,
           applySchedBtn: applySchedBtn,
           nextDep: nextDep,
+          schedDep: schedDep,
           quickDep: quickDep,
           quickDepTime: quickDepTime,
           syncCharge: syncCharge,
           depCliMode: depCliMode,
+          nativeDepSync: nativeDepSync,
+          applyDepBtn: applyDepBtn,
+          allowedClimateExtras: allowedClimateExtras,
+          batteryHeat: batteryHeat,
+          batteryHeatTime: batteryHeatTime,
+          syncBatteryHeat: syncBatteryHeat,
           weekDays: weekDays,
           tpmsCorners: tpmsCorners,
           windowsCov: windowsCov,
@@ -1998,10 +2229,17 @@
         chgDur: chgDur,
         chgDays: chgDays,
         nextDep: nextDep,
+        schedDep: schedDep,
         quickDep: quickDep,
         quickDepTime: quickDepTime,
         syncCharge: syncCharge,
         depCliMode: depCliMode,
+        nativeDepSync: nativeDepSync,
+        applyDepBtn: applyDepBtn,
+        allowedClimateExtras: allowedClimateExtras,
+        batteryHeat: batteryHeat,
+        batteryHeatTime: batteryHeatTime,
+        syncBatteryHeat: syncBatteryHeat,
         weekDays: weekDays,
         doorFL: doorFL,
         doorFR: doorFR,
@@ -2334,7 +2572,64 @@
         "</div>"
       ) : "";
 
-      var depHtml = (ctx.nextDep || ctx.quickDep || hasWeekDays) ? (
+      var depNativeHtml = (ctx.nativeDepSync || ctx.applyDepBtn || ctx.schedDep) ? (
+        '<div class="dep-subbox" data-bind="depNativeBox">' +
+          '<div class="sec-hdr">' +
+            '<span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.nativeDepartureTitle) + "</span></span>" +
+            (ctx.schedDep ? '<span class="badge hidden" data-bind="depSyncBadge"></span>' : "") +
+          "</div>" +
+          (ctx.schedDep
+            ? '<div class="info-row" role="button" tabindex="0" data-e="' + self._h(ctx.schedDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.carDeparturePlan) + '</span></span><span class="info-val num" data-bind="schedDepText"></span></div>'
+            : "") +
+          ((ctx.nativeDepSync || ctx.applyDepBtn)
+            ? '<div class="btn-row">' +
+                (ctx.nativeDepSync ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="native_departure_sync_toggle" data-confirm-key="native_departure_sync_toggle" data-bind="nativeDepSyncBtn"></button>' : "") +
+                (ctx.applyDepBtn ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_departure_schedule" data-confirm-key="apply_departure_schedule" data-bind="applyDepBtn"></button>' : "") +
+              "</div>"
+            : "") +
+        "</div>"
+      ) : "";
+
+      var depExtrasHtml = (ctx.allowedClimateExtras && ctx.allowedClimateExtras.length) ? (
+        '<div class="dep-subbox" data-bind="depExtrasBox">' +
+          '<div class="sec-hdr"><span>' + self._h(t.depClimateExtras) + "</span></div>" +
+          '<div class="chip-row" role="group" aria-label="' + self._h(t.depClimateExtras) + '">' +
+            ctx.allowedClimateExtras.map(function (extraKey) {
+              var meta = CLIMATE_EXTRA_META[extraKey];
+              var extraLbl = (t.climateExtraLabels && t.climateExtraLabels[extraKey])
+                ? t.climateExtraLabels[extraKey]
+                : (I18N.en.climateExtraLabels[extraKey] || extraKey);
+              return '<button type="button" class="chip-btn climate-extra-chip" data-climate-extra="' + self._h(extraKey) + '" data-uid="cliextra:' + self._h(extraKey) + '" aria-pressed="false">' +
+                svgIcon(meta ? meta.icon : "fan", "btn-ico") +
+                "<span>" + self._h(extraLbl) + "</span></button>";
+            }).join("") +
+          "</div>" +
+        "</div>"
+      ) : "";
+
+      var batteryHeatHtml = (ctx.batteryHeat || ctx.batteryHeatTime || ctx.syncBatteryHeat) ? (
+        '<div class="dep-subbox" data-bind="batteryHeatBox">' +
+          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("thermometer", "sec-ico") + "<span>" + self._h(t.batteryPreheat) + '</span></span><span class="badge hidden num" data-bind="batteryHeatSyncHint"></span></div>' +
+          ((ctx.batteryHeat || ctx.batteryHeatTime)
+            ? '<div class="btn-row">' +
+                (ctx.batteryHeat ? '<button type="button" class="ctrl-btn" style="flex:1" data-action-id="battery_pack_heat_toggle" data-confirm-key="battery_pack_heat_toggle" data-bind="batteryHeatBtn"></button>' : "") +
+                (ctx.batteryHeatTime ? '<label class="sr-only" for="lp-bat-heat-time">' + self._h(t.batteryPreheatTime) + '</label><input type="time" id="lp-bat-heat-time" inputmode="none" class="ctrl-input num" data-entity-input="' + self._h(ctx.batteryHeatTime.id) + '" data-uid="input:' + self._h(ctx.batteryHeatTime.id) + '">' : "") +
+              "</div>"
+            : "") +
+          (ctx.syncBatteryHeat
+            ? '<div class="btn-row"><button type="button" class="ctrl-btn" style="flex:1" data-action-id="sync_battery_heat_toggle" data-confirm-key="sync_battery_heat_toggle" data-bind="syncBatteryHeatBtn"></button></div>'
+            : "") +
+        "</div>"
+      ) : "";
+
+      var hasDepSection = Boolean(
+        ctx.nextDep || ctx.quickDep || hasWeekDays ||
+        ctx.nativeDepSync || ctx.applyDepBtn || ctx.schedDep ||
+        (ctx.allowedClimateExtras && ctx.allowedClimateExtras.length) ||
+        ctx.batteryHeat || ctx.batteryHeatTime || ctx.syncBatteryHeat
+      );
+
+      var depHtml = hasDepSection ? (
         '<div class="surface">' +
           '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.departures) + '</span></span><span class="badge hidden num" data-bind="depChargeHint"></span></div>' +
           (ctx.nextDep ? '<div class="info-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.nextDeparture) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
@@ -2351,6 +2646,9 @@
                   "<span>" + self._h(wd.letter) + '</span><span class="day-dot"></span><span class="day-time num" data-day-time="' + wd.slug + '"></span></button>';
               }).join("") + "</div>" + dayEditorHtml
             : "") +
+          depNativeHtml +
+          depExtrasHtml +
+          batteryHeatHtml +
         "</div>"
       ) : "";
 
@@ -3071,6 +3369,124 @@
         }
       }
 
+      // Native departure sync & scheduled_departure status
+      var depSyncBadge = root.querySelector('[data-bind="depSyncBadge"]');
+      if (depSyncBadge && vm.schedDep && vm.schedDep.s) {
+        var sdAttrs = vm.schedDep.s.attributes || {};
+        if (sdAttrs.synced_with_ha === true || sdAttrs.synced_with_ha === false) {
+          depSyncBadge.classList.remove("hidden");
+          depSyncBadge.classList.toggle("is-emerald", sdAttrs.synced_with_ha === true);
+          depSyncBadge.classList.toggle("is-amber", sdAttrs.synced_with_ha === false);
+          depSyncBadge.textContent = sdAttrs.synced_with_ha ? t.synced : t.pendingSync;
+        } else {
+          depSyncBadge.classList.add("hidden");
+        }
+      } else if (depSyncBadge) {
+        depSyncBadge.classList.add("hidden");
+      }
+      var schedDepTxt = root.querySelector('[data-bind="schedDepText"]');
+      if (schedDepTxt && vm.schedDep) {
+        var sdRawAttrs = vm.schedDep.s && vm.schedDep.s.attributes ? vm.schedDep.s.attributes : {};
+        schedDepTxt.textContent = this._dead(vm.schedDep.s)
+          ? "—"
+          : (sdRawAttrs.riepilogo ? String(sdRawAttrs.riepilogo) : vm.schedDep.s.state);
+      }
+      var nativeDepSyncBtn = root.querySelector('[data-bind="nativeDepSyncBtn"]');
+      if (nativeDepSyncBtn && vm.nativeDepSync) {
+        var ndsOn = this._isOn(vm.nativeDepSync);
+        this._applyBtnState(
+          nativeDepSyncBtn,
+          t.nativeDepSync + ": " + (ndsOn ? t.on : t.off),
+          "native_departure_sync_toggle",
+          "native_departure_sync_toggle",
+          ndsOn ? "is-emerald" : "",
+          t,
+          "calendar"
+        );
+      }
+      var applyDepBtnEl = root.querySelector('[data-bind="applyDepBtn"]');
+      if (applyDepBtnEl && vm.applyDepBtn) {
+        this._applyBtnState(
+          applyDepBtnEl,
+          t.applyDeparture,
+          "apply_departure_schedule",
+          "apply_departure_schedule",
+          "is-primary",
+          t,
+          "check"
+        );
+      }
+
+      // Dynamic departure climate extras (allowlisted + optimistic reconciliation)
+      var rawEntityExtras = (vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes)
+        ? vm.nextDep.s.attributes.climate_extras
+        : null;
+      var entityExtras = filterAllowedClimateExtras(rawEntityExtras);
+      var entityExtrasSig = entityExtras.join(",");
+      var activeClimateExtras = entityExtras;
+      if (this._optimisticClimateExtras) {
+        if (this._optimisticClimateExtras.baseSig === entityExtrasSig) {
+          activeClimateExtras = this._optimisticClimateExtras.extras;
+        } else {
+          this._optimisticClimateExtras = null;
+        }
+      }
+      this._currentClimateExtras = activeClimateExtras.slice();
+      this._currentClimateExtrasBaseSig = entityExtrasSig;
+
+      var activeExtraSet = Object.create(null);
+      for (var aei = 0; aei < activeClimateExtras.length; aei += 1) {
+        activeExtraSet[activeClimateExtras[aei]] = true;
+      }
+      var extraChips = root.querySelectorAll("[data-climate-extra]");
+      for (var eci = 0; eci < extraChips.length; eci += 1) {
+        var eKey = extraChips[eci].getAttribute("data-climate-extra");
+        var eOn = Boolean(activeExtraSet[eKey]);
+        var ePending = this._pendingKeys.has("climate_extra:" + eKey);
+        extraChips[eci].classList.toggle("is-active", eOn);
+        extraChips[eci].classList.toggle("is-pending", ePending);
+        extraChips[eci].setAttribute("aria-pressed", eOn ? "true" : "false");
+      }
+
+      // Battery pack preheating (cat. 216)
+      var batHeatBtn = root.querySelector('[data-bind="batteryHeatBtn"]');
+      if (batHeatBtn && vm.batteryHeat) {
+        var bhOn = this._isOn(vm.batteryHeat);
+        this._applyBtnState(
+          batHeatBtn,
+          t.batteryPreheat + ": " + (bhOn ? t.on : t.off),
+          "battery_pack_heat_toggle",
+          "battery_pack_heat_toggle",
+          bhOn ? "is-amber" : "",
+          t,
+          "flame"
+        );
+      }
+      syncInputVal(vm.batteryHeatTime, true);
+      var syncBatBtn = root.querySelector('[data-bind="syncBatteryHeatBtn"]');
+      if (syncBatBtn && vm.syncBatteryHeat) {
+        var sbhOn = this._isOn(vm.syncBatteryHeat);
+        this._applyBtnState(
+          syncBatBtn,
+          t.syncBatteryHeat + ": " + (sbhOn ? t.on : t.off),
+          "sync_battery_heat_toggle",
+          "sync_battery_heat_toggle",
+          sbhOn ? "is-emerald" : "",
+          t,
+          "clock"
+        );
+      }
+      var batHintEl = root.querySelector('[data-bind="batteryHeatSyncHint"]');
+      if (batHintEl) {
+        var bStart = vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes && vm.nextDep.s.attributes.battery_heat_start;
+        if (bStart) {
+          batHintEl.classList.remove("hidden");
+          batHintEl.textContent = t.batteryHeatHint + ": " + bStart;
+        } else {
+          batHintEl.classList.add("hidden");
+        }
+      }
+
       // Blueprint SVG & TPMS
       var setBp = function (part, cls, active) {
         var el = root.querySelector('[data-bp-part="' + part + '"]');
@@ -3143,6 +3559,9 @@
     computeToggleDays: computeToggleDays,
     presetForDays: presetForDays,
     presetDaysForKey: presetDaysForKey,
+    ALLOWED_CLIMATE_EXTRAS: ALLOWED_CLIMATE_EXTRAS.slice(),
+    filterAllowedClimateExtras: filterAllowedClimateExtras,
+    computeToggleClimateExtras: computeToggleClimateExtras,
     svgIcon: svgIcon,
   };
 

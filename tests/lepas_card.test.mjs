@@ -1615,3 +1615,282 @@ test("v1.20.1 Time inputs block manual keyboard typing and open picker on click"
   assert.equal(enterEv.defaultPrevented, true);
   assert.equal(pickerCalls, 2, "Pressing Enter on time input must open picker");
 });
+
+test("v1.21.0 Native departure sync, apply button, and synced_with_ha status indicator", async () => {
+  const hass = makeFullHass({
+    "switch.lepas_native_departure_sync": makeState("switch.lepas_native_departure_sync", "off"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "07:30", {
+      attiva: true,
+      riepilogo: "07:30 · Lun, Mer, Ven",
+      synced_with_ha: false,
+    }),
+  }, "it");
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hass);
+
+  const syncBtn = card.shadowRoot.querySelector('[data-action-id="native_departure_sync_toggle"]');
+  const applyBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
+  const syncBadge = card.shadowRoot.querySelector('[data-bind="depSyncBadge"]');
+  assert.ok(syncBtn, "Native departure sync button must render");
+  assert.ok(applyBtn, "Apply departure schedule button must render");
+  assert.ok(syncBadge, "Scheduled departure sync badge must render");
+  assert.equal(syncBadge.classList.contains("hidden"), false);
+  assert.equal(syncBadge.classList.contains("is-amber"), true);
+  assert.equal(syncBadge.textContent, "Da sincronizzare");
+
+  // Click native departure sync toggle -> switch.turn_on
+  syncBtn.click();
+  await Promise.resolve();
+  assert.deepEqual(hass.calls[0], {
+    domain: "switch",
+    service: "turn_on",
+    data: { entity_id: "switch.lepas_native_departure_sync" },
+  });
+
+  // Click apply departure schedule -> button.press
+  applyBtn.click();
+  await Promise.resolve();
+  assert.deepEqual(hass.calls[1], {
+    domain: "button",
+    service: "press",
+    data: { entity_id: "button.lepas_apply_departure_schedule" },
+  });
+
+  // Update sensor.lepas_scheduled_departure -> synced_with_ha: true turns badge emerald
+  card.hass = makeFullHass({
+    "switch.lepas_native_departure_sync": makeState("switch.lepas_native_departure_sync", "on"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "07:30", {
+      attiva: true,
+      synced_with_ha: true,
+    }),
+  }, "en");
+  const updatedBadge = card.shadowRoot.querySelector('[data-bind="depSyncBadge"]');
+  assert.equal(updatedBadge.classList.contains("hidden"), false);
+  assert.equal(updatedBadge.classList.contains("is-emerald"), true);
+  assert.equal(updatedBadge.textContent, "Synced");
+
+  // Fallback entity key: sensor.lepas_partenza_programmata also binds depSyncBadge
+  const itAliasCard = createCard({ default_tab: "charging" }, makeFullHass({
+    "sensor.lepas_partenza_programmata": makeState("sensor.lepas_partenza_programmata", "07:30", {
+      attiva: true,
+      synced_with_ha: true,
+    }),
+  }, "nl"));
+  const nlBadge = itAliasCard.shadowRoot.querySelector('[data-bind="depSyncBadge"]');
+  assert.ok(nlBadge);
+  assert.equal(nlBadge.classList.contains("hidden"), false);
+  assert.equal(nlBadge.textContent, "Gesynchroniseerd");
+
+  // Graceful omission when native departure entities are absent
+  const minimalCard = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
+  assert.equal(minimalCard.shadowRoot.querySelector('[data-action-id="native_departure_sync_toggle"]'), null);
+  assert.equal(minimalCard.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]'), null);
+  assert.equal(minimalCard.shadowRoot.querySelector('[data-bind="depSyncBadge"]'), null);
+});
+
+test("v1.21.0 Dynamic departure climate extras: strict allowlist, XSS escaping, service call, mutual exclusion, and failure rollback", async () => {
+  const h = LepasCard._helpers;
+  assert.ok(Array.isArray(h.ALLOWED_CLIMATE_EXTRAS), "ALLOWED_CLIMATE_EXTRAS helper must exist");
+  assert.equal(h.ALLOWED_CLIMATE_EXTRAS.length, 12);
+  assert.equal(typeof h.filterAllowedClimateExtras, "function");
+  assert.deepEqual(
+    h.filterAllowedClimateExtras(["steering_wheel_heating", "<img onerror=alert(1)>", "toString", "__proto__", "windshield_defog"]),
+    ["steering_wheel_heating", "windshield_defog"]
+  );
+
+  const initialExtras = ["driver_seat_heating", "<img onerror=alert(1)>"];
+  const hass = makeFullHass({
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30", {
+      departure_at: "2026-11-18T07:30:00+01:00",
+      allowed_climate_extras: [
+        "steering_wheel_heating",
+        "driver_seat_heating",
+        "driver_seat_ventilation",
+        "<img onerror=alert(1)>",
+        "injected_unknown_extra",
+      ],
+      climate_extras: initialExtras,
+    }),
+  }, "it");
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hass);
+  const chips = card.shadowRoot.querySelectorAll("[data-climate-extra]");
+  assert.equal(chips.length, 3, "Only allowlisted climate extras may render");
+  assert.equal(card.shadowRoot.querySelector("img[onerror]"), null);
+  assert.equal(card.shadowRoot.innerHTML.includes("onerror=alert"), false);
+
+  const heatChip = card.shadowRoot.querySelector('[data-climate-extra="driver_seat_heating"]');
+  const ventChip = card.shadowRoot.querySelector('[data-climate-extra="driver_seat_ventilation"]');
+  const steerChip = card.shadowRoot.querySelector('[data-climate-extra="steering_wheel_heating"]');
+  assert.ok(heatChip && ventChip && steerChip);
+  assert.equal(heatChip.classList.contains("is-active"), true);
+  assert.equal(heatChip.getAttribute("aria-pressed"), "true");
+  assert.equal(ventChip.classList.contains("is-active"), false);
+
+  // Clicking ventilation chip with config_entry_id present sends { entry_id, extras } and resolves seat mutual exclusion
+  const entryHass = makeFullHass({
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30", {
+      allowed_climate_extras: ["steering_wheel_heating", "driver_seat_heating", "driver_seat_ventilation"],
+      climate_extras: ["driver_seat_heating", "steering_wheel_heating"],
+    }),
+  }, "it");
+  entryHass.entities["sensor.lepas_next_departure"].config_entry_id = "entry_lepas_1";
+  const entryCard = createCard({ default_tab: "charging" }, entryHass);
+  entryCard.shadowRoot.querySelector('[data-climate-extra="driver_seat_ventilation"]').click();
+  await Promise.resolve();
+  assert.deepEqual(entryHass.calls[0], {
+    domain: "lepas",
+    service: "set_departure_climate_extras",
+    data: {
+      entry_id: "entry_lepas_1",
+      extras: ["steering_wheel_heating", "driver_seat_ventilation"],
+    },
+  });
+
+  // When config_entry_id is absent, entry_id is omitted gracefully; on rejection pending clears & HA state stays unmutated
+  let rejectPending;
+  const cachedArr = ["driver_seat_heating"];
+  const failHass = makeFullHass({
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30", {
+      allowed_climate_extras: ["steering_wheel_heating", "driver_seat_heating", "driver_seat_ventilation"],
+      climate_extras: cachedArr,
+    }),
+  }, "en");
+  failHass.callService = (domain, service, data) => {
+    failHass.calls.push({ domain, service, data });
+    return new Promise((_, reject) => {
+      rejectPending = reject;
+    });
+  };
+  const failCard = createCard({ default_tab: "charging" }, failHass);
+  const steerFailChip = failCard.shadowRoot.querySelector('[data-climate-extra="steering_wheel_heating"]');
+  steerFailChip.click();
+
+  // While in flight: pending class is set and entry_id omitted
+  assert.equal(failCard.shadowRoot.querySelector('[data-climate-extra="steering_wheel_heating"]').classList.contains("is-pending"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(failHass.calls[0].data, "entry_id"), false);
+  assert.deepEqual(failHass.calls[0], {
+    domain: "lepas",
+    service: "set_departure_climate_extras",
+    data: { extras: ["driver_seat_heating", "steering_wheel_heating"] },
+  });
+
+  // Reject service call -> clears pending, reverts active state, shows error, leaves cached HA state unmutated
+  rejectPending(new Error("Vehicle asleep"));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const settledSteer = failCard.shadowRoot.querySelector('[data-climate-extra="steering_wheel_heating"]');
+  assert.equal(settledSteer.classList.contains("is-pending"), false, "Pending class must clear on failure");
+  assert.equal(settledSteer.classList.contains("is-active"), false, "Failed chip must revert to un-activated state");
+  assert.equal(failCard.shadowRoot.querySelector('[data-climate-extra="driver_seat_heating"]').classList.contains("is-active"), true);
+  assert.deepEqual(cachedArr, ["driver_seat_heating"], "Cached HA state attribute array must NEVER be mutated");
+  assert.equal(failCard.shadowRoot.querySelector('[role="alert"].error-banner').classList.contains("hidden"), false);
+
+  // Absent / empty allowed_climate_extras hides the climate extras sub-box
+  const noExtrasCard = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
+  assert.equal(noExtrasCard.shadowRoot.querySelector('[data-bind="depExtrasBox"]'), null);
+});
+
+test("v1.21.0 Battery preheat sub-box visibility and controls (cat. 216)", async () => {
+  // Hidden when cat. 216 entities are absent
+  const noBatCard = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
+  assert.equal(noBatCard.shadowRoot.querySelector('[data-bind="batteryHeatBox"]'), null);
+
+  // Visible when cat. 216 entities are present
+  const hass = makeFullHass({
+    "switch.lepas_battery_pack_heat": makeState("switch.lepas_battery_pack_heat", "off"),
+    "time.lepas_battery_pack_heat_time": makeState("time.lepas_battery_pack_heat_time", "07:00:00"),
+    "switch.lepas_sync_battery_heat_to_departure": makeState("switch.lepas_sync_battery_heat_to_departure", "on"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30", {
+      battery_heat_start: "07:00",
+    }),
+  }, "it");
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hass);
+  const box = card.shadowRoot.querySelector('[data-bind="batteryHeatBox"]');
+  assert.ok(box, "Battery preheat sub-box must render when cat. 216 entities exist");
+
+  const hint = box.querySelector('[data-bind="batteryHeatSyncHint"]');
+  assert.ok(hint);
+  assert.equal(hint.classList.contains("hidden"), false);
+  assert.ok(hint.textContent.includes("07:00"));
+
+  const heatBtn = box.querySelector('[data-action-id="battery_pack_heat_toggle"]');
+  const syncBtn = box.querySelector('[data-action-id="sync_battery_heat_toggle"]');
+  const timeInput = box.querySelector('[data-entity-input="time.lepas_battery_pack_heat_time"]');
+  assert.ok(heatBtn && syncBtn && timeInput);
+  assert.equal(timeInput.getAttribute("inputmode"), "none");
+  assert.equal(timeInput.value, "07:00");
+
+  heatBtn.click();
+  await Promise.resolve();
+  assert.deepEqual(hass.calls[0], {
+    domain: "switch",
+    service: "turn_on",
+    data: { entity_id: "switch.lepas_battery_pack_heat" },
+  });
+
+  syncBtn.click();
+  await Promise.resolve();
+  assert.deepEqual(hass.calls[1], {
+    domain: "switch",
+    service: "turn_off",
+    data: { entity_id: "switch.lepas_sync_battery_heat_to_departure" },
+  });
+
+  timeInput.value = "06:30";
+  timeInput.dispatchEvent(new Event("change", { bubbles: true }));
+  await Promise.resolve();
+  assert.deepEqual(hass.calls[2], {
+    domain: "time",
+    service: "set_value",
+    data: { entity_id: "time.lepas_battery_pack_heat_time", time: "06:30:00" },
+  });
+});
+
+test("v1.21.0 IT/EN/NL i18n labels for native departure, battery heat, and all 12 climate extras", () => {
+  const h = LepasCard._helpers;
+  const requiredKeys = [
+    "nativeDepartureTitle",
+    "nativeDepSync",
+    "applyDeparture",
+    "carDeparturePlan",
+    "depClimateExtras",
+    "batteryPreheat",
+    "batteryPreheatTime",
+    "syncBatteryHeat",
+    "batteryHeatHint",
+  ];
+  const extraKeys = [
+    "driver_seat_heating",
+    "driver_seat_ventilation",
+    "passenger_seat_heating",
+    "passenger_seat_ventilation",
+    "rear_left_seat_heating",
+    "rear_left_seat_ventilation",
+    "rear_right_seat_heating",
+    "rear_right_seat_ventilation",
+    "rear_window_heating",
+    "windshield_defrost",
+    "windshield_defog",
+    "steering_wheel_heating",
+  ];
+
+  for (const lang of ["it", "en", "nl"]) {
+    const dict = h.getTexts(lang);
+    for (const k of requiredKeys) {
+      assert.equal(typeof dict[k], "string", `Missing I18N.${lang}.${k}`);
+      assert.ok(dict[k].trim().length > 0, `Empty I18N.${lang}.${k}`);
+    }
+    assert.ok(dict.climateExtraLabels && typeof dict.climateExtraLabels === "object", `Missing I18N.${lang}.climateExtraLabels`);
+    for (const ek of extraKeys) {
+      assert.equal(typeof dict.climateExtraLabels[ek], "string", `Missing I18N.${lang}.climateExtraLabels.${ek}`);
+      assert.ok(dict.climateExtraLabels[ek].trim().length > 0, `Empty I18N.${lang}.climateExtraLabels.${ek}`);
+    }
+  }
+  assert.notEqual(h.getTexts("it").batteryPreheat, h.getTexts("en").batteryPreheat);
+  assert.notEqual(h.getTexts("en").batteryPreheat, h.getTexts("nl").batteryPreheat);
+});
