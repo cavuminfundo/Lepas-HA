@@ -11,7 +11,7 @@ DALL'entry prima di importarli (assunzione: una sola auto per istanza HA).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 import functools
 import hashlib
 import json
@@ -28,6 +28,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -40,6 +41,7 @@ from .const import (
     CONF_TENANT_CODE, CONF_COUNTRY_ID,
     CONF_POLL_NORMAL, CONF_POLL_CHARGING, DEFAULT_POLL_NORMAL_MIN,
     DEFAULT_POLL_CHARGING_MIN, POLL_WAKE_WAIT, A07900_WAKE_COOLDOWN_S,
+    CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH,
     COMMAND_SETTLE_S, COMMAND_QUEUE_WAIT,
     HV_ON_POLL_EVERY, HV_ON_POLL_MAX,
     CHARGING_POLL_EVERY, CHARGING_POLL_MAX, DRIVE_WATCH_EVERY,
@@ -52,6 +54,7 @@ from .const import (
     CLIMA_MIN_DEFAULT, CLIMA_MAX_DEFAULT, CLIMA_STEP_DEFAULT,
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
 )
+from .consumption import ConsumptionTracker, is_degraded_battery_frame
 from .scheduler import (
     DEPARTURE_CLIMATE_EXTRAS_COMMANDS,
     DEPARTURE_CLIMATE_EXTRAS_FEATURES,
@@ -453,6 +456,11 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._hv_lock: threading.Lock = threading.Lock()
         self._hv_session_in_use: bool = False
         self._hv_session_start_odo: float | None = None
+        # Dedicated lock for consumption tracking (never nested with _state_lock or _hv_lock).
+        self._consumption_lock: threading.Lock = threading.Lock()
+        self._consumption_tracker: ConsumptionTracker = ConsumptionTracker()
+        self._consumption_store: Store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.consumption")
+        self.battery_capacity_kwh: float = self._configured_battery_capacity(opt)
         # Impronta dell'ultima telemetria vista, per accorgersi di quando cambia davvero.
         # `None` = nessuna lettura ancora fatta in questa sessione.
         self._impronta_dati: str | None = None
@@ -579,9 +587,99 @@ class LepasCoordinator(DataUpdateCoordinator):
                        f"Copia {', '.join(REQUIRED_CERTS)} in {self.certs_dir} "
                        f"(oppure indica una cartella in certs_src).")
 
+    @staticmethod
+    def _configured_battery_capacity(opt: Mapping[str, object] | object) -> float:
+        """Return validated usable HV battery capacity in kWh from entry options."""
+        if not isinstance(opt, Mapping):
+            return DEFAULT_BATTERY_CAPACITY_KWH
+        val = _safe_float(opt.get(CONF_BATTERY_CAPACITY_KWH))
+        if val is None or not (5.0 <= val <= 150.0):
+            return DEFAULT_BATTERY_CAPACITY_KWH
+        return val
+
+    async def async_load_consumption(self) -> None:
+        """Load persisted consumption history from HA Store on the event loop."""
+        try:
+            raw = await self._consumption_store.async_load()
+        except Exception as err:  # noqa: BLE001 — corrupt JSON/OSError must not block boot
+            _LOGGER.warning("Lepas: failed to load consumption store (%s)", type(err).__name__)
+            return
+        tracker = ConsumptionTracker.from_dict(raw)
+        with self._consumption_lock:
+            self._consumption_tracker = tracker
+
+    def _consumption_snapshot(self) -> dict:
+        """Serialize consumption tracker under _consumption_lock for Store persistence."""
+        with self._consumption_lock:
+            return self._consumption_tracker.to_dict()
+
+    @callback
+    def _schedule_consumption_save(self) -> None:
+        """Schedule debounced Store write on the Home Assistant event loop."""
+        if self._timers.closing:
+            return
+        self._consumption_store.async_delay_save(self._consumption_snapshot, 30)
+
+    async def async_flush_consumption(self) -> None:
+        """Flush consumption state to Store during unload after timers/MQTT stop."""
+        try:
+            await self._consumption_store.async_save(self._consumption_snapshot())
+        except Exception as err:  # noqa: BLE001 — unload must not fail on store I/O
+            _LOGGER.warning("Lepas: failed to flush consumption store (%s)", type(err).__name__)
+
+    def consumption_stats(self, mode: str, target_km: float | None) -> dict[str, object]:
+        """Return consumption statistics for a given propulsion mode and window."""
+        with self._consumption_lock:
+            return self._consumption_tracker.window_stats(mode, target_km)
+
+    async def async_reset_consumption_from_start(self) -> None:
+        """Reset cumulative From Start consumption totals and notify HA listeners."""
+        with self._consumption_lock:
+            self._consumption_tracker.reset_from_start()
+            snapshot = self._consumption_tracker.to_dict()
+        try:
+            await self._consumption_store.async_save(snapshot)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Lepas: failed to save reset consumption store (%s)", type(err).__name__)
+        if not self._timers.closing:
+            self.async_update_listeners()
+
+    def _ingest_consumption(self, rt: dict, fields: dict) -> None:
+        """Ingest one realtime frame under _consumption_lock (never nested with _state_lock)."""
+        from .entity import field_on
+
+        sources = (rt, fields)
+        odometer = _safe_float(_pick_field(sources, "odometer"))
+        soc_pct = _safe_float(_pick_field(sources, "dumpEnergy"))
+        fuel_l = _safe_float(_pick_field(sources, "oilSurplus"))
+        engine_on = field_on(_pick_field(sources, "engineState")) is True
+        charging_or_plugged = (
+            _safe_float(_pick_field(sources, "chargeState")) == 1.0
+            or field_on(_pick_field(sources, "chargeGunState")) is True
+            or field_on(_pick_field(sources, "fastChargingGunStatus")) is True
+        )
+        degraded = is_degraded_battery_frame(rt)
+
+        with self._consumption_lock:
+            changed = self._consumption_tracker.ingest(
+                odometer,
+                soc_pct,
+                fuel_l,
+                engine_on=engine_on,
+                charging_or_plugged=charging_or_plugged,
+                degraded_battery=degraded,
+                battery_capacity_kwh=self.battery_capacity_kwh,
+            )
+        if changed and not self._timers.closing:
+            try:
+                self.hass.loop.call_soon_threadsafe(self._schedule_consumption_save)
+            except RuntimeError:
+                pass
+
     # ───────────────── ciclo di vita MQTT auto ─────────────────
     async def async_start(self) -> None:
         """Avvia la connessione MQTT all'auto (paho gira in un thread proprio)."""
+        await self.async_load_consumption()
         await self.async_setup_diag()
         await self.hass.async_add_executor_job(self._connect_car)
         self.async_start_departure_scheduler()
@@ -2855,6 +2953,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             patch["position"] = pos_copy
             patch["last_pos_fix"] = dt_util.utcnow()
         patch["car_in_use"] = self._evaluate_car_in_use(rt_copy, fields_copy)
+        self._ingest_consumption(rt_copy, fields_copy)
         self._update(patch)
 
     async def async_refresh_full_status(self) -> None:

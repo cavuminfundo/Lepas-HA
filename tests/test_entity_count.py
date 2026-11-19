@@ -35,8 +35,8 @@ from custom_components.lepas.const import (
 # `entity_registry_enabled_default = False` (27 nel registro, 26 attive in `hass.states`).
 ATTESO = {
     "binary_sensor": 26,
-    "sensor": 43,
-    "button": 15,
+    "sensor": 49,
+    "button": 16,
     "switch": 30,
     "cover": 3,
     "number": 2,
@@ -76,7 +76,9 @@ ATTESO = {
 # 2 sensor diagnostici, 9 switch, 8 time) -> 129 attive in `hass.states`.
 # 2026-11-18 (v1.21.0): +5 entità per partenza nativa & preriscaldamento batteria (+3 switch,
 # +1 button, +1 time) -> 134 attive in `hass.states`.
-TOTALE_ATTESO = 134
+# 2026-11-19: +7 entità per sensori di consumo a lunga durata (+6 sensor EV/Ibrida,
+# +1 button reset_consumption_from_start) -> 141 attive in `hass.states`.
+TOTALE_ATTESO = 141
 
 
 def test_totale_dichiarato_coerente():

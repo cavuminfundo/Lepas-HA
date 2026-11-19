@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.29.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Long-Term EV & Fuel Consumption Engine (`consumption.py`, `coordinator.py`, `sensor.py`, `button.py`)**: Added persistent rolling (`100 km`, `1000 km`) and cumulative (`From start`) consumption tracking separated by `engineState` (`ev_consumption_*` in `kWh/100 km` when thermal engine is off; `hybrid_consumption_*` in `L/100 km` with `electric_consumption_kwh_100km` attribute when engine is on), automatic suppression of `hybrid_*` sensors on pure BEV vehicles, configurable `battery_capacity_kwh` in options/config flow, and `button.lepas_reset_consumption_from_start` to reset cumulative counters without clearing rolling queues.
+- **Overview Consumption Grid, Unit Switches & Auto-Updates Toggle (`lepas-card.js`)**: Added the compact `Average consumption` section (`50 km`, `100 km`, `1000 km`, `From start`) below the Overview KPI grid with independent per-row segmented unit switches (`kWh/100 | kWh/km` on EV; `L/100 | km/L` with zero-division guard on Fuel/Carburante) persisted in `localStorage`, added a 1-tap `switch.lepas_automatic_updates` toggle button in the Overview footer, fixed `.btn-row > .ctrl-btn` flexing and `.badge` width bounds, and bumped card assets to `?v=1.29.0`.
+
+### 🇮🇹 Italiano
+
+- **Motore Consumi a Lunga Durata EV e Carburante (`consumption.py`, `coordinator.py`, `sensor.py`, `button.py`)**: Aggiunto il tracciamento persistente dei consumi su finestre mobili (`100 km`, `1000 km`) e cumulativo (`Da inizio`) separato tramite `engineState` (`ev_consumption_*` in `kWh/100 km` a motore termico spento; `hybrid_consumption_*` in `L/100 km` con attributo `electric_consumption_kwh_100km` a motore acceso), soppressione automatica dei sensori `hybrid_*` sui veicoli BEV puri, `battery_capacity_kwh` configurabile da config/options flow e pulsante `button.lepas_reset_consumption_from_start` per azzerare i totalizzatori cumulativi preservando le code mobili.
+- **Griglia Consumi Overview, Selettori Unità e Toggle Aggiornamenti Auto (`lepas-card.js`)**: Aggiunto il blocco compatto `Consumi medi` (`50 km`, `100 km`, `1000 km`, `Da inizio`) in Plancia con selettori segmentati indipendenti per riga (`kWh/100 | kWh/km` su EV; `L/100 | km/L` con guardia zero-divisione su Carburante) salvati in `localStorage`, aggiunto il pulsante 1-tap per `switch.lepas_automatic_updates` nel footer Overview, sistemato il layout `.btn-row > .ctrl-btn` / `.badge`, e aggiornato il cache-busting della card a `?v=1.29.0`.
+
 ## v1.28.0 — 2026-11-19
 
 ### 🇬🇧 English

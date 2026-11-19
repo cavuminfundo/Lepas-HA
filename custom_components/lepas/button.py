@@ -61,6 +61,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
                 translation_key="apply_departure_schedule",
             )
         )
+    if entity_allowed(coord, "button", "reset_consumption_from_start"):
+        ents.append(
+            LepasActionButton(
+                coord,
+                "Lepas Reset consumption from start",
+                "reset_consumption_from_start",
+                coord.async_reset_consumption_from_start,
+                category=EntityCategory.CONFIG,
+                object_id=f"{ID_PREFIX}_reset_consumption_from_start",
+                translation_key="reset_consumption_from_start",
+            )
+        )
     add(ents)
 
 
@@ -92,6 +104,7 @@ class LepasActionButton(LepasEntity, ButtonEntity):
         "refresh_full": "mdi:car-info",
         "apply_charging_schedule": "mdi:calendar-sync",
         "apply_departure_schedule": "mdi:calendar-export",
+        "reset_consumption_from_start": "mdi:restart",
     }
 
     def __init__(

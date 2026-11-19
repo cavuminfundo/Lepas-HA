@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.28.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.29.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.28.0";
+  var CARD_VERSION = "1.29.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.28.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.28.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.28.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.28.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.28.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.29.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.29.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.29.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.29.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.29.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.28.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.29.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -167,6 +167,14 @@
       chargingLbl: "Ricarica",
       odometer: "Odometro",
       cable: "Cavo",
+      avgConsumption: "Consumi medi",
+      consEv: "EV",
+      consHybrid: "Carburante",
+      cons50: "50 km",
+      cons100: "100 km",
+      cons1000: "1000 km",
+      consFromStart: "Da inizio",
+      consUnitToggleTitle: "Cambia unità (/100 km ↔ kWh/km, km/L)",
       quickActions: "Comandi rapidi",
       trunk: "Baule",
       windows: "Finestrini",
@@ -179,6 +187,7 @@
       wakeCar: "Sveglia auto",
       refreshLoc: "Aggiorna pos.",
       refreshFull: "Stato completo",
+      autoUpdates: "Aggiornamento auto",
       locateGps: "Localizza GPS",
       position: "Posizione",
       updated: "Aggiornato",
@@ -347,6 +356,14 @@
       chargingLbl: "Charging",
       odometer: "Odometer",
       cable: "Cable",
+      avgConsumption: "Average consumption",
+      consEv: "EV",
+      consHybrid: "Fuel",
+      cons50: "50 km",
+      cons100: "100 km",
+      cons1000: "1000 km",
+      consFromStart: "From start",
+      consUnitToggleTitle: "Switch units (/100 km ↔ kWh/km, km/L)",
       quickActions: "Quick controls",
       trunk: "Trunk",
       windows: "Windows",
@@ -359,6 +376,7 @@
       wakeCar: "Wake car",
       refreshLoc: "Refresh pos.",
       refreshFull: "Full status",
+      autoUpdates: "Auto updates",
       locateGps: "Locate GPS",
       position: "Location",
       updated: "Updated",
@@ -527,6 +545,14 @@
       chargingLbl: "Laden",
       odometer: "Kilometerstand",
       cable: "Kabel",
+      avgConsumption: "Gemiddeld verbruik",
+      consEv: "EV",
+      consHybrid: "Brandstof",
+      cons50: "50 km",
+      cons100: "100 km",
+      cons1000: "1000 km",
+      consFromStart: "Vanaf start",
+      consUnitToggleTitle: "Eenheid wisselen (/100 km ↔ kWh/km, km/L)",
       quickActions: "Snelle bediening",
       trunk: "Kofferbak",
       windows: "Ramen",
@@ -539,6 +565,7 @@
       wakeCar: "Auto wekken",
       refreshLoc: "Locatie vernieuwen",
       refreshFull: "Volledige status",
+      autoUpdates: "Auto-updates",
       locateGps: "GPS zoeken",
       position: "Locatie",
       updated: "Bijgewerkt",
@@ -958,6 +985,42 @@
     return u ? v + " " + u : v;
   }
 
+  var CONS_UNIT_STORAGE_KEYS = { ev: "lepas_card_cons_ev_unit", hybrid: "lepas_card_cons_hyb_unit" };
+  function loadConsUnitModes() {
+    var modes = { ev: "per_100", hybrid: "per_100" };
+    try {
+      if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.getItem === "function") {
+        if (localStorage.getItem(CONS_UNIT_STORAGE_KEYS.ev) === "per_km") modes.ev = "per_km";
+        if (localStorage.getItem(CONS_UNIT_STORAGE_KEYS.hybrid) === "per_km") modes.hybrid = "per_km";
+      }
+    } catch (e) { /* ignore storage restrictions */ }
+    return modes;
+  }
+  function saveConsUnitMode(kind, mode) {
+    var key = CONS_UNIT_STORAGE_KEYS[kind];
+    if (!key) return;
+    try {
+      if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.setItem === "function") {
+        localStorage.setItem(key, mode === "per_km" ? "per_km" : "per_100");
+      }
+    } catch (e) { /* ignore storage restrictions */ }
+  }
+  function formatConsumptionCell(card, ent, kind, defaultUnit, mode) {
+    if (!ent || card._dead(ent.s)) return "—";
+    var num = card._num(ent.s);
+    if (mode === "per_km") {
+      if (num === null || !isFinite(num)) return "—";
+      if (kind === "ev") return (Math.round(num * 10) / 1000).toFixed(3) + " kWh/km";
+      if (num <= 0) return "—";
+      return (Math.round((100 / num) * 10) / 10).toFixed(1) + " km/L";
+    }
+    var disp = card._disp(ent.s);
+    if (disp !== "—" && !(ent.s.attributes && ent.s.attributes.unit_of_measurement) && num !== null) {
+      return disp + " " + defaultUnit;
+    }
+    return disp;
+  }
+
   function translateOption(kind, val, lang) {
     var code = String(lang || "en").slice(0, 2).toLowerCase();
     var dict = I18N[code] || I18N.en;
@@ -1215,9 +1278,22 @@
       ".metric-val { font-size: 1.08rem; font-weight: 700; color: var(--lp-text); line-height: 1.25; }",
       ".metric-bar { height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 2px; }",
       ".metric-bar-fill { height: 100%; background: var(--lp-emerald); border-radius: 999px; }",
+      ".cons-rows { display: flex; flex-direction: column; gap: 8px; }",
+      ".cons-row { display: flex; flex-direction: column; gap: 5px; }",
+      ".cons-row-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); }",
+      ".cons-row-title { display: inline-flex; align-items: center; gap: 5px; color: var(--lp-text); }",
+      ".cons-unit-seg { display: inline-grid; grid-template-columns: repeat(2, auto); gap: 2px; padding: 2px; border-radius: 9px; flex-shrink: 0; }",
+      ".cons-unit-seg .seg-btn { min-height: 26px; padding: 3px 8px; border-radius: 6px; font-size: 0.68rem; line-height: 1.15; white-space: nowrap; }",
+      ".cons-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }",
+      ".cons-cell { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 7px 6px; min-height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }",
+      ".cons-cell[data-e] { cursor: pointer; }",
+      ".cons-cell[data-e]:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
+      ".cons-cell-lbl { font-size: 0.67rem; font-weight: 600; color: var(--lp-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+      ".cons-cell-val { font-size: 0.76rem; font-weight: 700; color: var(--lp-text); line-height: 1.2; overflow-wrap: break-word; }",
       ".btn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
       ".btn-triple { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }",
       ".btn-row { display: flex; flex-wrap: wrap; gap: 8px; }",
+      ".btn-row > .ctrl-btn { flex: 1 1 120px; min-width: 0; }",
       ".ctrl-btn { position: relative; overflow: hidden; min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 10px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }",
       ".ctrl-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
       ".ctrl-btn:disabled { opacity: 0.55; cursor: not-allowed; }",
@@ -1357,7 +1433,7 @@
       ".bp-door-fr.is-open, .bp-door-rr.is-open { transform: rotate(-22deg); }",
       ".footer-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.76rem; color: var(--lp-text-secondary); }",
       ".meta-inline { display: inline-flex; align-items: center; gap: 6px; }",
-      ".badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); }",
+      ".badge { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; overflow-wrap: anywhere; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); }",
       ".badge.is-emerald { border-color: rgba(52, 211, 153, 0.4); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.1); }",
       ".badge.is-glacier { border-color: rgba(96, 165, 250, 0.4); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.1); }",
       ".badge.is-amber { border-color: rgba(245, 158, 11, 0.4); color: var(--lp-amber); background: rgba(245, 158, 11, 0.1); }",
@@ -1395,7 +1471,7 @@
       "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"charging\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"charging\"] { grid-column: 2; grid-row: 2; }",
       "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"climate\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"climate\"] { grid-column: 3; grid-row: 1 / span 2; }",
       "}",
-      "@container (max-width: 340px) { .bp-stage { grid-template-columns: minmax(60px, 1fr) minmax(92px, 120px) minmax(60px, 1fr); gap: 5px; } }",
+      "@container (max-width: 340px) { .bp-stage { grid-template-columns: minmax(60px, 1fr) minmax(92px, 120px) minmax(60px, 1fr); gap: 5px; } .cons-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }",
       "@supports not (container-type: inline-size) {",
       "  @media (min-width: 680px) {",
       "    ha-card[data-layout=\"auto\"] .tabs-bar { display: none; }",
@@ -1577,7 +1653,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.28.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.29.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -1608,6 +1684,7 @@
       };
       this._hass = null;
       this._activeTab = "overview";
+      this._consUnitModes = loadConsUnitModes();
       this._expandedDay = null;
       this._pendingDialogAction = null;
       this._dialogOutsidePress = false;
@@ -1930,6 +2007,20 @@
           return;
         }
         this._triggerAction(actionEl.getAttribute("data-action-id"), actionEl);
+        return;
+      }
+
+      var consUnitEl = target.closest("[data-cons-unit]");
+      if (consUnitEl) {
+        ev.stopPropagation();
+        var consKind = consUnitEl.getAttribute("data-cons-kind") === "hybrid" ? "hybrid" : "ev";
+        var nextConsMode = consUnitEl.getAttribute("data-cons-unit") === "per_km" ? "per_km" : "per_100";
+        if (!this._consUnitModes) this._consUnitModes = { ev: "per_100", hybrid: "per_100" };
+        if (nextConsMode !== this._consUnitModes[consKind]) {
+          this._consUnitModes[consKind] = nextConsMode;
+          saveConsUnitMode(consKind, nextConsMode);
+          if (this._hass) this._render(this._hass);
+        }
         return;
       }
 
@@ -2378,6 +2469,17 @@
       var chgSwitch = this._findDomain(items, "switch", "charging");
       var plug = this._findDomain(items, "binary_sensor", "charging_cable");
       var odo = this._findDomain(items, "sensor", "odometer");
+      var avgEnergy50 = this._findDomain(items, "sensor", "average_energy_consumption");
+      var evCons100 = this._findDomain(items, "sensor", "ev_consumption_100km");
+      var evCons1000 = this._findDomain(items, "sensor", "ev_consumption_1000km");
+      var evConsStart = this._findDomain(items, "sensor", "ev_consumption_from_start");
+      var avgFuel50 = this._findDomain(items, "sensor", "average_fuel_consumption");
+      var hybCons100 = this._findDomain(items, "sensor", "hybrid_consumption_100km");
+      var hybCons1000 = this._findDomain(items, "sensor", "hybrid_consumption_1000km");
+      var hybConsStart = this._findDomain(items, "sensor", "hybrid_consumption_from_start");
+      var hasEvCons = Boolean(avgEnergy50 || evCons100 || evCons1000 || evConsStart);
+      var hasHybridCons = Boolean(avgFuel50 || hybCons100 || hybCons1000 || hybConsStart);
+      var hasAnyCons = hasEvCons || hasHybridCons;
       var lock = this._findDomain(items, "lock", "lock");
       var climate = this._findDomain(items, "climate", "climate");
       var trunk = this._findDomain(items, "cover", "trunk");
@@ -2389,6 +2491,7 @@
       var wakeBtn = this._findDomain(items, "button", "wake_car");
       var refreshLocBtn = this._findDomain(items, "button", "refresh_location");
       var refreshFullBtn = this._findDomain(items, "button", "refresh_full_status");
+      var autoUpdatesSw = this._findDomain(items, "switch", "automatic_updates");
       var locateBtn = this._findDomain(items, "button", "locate_car_gps");
       var tracker = this._findDomain(items, "device_tracker", "location");
 
@@ -2648,6 +2751,7 @@
       regSwitchToggle("sync_charge_toggle", syncCharge);
       regSwitchToggle("battery_pack_heat_toggle", batteryHeat);
       regSwitchToggle("sync_battery_heat_toggle", syncBatteryHeat);
+      regSwitchToggle("auto_updates_toggle", autoUpdatesSw);
 
       if (chgDur) {
         var chAttrs = chgDur.s.attributes || {};
@@ -2679,6 +2783,8 @@
         extraSig,
         warnSig,
         allowedExtrasSig,
+        hasEvCons ? "1" : "0",
+        hasHybridCons ? "1" : "0",
         entityIdsSig,
       ].join("#");
 
@@ -2709,6 +2815,17 @@
           chgSwitch: chgSwitch,
           plug: plug,
           odo: odo,
+          avgEnergy50: avgEnergy50,
+          evCons100: evCons100,
+          evCons1000: evCons1000,
+          evConsStart: evConsStart,
+          avgFuel50: avgFuel50,
+          hybCons100: hybCons100,
+          hybCons1000: hybCons1000,
+          hybConsStart: hybConsStart,
+          hasEvCons: hasEvCons,
+          hasHybridCons: hasHybridCons,
+          hasAnyCons: hasAnyCons,
           lock: lock,
           climate: climate,
           trunk: trunk,
@@ -2716,6 +2833,7 @@
           wakeBtn: wakeBtn,
           refreshLocBtn: refreshLocBtn,
           refreshFullBtn: refreshFullBtn,
+          autoUpdatesSw: autoUpdatesSw,
           carUpdated: carUpdated,
           cmdResult: cmdResult,
           cliDur: cliDur,
@@ -2799,6 +2917,17 @@
         chgSwitch: chgSwitch,
         plug: plug,
         odo: odo,
+        avgEnergy50: avgEnergy50,
+        evCons100: evCons100,
+        evCons1000: evCons1000,
+        evConsStart: evConsStart,
+        avgFuel50: avgFuel50,
+        hybCons100: hybCons100,
+        hybCons1000: hybCons1000,
+        hybConsStart: hybConsStart,
+        hasEvCons: hasEvCons,
+        hasHybridCons: hasHybridCons,
+        hasAnyCons: hasAnyCons,
         lock: lock,
         climate: climate,
         trunk: trunk,
@@ -2806,6 +2935,7 @@
         sunroofCov: sunroofCov,
         carUpdated: carUpdated,
         cmdResult: cmdResult,
+        autoUpdatesSw: autoUpdatesSw,
         cliDur: cliDur,
         setTempL: setTempL,
         setTempR: setTempR,
@@ -2948,7 +3078,12 @@
           }).join("") + "</div>";
       } else if (cfg.show_all) {
         var usedIds = new Set(
-          [ctx.bat, ctx.evRange, ctx.totalRange, ctx.fuelRange, ctx.chgPower, ctx.chgStatus, ctx.chgSwitch, ctx.plug, ctx.odo]
+          [
+            ctx.bat, ctx.evRange, ctx.totalRange, ctx.fuelRange, ctx.chgPower, ctx.chgStatus, ctx.chgSwitch, ctx.plug, ctx.odo,
+            ctx.avgEnergy50, ctx.evCons100, ctx.evCons1000, ctx.evConsStart,
+            ctx.avgFuel50, ctx.hybCons100, ctx.hybCons1000, ctx.hybConsStart,
+            ctx.autoUpdatesSw,
+          ]
             .filter(Boolean).map(function (r) { return r.id; })
         );
         var rest = ctx.items.filter(function (r) {
@@ -2962,6 +3097,46 @@
             }).join("") + "</div>";
         }
       }
+
+      var buildConsRowHtml = function (rowBind, hiddenFlag, iconName, rowLabel, kind, u100Lbl, uKmLbl, b100, bKm, cells) {
+        return '<div class="cons-row' + (hiddenFlag ? ' hidden" hidden' : '"') + ' data-bind="' + rowBind + '">' +
+          '<div class="cons-row-hdr">' +
+            '<span class="cons-row-title">' + svgIcon(iconName, "sec-ico") + "<span>" + self._h(rowLabel) + "</span></span>" +
+            '<div class="seg-switch cons-unit-seg" role="group" aria-label="' + self._h(t.consUnitToggleTitle) + '" title="' + self._h(t.consUnitToggleTitle) + '">' +
+              '<button type="button" class="seg-btn is-active" data-cons-kind="' + kind + '" data-cons-unit="per_100" data-bind="' + b100 + '" aria-pressed="true">' + self._h(u100Lbl) + "</button>" +
+              '<button type="button" class="seg-btn" data-cons-kind="' + kind + '" data-cons-unit="per_km" data-bind="' + bKm + '" aria-pressed="false">' + self._h(uKmLbl) + "</button>" +
+            "</div>" +
+          "</div>" +
+          '<div class="cons-grid">' +
+            cells.map(function (c) {
+              var entAttr = c.ent ? (' role="button" tabindex="0" data-e="' + self._h(c.ent.id) + '"') : "";
+              return '<div class="cons-cell" data-bind="' + c.cellBind + '"' + entAttr + ">" +
+                '<span class="cons-cell-lbl">' + self._h(c.label) + "</span>" +
+                '<span class="cons-cell-val num" data-bind="' + c.valBind + '">—</span>' +
+              "</div>";
+            }).join("") +
+          "</div>" +
+        "</div>";
+      };
+
+      var consHtml =
+        '<div class="surface cons-section' + (ctx.hasAnyCons ? '"' : ' hidden" hidden') + ' data-bind="consSection">' +
+          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("gauge", "sec-ico") + "<span>" + self._h(t.avgConsumption) + "</span></span></div>" +
+          '<div class="cons-rows">' +
+            buildConsRowHtml("consEvRow", !ctx.hasEvCons, "bolt", t.consEv, "ev", "kWh/100", "kWh/km", "consEvPer100Btn", "consEvPerKmBtn", [
+              { cellBind: "consEv50Cell", valBind: "consEv50Val", label: t.cons50, ent: ctx.avgEnergy50 },
+              { cellBind: "consEv100Cell", valBind: "consEv100Val", label: t.cons100, ent: ctx.evCons100 },
+              { cellBind: "consEv1000Cell", valBind: "consEv1000Val", label: t.cons1000, ent: ctx.evCons1000 },
+              { cellBind: "consEvStartCell", valBind: "consEvStartVal", label: t.consFromStart, ent: ctx.evConsStart },
+            ]) +
+            buildConsRowHtml("consHybridRow", !ctx.hasHybridCons, "flame", t.consHybrid, "hybrid", "L/100", "km/L", "consHybPer100Btn", "consHybPerKmBtn", [
+              { cellBind: "consHyb50Cell", valBind: "consHyb50Val", label: t.cons50, ent: ctx.avgFuel50 },
+              { cellBind: "consHyb100Cell", valBind: "consHyb100Val", label: t.cons100, ent: ctx.hybCons100 },
+              { cellBind: "consHyb1000Cell", valBind: "consHyb1000Val", label: t.cons1000, ent: ctx.hybCons1000 },
+              { cellBind: "consHybStartCell", valBind: "consHybStartVal", label: t.consFromStart, ent: ctx.hybConsStart },
+            ]) +
+          "</div>" +
+        "</div>";
 
       var overviewHtml =
         '<section class="panel" data-panel="overview">' +
@@ -2984,6 +3159,7 @@
               '<span class="metric-val num" data-bind="mOdoVal">—</span>' +
             "</div>" +
           "</div>" +
+          consHtml +
           ((quickPrimaryBtns.length || quickSecondaryBtns.length)
             ? '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.quickActions) + "</span></div>" +
                 (quickPrimaryBtns.length ? '<div class="btn-grid">' + quickPrimaryBtns.join("") + "</div>" : "") +
@@ -3000,6 +3176,9 @@
                   (ctx.refreshLocBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_location" data-confirm-key="refresh_location">' + svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.refreshLoc) + "</span></button>" : "") +
                   (ctx.refreshFullBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_full" data-confirm-key="refresh_full">' + svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.refreshFull) + "</span></button>" : "") +
                 "</div>"
+              : "") +
+            (ctx.autoUpdatesSw
+              ? '<div class="btn-row"><button type="button" class="ctrl-btn btn-compact" data-action-id="auto_updates_toggle" data-bind="autoUpdatesBtn"></button></div>'
               : "") +
           "</div>" +
           extraRowsHtml +
@@ -3596,6 +3775,71 @@
         if (odoVal) odoVal.textContent = this._isOn(vm.plug) ? t.plugged : t.unplugged;
       }
 
+      // Overview Consumption grid
+      var consModes = this._consUnitModes || { ev: "per_100", hybrid: "per_100" };
+      var consSection = root.querySelector('[data-bind="consSection"]');
+      if (consSection) {
+        consSection.classList.toggle("hidden", !vm.hasAnyCons);
+        consSection.hidden = !vm.hasAnyCons;
+      }
+      var consSegPairs = [
+        { kind: "ev", b100: "consEvPer100Btn", bKm: "consEvPerKmBtn" },
+        { kind: "hybrid", b100: "consHybPer100Btn", bKm: "consHybPerKmBtn" },
+      ];
+      for (var cpi = 0; cpi < consSegPairs.length; cpi += 1) {
+        var pair = consSegPairs[cpi];
+        var isKm = consModes[pair.kind] === "per_km";
+        var b100El = root.querySelector('[data-bind="' + pair.b100 + '"]');
+        var bKmEl = root.querySelector('[data-bind="' + pair.bKm + '"]');
+        if (b100El) {
+          b100El.setAttribute("aria-pressed", !isKm ? "true" : "false");
+          b100El.classList.toggle("is-active", !isKm);
+        }
+        if (bKmEl) {
+          bKmEl.setAttribute("aria-pressed", isKm ? "true" : "false");
+          bKmEl.classList.toggle("is-active", isKm);
+        }
+      }
+      var consEvRow = root.querySelector('[data-bind="consEvRow"]');
+      if (consEvRow) {
+        consEvRow.classList.toggle("hidden", !vm.hasEvCons);
+        consEvRow.hidden = !vm.hasEvCons;
+      }
+      var consHybridRow = root.querySelector('[data-bind="consHybridRow"]');
+      if (consHybridRow) {
+        consHybridRow.classList.toggle("hidden", !vm.hasHybridCons);
+        consHybridRow.hidden = !vm.hasHybridCons;
+      }
+      var consBindings = [
+        { cell: "consEv50Cell", val: "consEv50Val", ent: vm.avgEnergy50, kind: "ev", unit: "kWh/100 km" },
+        { cell: "consEv100Cell", val: "consEv100Val", ent: vm.evCons100, kind: "ev", unit: "kWh/100 km" },
+        { cell: "consEv1000Cell", val: "consEv1000Val", ent: vm.evCons1000, kind: "ev", unit: "kWh/100 km" },
+        { cell: "consEvStartCell", val: "consEvStartVal", ent: vm.evConsStart, kind: "ev", unit: "kWh/100 km" },
+        { cell: "consHyb50Cell", val: "consHyb50Val", ent: vm.avgFuel50, kind: "hybrid", unit: "L/100 km" },
+        { cell: "consHyb100Cell", val: "consHyb100Val", ent: vm.hybCons100, kind: "hybrid", unit: "L/100 km" },
+        { cell: "consHyb1000Cell", val: "consHyb1000Val", ent: vm.hybCons1000, kind: "hybrid", unit: "L/100 km" },
+        { cell: "consHybStartCell", val: "consHybStartVal", ent: vm.hybConsStart, kind: "hybrid", unit: "L/100 km" },
+      ];
+      for (var csi = 0; csi < consBindings.length; csi += 1) {
+        var cb = consBindings[csi];
+        var consCell = root.querySelector('[data-bind="' + cb.cell + '"]');
+        var consVal = root.querySelector('[data-bind="' + cb.val + '"]');
+        if (consCell) {
+          if (cb.ent && cb.ent.id) {
+            consCell.setAttribute("role", "button");
+            consCell.setAttribute("tabindex", "0");
+            consCell.setAttribute("data-e", cb.ent.id);
+          } else {
+            consCell.removeAttribute("role");
+            consCell.removeAttribute("tabindex");
+            consCell.removeAttribute("data-e");
+          }
+        }
+        if (consVal) {
+          consVal.textContent = formatConsumptionCell(this, cb.ent, cb.kind, cb.unit, consModes[cb.kind]);
+        }
+      }
+
       // Overview Quick Dock + Security Action Buttons (synchronized confirmation keys!)
       if (vm.lock) {
         var isLocked = vm.lock.s && vm.lock.s.state === "locked";
@@ -3732,6 +3976,12 @@
       if (cliCmdBar) {
         cliCmdBar.classList.toggle("hidden", !outcome);
         cliCmdBar.hidden = !outcome;
+      }
+      var autoUpdatesBtn = root.querySelector('[data-bind="autoUpdatesBtn"]');
+      if (autoUpdatesBtn && vm.autoUpdatesSw) {
+        var auOn = this._isOn(vm.autoUpdatesSw);
+        this._applyBtnState(autoUpdatesBtn, t.autoUpdates + ": " + (auOn ? t.on : t.off), "auto_updates_toggle", "auto_updates_toggle", auOn ? "is-emerald" : "", t, "refresh");
+        autoUpdatesBtn.setAttribute("aria-pressed", auOn ? "true" : "false");
       }
       var extraValEls = root.querySelectorAll("[data-extra-entity]");
       for (var ex = 0; ex < extraValEls.length; ex += 1) {

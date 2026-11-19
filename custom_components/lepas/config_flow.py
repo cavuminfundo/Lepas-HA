@@ -34,6 +34,7 @@ from .const import (
     CONF_POLL_NORMAL, CONF_POLL_CHARGING,
     DEFAULT_POLL_NORMAL_MIN, DEFAULT_POLL_CHARGING_MIN,
     CONF_VEHICLE_NAME,
+    CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -588,5 +589,9 @@ class LepasOptionsFlow(config_entries.OptionsFlow):
                 CONF_VEHICLE_NAME,
                 description={"suggested_value": cur_name},
             ): str,
+            vol.Optional(
+                CONF_BATTERY_CAPACITY_KWH,
+                default=opt.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH),
+            ): vol.All(vol.Coerce(float), vol.Range(min=5.0, max=150.0)),
         })
         return self.async_show_form(step_id="init", data_schema=schema)

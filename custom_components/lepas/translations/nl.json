@@ -115,7 +115,8 @@
         "data": {
           "poll_normal_min": "Update-interval wanneer geparkeerd (minuten, 0 = uit)",
           "poll_charging_min": "Update-interval tijdens opladen (minuten, 0 = uit)",
-          "vehicle_name": "Voertuignaam (laat leeg om de naam te gebruiken die door de auto is gedetecteerd)"
+          "vehicle_name": "Voertuignaam (laat leeg om de naam te gebruiken die door de auto is gedetecteerd)",
+          "battery_capacity_kwh": "Bruikbare HV-batterijcapaciteit (kWh)"
         }
       }
     }
@@ -249,6 +250,9 @@
       },
       "apply_departure_schedule": {
         "name": "Vertrekschema toepassen"
+      },
+      "reset_consumption_from_start": {
+        "name": "Verbruik resetten (vanaf begin)"
       }
     },
     "climate": {
@@ -444,6 +448,24 @@
       },
       "next_departure": {
         "name": "Volgend vertrek"
+      },
+      "ev_consumption_100km": {
+        "name": "EV-verbruik (100 km)"
+      },
+      "ev_consumption_1000km": {
+        "name": "EV-verbruik (1000 km)"
+      },
+      "ev_consumption_from_start": {
+        "name": "EV-verbruik (vanaf begin)"
+      },
+      "hybrid_consumption_100km": {
+        "name": "Hybride verbruik (100 km)"
+      },
+      "hybrid_consumption_1000km": {
+        "name": "Hybride verbruik (1000 km)"
+      },
+      "hybrid_consumption_from_start": {
+        "name": "Hybride verbruik (vanaf begin)"
       }
     },
     "switch": {

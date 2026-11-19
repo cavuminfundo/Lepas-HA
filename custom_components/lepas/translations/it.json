@@ -115,7 +115,8 @@
         "data": {
           "poll_normal_min": "Intervallo di aggiornamento da parcheggiata (minuti, 0 = off)",
           "poll_charging_min": "Intervallo di aggiornamento alla colonnina (minuti, 0 = off)",
-          "vehicle_name": "Nome del veicolo (vuoto = usa quello rilevato dall'auto)"
+          "vehicle_name": "Nome del veicolo (vuoto = usa quello rilevato dall'auto)",
+          "battery_capacity_kwh": "Capacità utilizzabile batteria HV (kWh)"
         }
       }
     }
@@ -249,6 +250,9 @@
       },
       "apply_departure_schedule": {
         "name": "Applica programma partenza"
+      },
+      "reset_consumption_from_start": {
+        "name": "Azzera consumi (da inizio)"
       }
     },
     "climate": {
@@ -444,6 +448,24 @@
       },
       "next_departure": {
         "name": "Prossima partenza"
+      },
+      "ev_consumption_100km": {
+        "name": "Consumo elettrico (100 km)"
+      },
+      "ev_consumption_1000km": {
+        "name": "Consumo elettrico (1000 km)"
+      },
+      "ev_consumption_from_start": {
+        "name": "Consumo elettrico (da inizio)"
+      },
+      "hybrid_consumption_100km": {
+        "name": "Consumo ibrido (100 km)"
+      },
+      "hybrid_consumption_1000km": {
+        "name": "Consumo ibrido (1000 km)"
+      },
+      "hybrid_consumption_from_start": {
+        "name": "Consumo ibrido (da inizio)"
       }
     },
     "switch": {

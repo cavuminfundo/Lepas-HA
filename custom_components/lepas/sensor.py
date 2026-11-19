@@ -40,6 +40,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import CHARGE_ENERGY_MAX_GAP, DOMAIN, FIELDS_AS_RICH_ENTITY, entity_allowed
+from .consumption import WINDOW_100_KM, WINDOW_1000_KM, is_degraded_battery_frame
 from .coordinator import SENSORS
 from .entity import LepasEntity, field_on, in_zona_casa
 from .naming import ID_PREFIX
@@ -142,7 +143,7 @@ def _primo(rt: dict, *nomi: str):
     return None
 
 
-def _frame_batteria_degradato(rt: dict) -> bool:
+def _frame_batteria_degradato(rt: dict | None) -> bool:
     """True se il frame realtime porta `pureElectricRange = 0`: NON è una lettura, è un
     segnaposto → in quel frame anche la percentuale batteria è da buttare.
 
@@ -164,8 +165,7 @@ def _frame_batteria_degradato(rt: dict) -> bool:
     potrebbe in teoria essere vero; l'effetto peggiore però è tenere l'ultimo valore noto per
     un frame, quindi la sentinella resta accettabile anche lì.
     """
-    v = _primo(rt, *ELEC_RANGE_FIELDS)
-    return v == 0.0
+    return is_degraded_battery_frame(rt)
 
 
 def _cruise_range_miglia(rt: dict):
@@ -475,6 +475,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     if entity_allowed(coord, "sensor", "scheduled_charging_window"):
         ents.append(LepasScheduledChargingWindowSensor(coord))
     ents.append(LepasNextDepartureSensor(coord))
+    ents.extend(
+        LepasConsumptionSensor(coord, spec)
+        for spec in _CONSUMPTION_SPECS
+        if not (bev and spec.mode == "hev")
+    )
     add(ents)
 
 
@@ -1271,3 +1276,67 @@ class LepasNextDepartureSensor(LepasEntity, SensorEntity, RestoreEntity):
             "allowed_climate_extras": allowed_extras,
             "battery_heat_start": battery_heat_start,
         }
+
+
+@dataclass(frozen=True)
+class _ConsumptionSpec:
+    """Descriptor for a rolling or cumulative consumption sensor."""
+
+    key: str
+    mode: str
+    target_km: float | None
+    unit: str
+    icon: str
+
+
+_CONSUMPTION_SPECS: tuple[_ConsumptionSpec, ...] = (
+    _ConsumptionSpec("ev_consumption_100km", "ev", WINDOW_100_KM, "kWh/100 km", "mdi:lightning-bolt"),
+    _ConsumptionSpec("ev_consumption_1000km", "ev", WINDOW_1000_KM, "kWh/100 km", "mdi:lightning-bolt"),
+    _ConsumptionSpec("ev_consumption_from_start", "ev", None, "kWh/100 km", "mdi:lightning-bolt"),
+    _ConsumptionSpec("hybrid_consumption_100km", "hev", WINDOW_100_KM, "L/100 km", "mdi:gas-station"),
+    _ConsumptionSpec("hybrid_consumption_1000km", "hev", WINDOW_1000_KM, "L/100 km", "mdi:gas-station"),
+    _ConsumptionSpec("hybrid_consumption_from_start", "hev", None, "L/100 km", "mdi:gas-station"),
+)
+
+
+class LepasConsumptionSensor(LepasEntity, SensorEntity):
+    """Long-term EV or Hybrid consumption sensor backed by ConsumptionTracker."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coord, spec: _ConsumptionSpec) -> None:
+        super().__init__(
+            coord,
+            f"Lepas {spec.key}",
+            spec.key,
+            object_id=f"{ID_PREFIX}_{spec.key}",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key=spec.key,
+        )
+        self._spec = spec
+        self._attr_native_unit_of_measurement = spec.unit
+        self._attr_icon = spec.icon
+
+    def _stats(self) -> dict[str, object]:
+        return self.coordinator.consumption_stats(self._spec.mode, self._spec.target_km)
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._stats().get("value")
+        return float(val) if val is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        stats = self._stats()
+        attrs: dict[str, object] = {
+            "sampled_km": stats.get("sampled_km", 0.0),
+            "window_target_km": stats.get("window_target_km"),
+            "progress_pct": stats.get("progress_pct"),
+            "energy_kwh": stats.get("energy_kwh", 0.0),
+            "fuel_l": stats.get("fuel_l", 0.0),
+        }
+        if self._spec.mode == "hev":
+            attrs["electric_consumption_kwh_100km"] = stats.get("electric_kwh_100km")
+        return attrs
+

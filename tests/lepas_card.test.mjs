@@ -760,6 +760,14 @@ function makeFullHass(overrides = {}, lang = "it") {
     "sensor.lepas_away_charging_energy": makeState("sensor.lepas_away_charging_energy", "38.1", { unit_of_measurement: "kWh" }),
     "sensor.lepas_fast_charging_port": makeState("sensor.lepas_fast_charging_port", "Disconnected"),
     "sensor.lepas_odometer": makeState("sensor.lepas_odometer", "12450", { unit_of_measurement: "km" }),
+    "sensor.lepas_average_energy_consumption": makeState("sensor.lepas_average_energy_consumption", "18.2", { unit_of_measurement: "kWh/100 km" }),
+    "sensor.lepas_ev_consumption_100km": makeState("sensor.lepas_ev_consumption_100km", "17.45", { unit_of_measurement: "kWh/100 km", suggested_display_precision: 2 }),
+    "sensor.lepas_ev_consumption_1000km": makeState("sensor.lepas_ev_consumption_1000km", "16.80", { unit_of_measurement: "kWh/100 km", suggested_display_precision: 2 }),
+    "sensor.lepas_ev_consumption_from_start": makeState("sensor.lepas_ev_consumption_from_start", "16.95", { unit_of_measurement: "kWh/100 km", suggested_display_precision: 2 }),
+    "sensor.lepas_average_fuel_consumption": makeState("sensor.lepas_average_fuel_consumption", "6.4", { unit_of_measurement: "L/100 km" }),
+    "sensor.lepas_hybrid_consumption_100km": makeState("sensor.lepas_hybrid_consumption_100km", "6.15", { unit_of_measurement: "L/100 km", suggested_display_precision: 2 }),
+    "sensor.lepas_hybrid_consumption_1000km": makeState("sensor.lepas_hybrid_consumption_1000km", "5.90", { unit_of_measurement: "L/100 km", suggested_display_precision: 2 }),
+    "sensor.lepas_hybrid_consumption_from_start": makeState("sensor.lepas_hybrid_consumption_from_start", "6.05", { unit_of_measurement: "L/100 km", suggested_display_precision: 2 }),
     "sensor.lepas_car_data_updated": makeState("sensor.lepas_car_data_updated", "2026-11-17T20:15:00Z"),
     "sensor.lepas_command_result": makeState("sensor.lepas_command_result", "OK"),
     "sensor.lepas_set_temperature_left": makeState("sensor.lepas_set_temperature_left", "21.5", { unit_of_measurement: "°C" }),
@@ -918,16 +926,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.28.0");
+  assert.equal(h.CARD_VERSION, "1.29.0");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.28.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.29.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.28.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.29.0`
     );
   }
 
@@ -946,7 +954,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.28.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.29.0`
     );
   }
 
@@ -3060,4 +3068,262 @@ test("SoC ring animates only during active charging, differentiates AC/DC, and r
   assert.match(cssText, /prefers-reduced-motion:\s*no-preference[\s\S]*?\.soc-btn\.is-charging\s+\.soc-track/);
   assert.match(cssText, /prefers-reduced-motion:\s*reduce[\s\S]*?\.soc-mode-slide[\s\S]*?\.soc-chg-ico:not\(\.hidden\)/);
 });
+
+test("Overview consumption section renders EV and Hybrid metrics, dispatches hass-more-info, handles BEV and translations", () => {
+  // 1. Italian (default makeFullHass) EV + Hybrid values and DOM placement
+  const hassIt = makeFullHass({}, "it");
+  const card = createCard({ layout: "compact", default_tab: "overview", show_all: true }, hassIt);
+  const overviewPanel = card.shadowRoot.querySelector('[data-panel="overview"]');
+  const consSection = overviewPanel.querySelector('[data-bind="consSection"]');
+  const consEvRow = consSection.querySelector('[data-bind="consEvRow"]');
+  const consHybridRow = consSection.querySelector('[data-bind="consHybridRow"]');
+  assert.ok(consSection && consEvRow && consHybridRow, "Consumption section and rows must exist in Overview");
+  assert.equal(consSection.classList.contains("hidden"), false);
+  assert.equal(consEvRow.classList.contains("hidden"), false);
+  assert.equal(consHybridRow.classList.contains("hidden"), false);
+  assert.equal(overviewPanel.children[0].classList.contains("metrics-grid"), true);
+  assert.equal(overviewPanel.children[1], consSection, "consSection must sit immediately below .metrics-grid");
+
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv50Val"]').textContent, "18.2 kWh/100 km");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv100Val"]').textContent, "17.45 kWh/100 km");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv1000Val"]').textContent, "16.80 kWh/100 km");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEvStartVal"]').textContent, "16.95 kWh/100 km");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb50Val"]').textContent, "6.4 L/100 km");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb100Val"]').textContent, "6.15 L/100 km");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb1000Val"]').textContent, "5.90 L/100 km");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consHybStartVal"]').textContent, "6.05 L/100 km");
+
+  // show_all: true must NOT duplicate consumption sensors in extraRowsHtml
+  const extraIds = Array.from(card.shadowRoot.querySelectorAll("[data-extra-entity]"))
+    .map((el) => el.getAttribute("data-extra-entity"));
+  for (const cid of [
+    "sensor.lepas_average_energy_consumption",
+    "sensor.lepas_ev_consumption_100km",
+    "sensor.lepas_ev_consumption_1000km",
+    "sensor.lepas_ev_consumption_from_start",
+    "sensor.lepas_average_fuel_consumption",
+    "sensor.lepas_hybrid_consumption_100km",
+    "sensor.lepas_hybrid_consumption_1000km",
+    "sensor.lepas_hybrid_consumption_from_start",
+  ]) {
+    assert.equal(extraIds.includes(cid), false, `${cid} must not be duplicated in show_all extra rows`);
+  }
+
+  // 2. Click (including inner child span) and Enter key dispatch hass-more-info with exact entityId
+  const moreInfoEvents = [];
+  card.addEventListener("hass-more-info", (ev) => {
+    moreInfoEvents.push(ev.detail.entityId);
+  });
+  const ev100Cell = card.shadowRoot.querySelector('[data-bind="consEv100Cell"]');
+  const ev100ValSpan = card.shadowRoot.querySelector('[data-bind="consEv100Val"]');
+  const hybStartCell = card.shadowRoot.querySelector('[data-bind="consHybStartCell"]');
+  assert.equal(ev100Cell.tagName, "DIV");
+  assert.equal(ev100Cell.getAttribute("role"), "button");
+  assert.equal(ev100Cell.getAttribute("tabindex"), "0");
+  assert.equal(ev100Cell.getAttribute("data-e"), "sensor.lepas_ev_consumption_100km");
+  assert.equal(hybStartCell.getAttribute("data-e"), "sensor.lepas_hybrid_consumption_from_start");
+
+  ev100ValSpan.click();
+  hybStartCell.dispatchEvent(new MiniEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  assert.deepEqual(moreInfoEvents, [
+    "sensor.lepas_ev_consumption_100km",
+    "sensor.lepas_hybrid_consumption_from_start",
+  ]);
+
+  // 3. unknown/unavailable state renders "—" while keeping data-e; missing entity removes data-e and renders "—"
+  card.hass = makeFullHass({
+    "sensor.lepas_ev_consumption_100km": makeState("sensor.lepas_ev_consumption_100km", "unknown", { unit_of_measurement: "kWh/100 km" }),
+    "sensor.lepas_ev_consumption_1000km": null,
+  }, "it");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv100Val"]').textContent, "—");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv100Cell"]').getAttribute("data-e"), "sensor.lepas_ev_consumption_100km");
+  const ev1000Cell = card.shadowRoot.querySelector('[data-bind="consEv1000Cell"]');
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv1000Val"]').textContent, "—");
+  assert.equal(ev1000Cell.getAttribute("data-e"), null);
+  ev1000Cell.click();
+  assert.equal(moreInfoEvents.length, 2, "Clicking missing entity cell without data-e must not fire hass-more-info");
+
+  // 4. BEV case (no hybrid_* and no average_fuel_consumption) hides Hybrid row while keeping EV row visible
+  card.hass = makeFullHass({
+    "sensor.lepas_average_fuel_consumption": null,
+    "sensor.lepas_hybrid_consumption_100km": null,
+    "sensor.lepas_hybrid_consumption_1000km": null,
+    "sensor.lepas_hybrid_consumption_from_start": null,
+  }, "it");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consSection"]').classList.contains("hidden"), false);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consEvRow"]').classList.contains("hidden"), false);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consHybridRow"]').classList.contains("hidden"), true);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consHybridRow"]').hidden, true);
+
+  // No consumption entities at all hides entire consSection
+  card.hass = makeFullHass({
+    "sensor.lepas_average_energy_consumption": null,
+    "sensor.lepas_ev_consumption_100km": null,
+    "sensor.lepas_ev_consumption_1000km": null,
+    "sensor.lepas_ev_consumption_from_start": null,
+    "sensor.lepas_average_fuel_consumption": null,
+    "sensor.lepas_hybrid_consumption_100km": null,
+    "sensor.lepas_hybrid_consumption_1000km": null,
+    "sensor.lepas_hybrid_consumption_from_start": null,
+  }, "it");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consSection"]').classList.contains("hidden"), true);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consSection"]').hidden, true);
+
+  // 5. Translations across it / en / nl and responsive CSS check
+  const expectedByLang = {
+    it: { title: "Consumi medi", ev: "EV", hybrid: "Carburante", start: "Da inizio" },
+    en: { title: "Average consumption", ev: "EV", hybrid: "Fuel", start: "From start" },
+    nl: { title: "Gemiddeld verbruik", ev: "EV", hybrid: "Brandstof", start: "Vanaf start" },
+  };
+  for (const [lang, exp] of Object.entries(expectedByLang)) {
+    const locCard = createCard({ layout: "compact", default_tab: "overview" }, makeFullHass({}, lang));
+    const sec = locCard.shadowRoot.querySelector('[data-bind="consSection"]');
+    const text = sec.textContent;
+    assert.ok(text.includes(exp.title), `[${lang}] missing section title ${exp.title}`);
+    assert.ok(text.includes(exp.ev), `[${lang}] missing EV label ${exp.ev}`);
+    assert.ok(text.includes(exp.hybrid), `[${lang}] missing Hybrid label ${exp.hybrid}`);
+    assert.ok(text.includes("50 km"), `[${lang}] missing 50 km label`);
+    assert.ok(text.includes("100 km"), `[${lang}] missing 100 km label`);
+    assert.ok(text.includes("1000 km"), `[${lang}] missing 1000 km label`);
+    assert.ok(text.includes(exp.start), `[${lang}] missing from-start label ${exp.start}`);
+  }
+
+  const css = card.shadowRoot.querySelector("style")?.textContent || "";
+  assert.match(css, /\.cons-grid\s*\{[^}]*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(css, /@container\s*\(max-width:\s*340px\)[\s\S]*?\.cons-grid\s*\{\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+});
+
+test("Overview footer refresh buttons stretch evenly across .btn-row and badge stays bounded", () => {
+  const card = createCard(
+    { layout: "compact", default_tab: "overview" },
+    makeFullHass({ "button.lepas_refresh_full_status": makeState("button.lepas_refresh_full_status", "unknown") }, "it"),
+  );
+  const css = card.shadowRoot.querySelector("style")?.textContent || "";
+  assert.match(css, /\.btn-row\s*>\s*\.ctrl-btn\s*\{[^}]*flex:\s*1\b/);
+  assert.match(css, /\.badge\s*\{[^}]*max-width:\s*100%/);
+  const row = card.shadowRoot.querySelector('[data-panel="overview"] .btn-row');
+  assert.ok(row, "Overview refresh .btn-row should exist");
+  const btns = row.querySelectorAll("button.ctrl-btn");
+  assert.equal(btns.length, 2);
+});
+
+test("Overview automatic_updates switch renders 1-tap toggle, reflects ON/OFF state across languages, and omits when absent", async () => {
+  const offHass = makeFullHass({ "switch.lepas_automatic_updates": makeState("switch.lepas_automatic_updates", "off") }, "it");
+  const offCard = createCard({ layout: "compact", default_tab: "overview" }, offHass);
+  const offBtn = offCard.shadowRoot.querySelector('[data-bind="autoUpdatesBtn"]');
+  assert.ok(offBtn, "autoUpdatesBtn should render when switch.lepas_automatic_updates exists");
+  assert.ok(offBtn.textContent.includes("Aggiornamento auto: OFF"));
+  assert.equal(offBtn.getAttribute("aria-pressed"), "false");
+  assert.equal(offBtn.classList.contains("is-emerald"), false);
+  offBtn.click();
+  await Promise.resolve();
+  assert.equal(offHass.calls.length, 1);
+  assert.deepEqual(offHass.calls[0], { domain: "switch", service: "turn_on", data: { entity_id: "switch.lepas_automatic_updates" } });
+
+  const onHass = makeFullHass({ "switch.lepas_automatic_updates": makeState("switch.lepas_automatic_updates", "on") }, "en");
+  const onCard = createCard({ layout: "compact", default_tab: "overview" }, onHass);
+  const onBtn = onCard.shadowRoot.querySelector('[data-bind="autoUpdatesBtn"]');
+  assert.ok(onBtn.textContent.includes("Auto updates: ON"));
+  assert.equal(onBtn.getAttribute("aria-pressed"), "true");
+  assert.equal(onBtn.classList.contains("is-emerald"), true);
+  onBtn.click();
+  await Promise.resolve();
+  assert.equal(onHass.calls.length, 1);
+  assert.deepEqual(onHass.calls[0], { domain: "switch", service: "turn_off", data: { entity_id: "switch.lepas_automatic_updates" } });
+
+  const nlCard = createCard(
+    { layout: "compact", default_tab: "overview" },
+    makeFullHass({ "switch.lepas_automatic_updates": makeState("switch.lepas_automatic_updates", "on") }, "nl"),
+  );
+  assert.ok(nlCard.shadowRoot.querySelector('[data-bind="autoUpdatesBtn"]').textContent.includes("Auto-updates: AAN"));
+
+  const absentCard = createCard({ layout: "compact", default_tab: "overview" }, makeFullHass({}, "it"));
+  assert.equal(absentCard.shadowRoot.querySelector('[data-bind="autoUpdatesBtn"]'), null);
+});
+
+test("Overview consumption unit toggles switch EV (kWh/100 <-> kWh/km) and Hybrid (L/100 <-> km/L) independently with zero-guard and persistence", () => {
+  const store = new Map();
+  const prevStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+  };
+  try {
+    const hass = makeFullHass({}, "it");
+    const card = createCard({ layout: "compact", default_tab: "overview" }, hass);
+    const moreInfoIds = [];
+    card.addEventListener("hass-more-info", (ev) => moreInfoIds.push(ev.detail.entityId));
+
+    const ev100Btn = card.shadowRoot.querySelector('[data-bind="consEvPer100Btn"]');
+    const evKmBtn = card.shadowRoot.querySelector('[data-bind="consEvPerKmBtn"]');
+    const hyb100Btn = card.shadowRoot.querySelector('[data-bind="consHybPer100Btn"]');
+    const hybKmBtn = card.shadowRoot.querySelector('[data-bind="consHybPerKmBtn"]');
+    assert.ok(ev100Btn && evKmBtn && hyb100Btn && hybKmBtn, "Both EV and Hybrid segmented controls must exist");
+    assert.equal(ev100Btn.textContent, "kWh/100");
+    assert.equal(evKmBtn.textContent, "kWh/km");
+    assert.equal(hyb100Btn.textContent, "L/100");
+    assert.equal(hybKmBtn.textContent, "km/L");
+    assert.equal(ev100Btn.getAttribute("aria-pressed"), "true");
+    assert.equal(hyb100Btn.getAttribute("aria-pressed"), "true");
+
+    // Toggle EV only -> Hybrid stays in L/100 km
+    ev100Btn.click();
+    assert.equal(ev100Btn.getAttribute("aria-pressed"), "true");
+    evKmBtn.click();
+    assert.equal(moreInfoIds.length, 0, "Clicking unit segment must not trigger hass-more-info");
+    assert.equal(evKmBtn.getAttribute("aria-pressed"), "true");
+    assert.equal(evKmBtn.classList.contains("is-active"), true);
+    assert.equal(ev100Btn.getAttribute("aria-pressed"), "false");
+    assert.equal(hyb100Btn.getAttribute("aria-pressed"), "true", "Hybrid must stay independent in L/100 km");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consEv50Val"]').textContent, "0.182 kWh/km");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consEv100Val"]').textContent, "0.175 kWh/km");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consEv1000Val"]').textContent, "0.168 kWh/km");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consEvStartVal"]').textContent, "0.170 kWh/km");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb50Val"]').textContent, "6.4 L/100 km");
+
+    // Toggle Hybrid independently -> km/L
+    hybKmBtn.click();
+    assert.equal(hybKmBtn.getAttribute("aria-pressed"), "true");
+    assert.equal(hybKmBtn.classList.contains("is-active"), true);
+    assert.equal(hyb100Btn.getAttribute("aria-pressed"), "false");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb50Val"]').textContent, "15.6 km/L");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb100Val"]').textContent, "16.3 km/L");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb1000Val"]').textContent, "16.9 km/L");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consHybStartVal"]').textContent, "16.5 km/L");
+
+    // Zero fuel consumption must render "—" in km/L mode (no Infinity), while 0 EV renders "0.000 kWh/km"
+    card.hass = makeFullHass({
+      "sensor.lepas_average_fuel_consumption": makeState("sensor.lepas_average_fuel_consumption", "0", { unit_of_measurement: "L/100 km" }),
+      "sensor.lepas_average_energy_consumption": makeState("sensor.lepas_average_energy_consumption", "0", { unit_of_measurement: "kWh/100 km" }),
+    }, "it");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb50Val"]').textContent, "—");
+    assert.equal(card.shadowRoot.querySelector('[data-bind="consEv50Val"]').textContent, "0.000 kWh/km");
+
+    // Independent persistence across new card instance + reverting Hybrid only
+    const card2 = createCard({ layout: "compact", default_tab: "overview" }, makeFullHass({}, "en"));
+    assert.equal(card2.shadowRoot.querySelector('[data-bind="consEvPerKmBtn"]').getAttribute("aria-pressed"), "true");
+    assert.equal(card2.shadowRoot.querySelector('[data-bind="consHybPerKmBtn"]').getAttribute("aria-pressed"), "true");
+    card2.shadowRoot.querySelector('[data-bind="consHybPer100Btn"]').click();
+    assert.equal(card2.shadowRoot.querySelector('[data-bind="consEv50Val"]').textContent, "0.182 kWh/km");
+    assert.equal(card2.shadowRoot.querySelector('[data-bind="consHyb50Val"]').textContent, "6.4 L/100 km");
+  } finally {
+    if (prevStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = prevStorage;
+  }
+});
+
+test("Fuel consumption cells render single metric without electric sub-line even when attribute is present", () => {
+  const hass = makeFullHass({
+    "sensor.lepas_hybrid_consumption_100km": makeState("sensor.lepas_hybrid_consumption_100km", "6.15", {
+      unit_of_measurement: "L/100 km",
+      electric_consumption_kwh_100km: 2.4,
+    }),
+  }, "it");
+  const card = createCard({ layout: "compact", default_tab: "overview" }, hass);
+  assert.equal(card.shadowRoot.querySelector(".cons-cell-sub"), null);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb100Val"]').textContent, "6.15 L/100 km");
+});
+
+
 

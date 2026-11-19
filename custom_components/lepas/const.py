@@ -443,6 +443,8 @@ CONF_POLL_NORMAL = "poll_normal_min"
 CONF_POLL_CHARGING = "poll_charging_min"
 DEFAULT_POLL_NORMAL_MIN = 60
 DEFAULT_POLL_CHARGING_MIN = 30
+CONF_BATTERY_CAPACITY_KWH = "battery_capacity_kwh"
+DEFAULT_BATTERY_CAPACITY_KWH = 18.4
 # attesa tra la sveglia (localizza) e la lettura realtime forzata, perché l'auto torni online
 POLL_WAKE_WAIT = 25
 # cooldown minimo (secondi) tra due sveglie automatiche innescate da A07900 (evita tempeste)

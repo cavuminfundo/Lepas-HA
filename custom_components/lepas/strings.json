@@ -115,7 +115,8 @@
         "data": {
           "poll_normal_min": "Update interval when parked (minutes, 0 = off)",
           "poll_charging_min": "Update interval while plugged in (minutes, 0 = off)",
-          "vehicle_name": "Vehicle name (leave empty to use the name detected from the car)"
+          "vehicle_name": "Vehicle name (leave empty to use the name detected from the car)",
+          "battery_capacity_kwh": "Usable HV battery capacity (kWh)"
         }
       }
     }
@@ -249,6 +250,9 @@
       },
       "apply_departure_schedule": {
         "name": "Apply departure schedule"
+      },
+      "reset_consumption_from_start": {
+        "name": "Reset consumption (from start)"
       }
     },
     "climate": {
@@ -444,6 +448,24 @@
       },
       "next_departure": {
         "name": "Next departure"
+      },
+      "ev_consumption_100km": {
+        "name": "EV consumption (100 km)"
+      },
+      "ev_consumption_1000km": {
+        "name": "EV consumption (1000 km)"
+      },
+      "ev_consumption_from_start": {
+        "name": "EV consumption (from start)"
+      },
+      "hybrid_consumption_100km": {
+        "name": "Hybrid consumption (100 km)"
+      },
+      "hybrid_consumption_1000km": {
+        "name": "Hybrid consumption (1000 km)"
+      },
+      "hybrid_consumption_from_start": {
+        "name": "Hybrid consumption (from start)"
       }
     },
     "switch": {
