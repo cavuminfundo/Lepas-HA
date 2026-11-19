@@ -35,8 +35,8 @@ from custom_components.lepas.const import (
 # `entity_registry_enabled_default = False` (27 nel registro, 26 attive in `hass.states`).
 ATTESO = {
     "binary_sensor": 26,
-    "sensor": 50,
-    "button": 16,
+    "sensor": 54,
+    "button": 17,
     "switch": 30,
     "cover": 3,
     "number": 2,
@@ -80,7 +80,8 @@ ATTESO = {
 # +1 button reset_consumption_from_start) -> 141 attive in `hass.states`.
 # 2026-11-19: `potenza_ricarica` (`sensor.lepas_charging_power`) promosso da BEV-only a tutti
 # i modelli (confermato `chargingPower` su Lepas L8 PHEV sotto carica) -> 142 attive.
-TOTALE_ATTESO = 142
+# 2026-11-19 (v1.30.0): +5 entità statistiche ricarica (+4 sensor periodici, +1 button reset) -> 147.
+TOTALE_ATTESO = 147
 
 
 def test_totale_dichiarato_coerente():

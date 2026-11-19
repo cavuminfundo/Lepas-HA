@@ -54,6 +54,7 @@ from .const import (
     CLIMA_MIN_DEFAULT, CLIMA_MAX_DEFAULT, CLIMA_STEP_DEFAULT,
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
 )
+from .charging_stats import ChargingStatsTracker
 from .consumption import ConsumptionTracker, is_degraded_battery_frame
 from .scheduler import (
     DEPARTURE_CLIMATE_EXTRAS_COMMANDS,
@@ -460,6 +461,10 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._consumption_lock: threading.Lock = threading.Lock()
         self._consumption_tracker: ConsumptionTracker = ConsumptionTracker()
         self._consumption_store: Store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.consumption")
+        # Dedicated lock for charging stats (never nested with _state_lock, _hv_lock, or _consumption_lock).
+        self._charging_lock: threading.Lock = threading.Lock()
+        self._charging_tracker: ChargingStatsTracker = ChargingStatsTracker()
+        self._charging_store: Store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.charging_stats")
         self.battery_capacity_kwh: float = self._configured_battery_capacity(opt)
         # Impronta dell'ultima telemetria vista, per accorgersi di quando cambia davvero.
         # `None` = nessuna lettura ancora fatta in questa sessione.
@@ -676,10 +681,137 @@ class LepasCoordinator(DataUpdateCoordinator):
             except RuntimeError:
                 pass
 
+    async def async_load_charging_stats(self) -> None:
+        """Load persisted charging energy stats from HA Store on the event loop."""
+        try:
+            raw = await self._charging_store.async_load()
+        except Exception as err:  # noqa: BLE001 — corrupt JSON/OSError must not block boot
+            _LOGGER.warning("Lepas: failed to load charging stats store (%s)", type(err).__name__)
+            return
+        tracker = ChargingStatsTracker.from_dict(raw)
+        with self._charging_lock:
+            self._charging_tracker = tracker
+
+    def _charging_snapshot(self) -> dict:
+        """Serialize charging tracker under _charging_lock for Store persistence."""
+        with self._charging_lock:
+            return self._charging_tracker.to_dict()
+
+    @callback
+    def _schedule_charging_save(self) -> None:
+        """Schedule debounced Store write outside _charging_lock on the event loop."""
+        if self._timers.closing:
+            return
+        try:
+            self._charging_store.async_delay_save(self._charging_snapshot, 30)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "Lepas: failed to schedule charging stats save (%s)", type(err).__name__
+            )
+
+    async def async_flush_charging_stats(self) -> None:
+        """Flush charging stats state to Store during unload after timers/MQTT stop."""
+        try:
+            await self._charging_store.async_save(self._charging_snapshot())
+        except Exception as err:  # noqa: BLE001 — unload must not fail on store I/O
+            _LOGGER.warning("Lepas: failed to flush charging stats store (%s)", type(err).__name__)
+
+    def charging_stats(self, period: str) -> dict[str, object]:
+        """Return periodic charging energy statistics evaluated at current local date."""
+        local_date = dt_util.as_local(dt_util.utcnow()).date().isoformat()
+        with self._charging_lock:
+            return self._charging_tracker.period_stats(period, local_date)
+
+    async def async_reset_charging_from_start(self) -> None:
+        """Reset cumulative From Start charging stats and notify HA listeners."""
+        with self._charging_lock:
+            self._charging_tracker.reset_from_start()
+            snapshot = self._charging_tracker.to_dict()
+        try:
+            await self._charging_store.async_save(snapshot)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "Lepas: failed to save reset charging stats store (%s)", type(err).__name__
+            )
+        if not self._timers.closing:
+            self.async_update_listeners()
+
+    def _safe_in_home_zone(self, pos: dict | None) -> bool | None:
+        """Resolve zone.home containment safely when hass.states is absent or mocked."""
+        from .entity import in_zona_casa
+
+        try:
+            res = in_zona_casa(self.hass, pos)
+        except Exception:  # noqa: BLE001
+            return None
+        return res if isinstance(res, bool) else None
+
+    def _ingest_charging_stats_on_loop(self, patch: dict) -> None:
+        """Ingest realtime or fields-only patch on the HA event loop under _charging_lock."""
+        if self._timers.closing:
+            return
+        if "realtime" not in patch and "fields" not in patch:
+            return
+
+        if "realtime" in patch:
+            rt = patch.get("realtime")
+            if not isinstance(rt, dict):
+                return
+            fields = patch.get("fields") or self.data.get("fields") or {}
+            sources: tuple[dict | None, ...] = (rt, fields)
+            pwr_val = _safe_float(_pick_field(sources, "chargingPower"))
+            power_kw: float | None = pwr_val if (pwr_val is not None and pwr_val >= 0.0) else 0.0
+            degraded = is_degraded_battery_frame(rt)
+        else:
+            # AB-LEP-014: fields-only MQTT push uses msg_fields > fields, never stale realtime.
+            msg_fields = patch.get("msg_fields")
+            all_fields = patch.get("fields")
+            sources = (
+                msg_fields if isinstance(msg_fields, dict) else {},
+                all_fields if isinstance(all_fields, dict) else {},
+            )
+            power_kw = None
+            degraded = False
+
+        from .entity import field_on
+
+        charge_state = _pick_field(sources, "chargeState")
+        plugged = (
+            field_on(_pick_field(sources, "chargeGunState")) is True
+            or field_on(_pick_field(sources, "fastChargingGunStatus")) is True
+        )
+        soc_raw = _safe_float(_pick_field(sources, "dumpEnergy"))
+        soc_pct = soc_raw if (soc_raw is not None and 0.0 < soc_raw <= 100.0) else None
+        odo_raw = _safe_float(_pick_field(sources, "odometer"))
+        odometer = odo_raw if (odo_raw is not None and odo_raw >= 0.0) else None
+        pos = patch.get("position") if "position" in patch else self.data.get("position")
+        in_home = self._safe_in_home_zone(pos if isinstance(pos, dict) else None)
+
+        now_dt = dt_util.utcnow()
+        now_ts = now_dt.timestamp()
+        local_date = dt_util.as_local(now_dt).date().isoformat()
+
+        with self._charging_lock:
+            changed = self._charging_tracker.ingest(
+                now_ts,
+                local_date,
+                power_kw=power_kw,
+                charge_state=charge_state,
+                plugged=plugged,
+                soc_pct=soc_pct,
+                odometer=odometer,
+                in_home_zone=in_home,
+                degraded_battery=degraded,
+                battery_capacity_kwh=self.battery_capacity_kwh,
+            )
+        if changed and not self._timers.closing:
+            self._schedule_charging_save()
+
     # ───────────────── ciclo di vita MQTT auto ─────────────────
     async def async_start(self) -> None:
         """Avvia la connessione MQTT all'auto (paho gira in un thread proprio)."""
         await self.async_load_consumption()
+        await self.async_load_charging_stats()
         await self.async_setup_diag()
         await self.hass.async_add_executor_job(self._connect_car)
         self.async_start_departure_scheduler()
@@ -2267,6 +2399,7 @@ class LepasCoordinator(DataUpdateCoordinator):
 
     def _apply_update(self, patch: dict) -> None:
         self.data = {**self.data, **patch}
+        self._ingest_charging_stats_on_loop(patch)
         self.async_set_updated_data(self.data)
 
     # ───────────────── contesto per i moduli core/ (P2-6) ─────────────────

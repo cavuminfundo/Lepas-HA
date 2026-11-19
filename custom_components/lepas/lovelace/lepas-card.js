@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.29.1).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,10 +11,12 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.29.1";
+  var CARD_VERSION = "1.30.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
+  var VALID_STATS_SCOPES = ["all", "home", "away"];
+  var VALID_STATS_CHARTS = ["7d", "30d", "12m"];
   var DAY_SLUGS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   var CHARGE_DAY_PRESETS = {
     all_days: [1, 2, 3, 4, 5, 6, 7],
@@ -82,13 +84,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.29.1",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.29.1",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.29.1",
-    black: "/lepas_card/lepas-hero-black.png?v=1.29.1",
-    white: "/lepas_card/lepas-hero-white.png?v=1.29.1",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.30.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.30.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.29.1";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -130,6 +132,7 @@
     it: {
       tabs: { overview: "Plancia", climate: "Clima", charging: "Ricarica", security: "Sicurezza" },
       weekdays: ["L", "M", "M", "G", "V", "S", "D"],
+      monthsShort: ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"],
       dayNames: { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Gio", fri: "Ven", sat: "Sab", sun: "Dom" },
       colors: { grey: "Grigio", teal: "Ottanio", violet: "Viola", black: "Nero", white: "Bianco" },
       layouts: { auto: "Auto", compact: "Compatto 4-Tab", cockpit: "Cockpit Desktop" },
@@ -265,9 +268,6 @@
       stopCharging: "Ferma ricarica",
       chargeModeManual: "Orario manuale",
       chargeModeDeparture: "Segui partenza",
-      presetAll: "Tutti",
-      presetWeekdays: "Lun–Ven",
-      presetWeekend: "Weekend",
       followDepartureTitle: "Avvio automatico per partenza",
       noDeparturePlanned: "Nessuna partenza attiva: abilita un giorno sotto.",
       closuresGroup: "Aperture e accessi",
@@ -290,6 +290,33 @@
       batteryPreheatTime: "Orario preriscaldamento batteria",
       syncBatteryHeat: "Allinea alla partenza",
       batteryHeatHint: "Avvio batteria",
+      statsCardDefaultTitle: "Statistiche Lepas",
+      statsChargingTitle: "Ricarica",
+      statsScopeAll: "Tutte",
+      statsPeriodToday: "Oggi",
+      statsPeriodMonth: "Mese",
+      statsPeriodYear: "Anno",
+      statsPeriodFromStart: "Da inizio",
+      statsChart7d: "7g",
+      statsChart30d: "30g",
+      statsChart12m: "12m",
+      statsChartAriaLabel: "Storico energia ricaricata",
+      statsChartEmpty: "Nessuna sessione di ricarica registrata nel periodo",
+      statsOtherZone: "Altro",
+      statsSessionsShort: "sess.",
+      statsResetBtn: "Reset",
+      statsResetTitle: "Azzera Da inizio",
+      statsResetChargingConfirm: "Azzerare statistiche ricarica (Da inizio)?",
+      statsResetConsumptionConfirm: "Azzerare consumi medi (Da inizio)?",
+      statsResetHint: "Questa azione azzera i contatori cumulativi Da inizio.",
+      statsConfirmReset: "Azzera",
+      statsNoData: "Nessun sensore statistiche disponibile.",
+      editorDefaultScope: "Filtro iniziale",
+      editorDefaultChart: "Grafico iniziale",
+      editorShowCharging: "Mostra sezione Ricarica",
+      editorShowConsumption: "Mostra sezione Consumi medi",
+      editorShowChart: "Mostra grafico storico",
+      editorShowResetButtons: "Mostra pulsanti reset",
       climateExtraLabels: {
         driver_seat_heating: "Sedile guida caldo",
         driver_seat_ventilation: "Sedile guida aria",
@@ -320,6 +347,7 @@
     en: {
       tabs: { overview: "Overview", climate: "Climate", charging: "Charging", security: "Security" },
       weekdays: ["M", "T", "W", "T", "F", "S", "S"],
+      monthsShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
       dayNames: { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" },
       colors: { grey: "Grey", teal: "Teal", violet: "Violet", black: "Black", white: "White" },
       layouts: { auto: "Auto", compact: "Compact 4-Tab", cockpit: "Desktop Cockpit" },
@@ -455,9 +483,6 @@
       stopCharging: "Stop charging",
       chargeModeManual: "Manual time",
       chargeModeDeparture: "Follow departure",
-      presetAll: "All",
-      presetWeekdays: "Mon–Fri",
-      presetWeekend: "Weekend",
       followDepartureTitle: "Auto-start before departure",
       noDeparturePlanned: "No active departure: enable a day below.",
       closuresGroup: "Closures and access",
@@ -480,6 +505,33 @@
       batteryPreheatTime: "Battery preheat time",
       syncBatteryHeat: "Align to departure",
       batteryHeatHint: "Battery heat",
+      statsCardDefaultTitle: "Lepas Statistics",
+      statsChargingTitle: "Charging",
+      statsScopeAll: "All",
+      statsPeriodToday: "Today",
+      statsPeriodMonth: "Month",
+      statsPeriodYear: "Year",
+      statsPeriodFromStart: "From start",
+      statsChart7d: "7d",
+      statsChart30d: "30d",
+      statsChart12m: "12m",
+      statsChartAriaLabel: "Charged energy history",
+      statsChartEmpty: "No charging sessions recorded in this period",
+      statsOtherZone: "Other",
+      statsSessionsShort: "sess.",
+      statsResetBtn: "Reset",
+      statsResetTitle: "Reset From start",
+      statsResetChargingConfirm: "Reset charging stats (From start)?",
+      statsResetConsumptionConfirm: "Reset consumption stats (From start)?",
+      statsResetHint: "This resets the cumulative From start counters.",
+      statsConfirmReset: "Reset",
+      statsNoData: "No statistics sensors available.",
+      editorDefaultScope: "Default scope",
+      editorDefaultChart: "Default chart",
+      editorShowCharging: "Show Charging section",
+      editorShowConsumption: "Show Average consumption section",
+      editorShowChart: "Show history chart",
+      editorShowResetButtons: "Show reset buttons",
       climateExtraLabels: {
         driver_seat_heating: "Driver seat heat",
         driver_seat_ventilation: "Driver seat vent",
@@ -510,6 +562,7 @@
     nl: {
       tabs: { overview: "Overzicht", climate: "Klimaat", charging: "Laden", security: "Beveiliging" },
       weekdays: ["M", "D", "W", "D", "V", "Z", "Z"],
+      monthsShort: ["Jan", "Feb", "Mrt", "Apr", "Mei", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"],
       dayNames: { mon: "Ma", tue: "Di", wed: "Wo", thu: "Do", fri: "Vr", sat: "Za", sun: "Zo" },
       colors: { grey: "Grijs", teal: "Zeegroen", violet: "Violet", black: "Zwart", white: "Wit" },
       layouts: { auto: "Auto", compact: "Compact 4-Tab", cockpit: "Desktop Cockpit" },
@@ -645,9 +698,6 @@
       stopCharging: "Laden stoppen",
       chargeModeManual: "Handmatige tijd",
       chargeModeDeparture: "Volg vertrek",
-      presetAll: "Alle",
-      presetWeekdays: "Ma–Vr",
-      presetWeekend: "Weekend",
       followDepartureTitle: "Automatische start voor vertrek",
       noDeparturePlanned: "Geen actief vertrek: schakel hieronder een dag in.",
       closuresGroup: "Sluitingen en toegang",
@@ -670,6 +720,33 @@
       batteryPreheatTime: "Tijd batterij voorverwarming",
       syncBatteryHeat: "Afstemmen op vertrek",
       batteryHeatHint: "Accu start",
+      statsCardDefaultTitle: "Lepas Statistieken",
+      statsChargingTitle: "Laden",
+      statsScopeAll: "Alle",
+      statsPeriodToday: "Vandaag",
+      statsPeriodMonth: "Maand",
+      statsPeriodYear: "Jaar",
+      statsPeriodFromStart: "Vanaf start",
+      statsChart7d: "7d",
+      statsChart30d: "30d",
+      statsChart12m: "12m",
+      statsChartAriaLabel: "Laadenergie geschiedenis",
+      statsChartEmpty: "Geen laadsessies geregistreerd in deze periode",
+      statsOtherZone: "Overig",
+      statsSessionsShort: "sess.",
+      statsResetBtn: "Reset",
+      statsResetTitle: "Reset Vanaf start",
+      statsResetChargingConfirm: "Laadstatistieken (Vanaf start) resetten?",
+      statsResetConsumptionConfirm: "Verbruiksstatistieken (Vanaf start) resetten?",
+      statsResetHint: "Dit zet de cumulatieve Vanaf start-tellers terug op nul.",
+      statsConfirmReset: "Resetten",
+      statsNoData: "Geen statistieksensoren beschikbaar.",
+      editorDefaultScope: "Standaardbereik",
+      editorDefaultChart: "Standaardgrafiek",
+      editorShowCharging: "Sectie Laden tonen",
+      editorShowConsumption: "Sectie Gemiddeld verbruik tonen",
+      editorShowChart: "Historiekgrafiek tonen",
+      editorShowResetButtons: "Resetknoppen tonen",
       climateExtraLabels: {
         driver_seat_heating: "Stoel best. verw.",
         driver_seat_ventilation: "Stoel best. vent.",
@@ -988,6 +1065,98 @@
     return u ? v + " " + u : v;
   }
 
+  function parseStateNumber(s) {
+    var n = s ? parseFloat(s.state) : NaN;
+    return isNaN(n) || !isFinite(n) ? null : n;
+  }
+
+  function formatEntityStateDisplay(s, hass) {
+    if (isDeadStateObj(s)) return "—";
+    var rawStr = String(s.state).trim();
+    var lang = getLang(hass);
+    var n = Number(rawStr);
+    if (!isNaN(n) && isFinite(n)) {
+      return formatMetric(s, lang);
+    }
+    if (hass && typeof hass.formatEntityState === "function" && !(s.attributes && s.attributes.unit_of_measurement)) {
+      try { return hass.formatEntityState(s); } catch (e) { /* fall through */ }
+    }
+    return formatMetric(s, lang);
+  }
+
+  function isEntityOn(ent) {
+    return Boolean(ent && ent.s && ent.s.state === "on");
+  }
+
+  function collectIntegrationItems(hass, config) {
+    var c = config || {};
+    var prefix = c.prefix != null ? String(c.prefix) : "lepas_";
+    var integration = c.integration != null ? String(c.integration) : "lepas";
+    var out = [];
+    if (!hass || !hass.states) return out;
+    var strip = function (o) {
+      return o.indexOf(prefix) === 0 ? o.slice(prefix.length) : o;
+    };
+    var reg = hass.entities;
+    if (reg) {
+      for (var id in reg) {
+        if (!Object.prototype.hasOwnProperty.call(reg, id)) continue;
+        if (!reg[id] || reg[id].platform !== integration) continue;
+        var s = hass.states[id];
+        if (s) {
+          var dot = id.indexOf(".");
+          out.push({ id: id, domain: dot >= 0 ? id.slice(0, dot) : "", key: strip(id.slice(dot + 1)), s: s });
+        }
+      }
+    }
+    if (!out.length) {
+      for (var sid in hass.states) {
+        if (!Object.prototype.hasOwnProperty.call(hass.states, sid)) continue;
+        var sdot = sid.indexOf(".");
+        if (sdot < 0) continue;
+        var obj = sid.slice(sdot + 1);
+        if (obj.indexOf(prefix) === 0) {
+          out.push({ id: sid, domain: sid.slice(0, sdot), key: strip(obj), s: hass.states[sid] });
+        }
+      }
+    }
+    return out;
+  }
+
+  function findDomainEntity(items, domain) {
+    for (var i = 2; i < arguments.length; i += 1) {
+      var k = arguments[i];
+      for (var j = 0; j < items.length; j += 1) {
+        if (items[j].domain === domain && items[j].key === k) return items[j];
+      }
+    }
+    return null;
+  }
+
+  function dispatchMoreInfo(host, id) {
+    if (!host || !id) return;
+    host.dispatchEvent(new CustomEvent("hass-more-info", {
+      bubbles: true,
+      composed: true,
+      detail: { entityId: id },
+    }));
+  }
+
+  function emitEditorConfig(editor, patch, clearKeys) {
+    var next = Object.assign({}, editor._config, patch);
+    if (Array.isArray(clearKeys)) {
+      for (var i = 0; i < clearKeys.length; i += 1) {
+        if (next[clearKeys[i]] === "") delete next[clearKeys[i]];
+      }
+    }
+    editor._config = next;
+    editor.dispatchEvent(new CustomEvent("config-changed", {
+      detail: { config: next },
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
   var CONS_UNIT_STORAGE_KEYS = { ev: "lepas_card_cons_ev_unit", hybrid: "lepas_card_cons_hyb_unit" };
   function loadConsUnitModes() {
     var modes = { ev: "per_100", hybrid: "per_100" };
@@ -1008,20 +1177,437 @@
       }
     } catch (e) { /* ignore storage restrictions */ }
   }
-  function formatConsumptionCell(card, ent, kind, defaultUnit, mode) {
-    if (!ent || card._dead(ent.s)) return "—";
-    var num = card._num(ent.s);
+  function formatConsumptionCell(hassOrCard, ent, kind, defaultUnit, mode) {
+    var hass = (hassOrCard && hassOrCard._hass !== undefined) ? hassOrCard._hass : hassOrCard;
+    if (!ent || isDeadStateObj(ent.s)) return "—";
+    var num = parseStateNumber(ent.s);
     if (mode === "per_km") {
       if (num === null || !isFinite(num)) return "—";
       if (kind === "ev") return (Math.round(num * 10) / 1000).toFixed(3) + " kWh/km";
       if (num <= 0) return "—";
       return (Math.round((100 / num) * 10) / 10).toFixed(1) + " km/L";
     }
-    var disp = card._disp(ent.s);
+    var disp = formatEntityStateDisplay(ent.s, hass);
     if (disp !== "—" && !(ent.s.attributes && ent.s.attributes.unit_of_measurement) && num !== null) {
       return disp + " " + defaultUnit;
     }
     return disp;
+  }
+
+  function buildConsRowHtml(opts) {
+    return '<div class="cons-row' + (opts.hidden ? ' hidden" hidden' : '"') + ' data-bind="' + escapeHtml(opts.rowBind) + '">' +
+      '<div class="cons-row-hdr">' +
+        '<span class="cons-row-title">' + svgIcon(opts.iconName, "sec-ico") + "<span>" + escapeHtml(opts.rowLabel) + "</span></span>" +
+        '<div class="seg-switch cons-unit-seg" role="group" aria-label="' + escapeHtml(opts.toggleTitle) + '" title="' + escapeHtml(opts.toggleTitle) + '">' +
+          '<button type="button" class="seg-btn is-active" data-cons-kind="' + escapeHtml(opts.kind) + '" data-cons-unit="per_100" data-bind="' + escapeHtml(opts.b100) + '" aria-pressed="true">' + escapeHtml(opts.u100Lbl) + "</button>" +
+          '<button type="button" class="seg-btn" data-cons-kind="' + escapeHtml(opts.kind) + '" data-cons-unit="per_km" data-bind="' + escapeHtml(opts.bKm) + '" aria-pressed="false">' + escapeHtml(opts.uKmLbl) + "</button>" +
+        "</div>" +
+      "</div>" +
+      '<div class="cons-grid">' +
+        opts.cells.map(function (c) {
+          var entAttr = c.ent ? (' role="button" tabindex="0" data-e="' + escapeHtml(c.ent.id) + '"') : "";
+          return '<div class="cons-cell" data-bind="' + escapeHtml(c.cellBind) + '"' + entAttr + ">" +
+            '<span class="cons-cell-lbl">' + escapeHtml(c.label) + "</span>" +
+            '<span class="cons-cell-val num" data-bind="' + escapeHtml(c.valBind) + '">—</span>' +
+          "</div>";
+        }).join("") +
+      "</div>" +
+    "</div>";
+  }
+
+  function applyConsumptionBindings(root, hass, modes, vm) {
+    var consModes = modes || { ev: "per_100", hybrid: "per_100" };
+    var consSegPairs = [
+      { kind: "ev", b100: "consEvPer100Btn", bKm: "consEvPerKmBtn" },
+      { kind: "hybrid", b100: "consHybPer100Btn", bKm: "consHybPerKmBtn" },
+    ];
+    for (var cpi = 0; cpi < consSegPairs.length; cpi += 1) {
+      var pair = consSegPairs[cpi];
+      var isKm = consModes[pair.kind] === "per_km";
+      var b100El = root.querySelector('[data-bind="' + pair.b100 + '"]');
+      var bKmEl = root.querySelector('[data-bind="' + pair.bKm + '"]');
+      if (b100El) {
+        b100El.setAttribute("aria-pressed", !isKm ? "true" : "false");
+        b100El.classList.toggle("is-active", !isKm);
+      }
+      if (bKmEl) {
+        bKmEl.setAttribute("aria-pressed", isKm ? "true" : "false");
+        bKmEl.classList.toggle("is-active", isKm);
+      }
+    }
+    var consEvRow = root.querySelector('[data-bind="consEvRow"]');
+    if (consEvRow) {
+      consEvRow.classList.toggle("hidden", !vm.hasEvCons);
+      consEvRow.hidden = !vm.hasEvCons;
+    }
+    var consHybridRow = root.querySelector('[data-bind="consHybridRow"]');
+    if (consHybridRow) {
+      consHybridRow.classList.toggle("hidden", !vm.hasHybridCons);
+      consHybridRow.hidden = !vm.hasHybridCons;
+    }
+    var consBindings = [
+      { cell: "consEv50Cell", val: "consEv50Val", ent: vm.avgEnergy50, kind: "ev", unit: "kWh/100 km" },
+      { cell: "consEv100Cell", val: "consEv100Val", ent: vm.evCons100, kind: "ev", unit: "kWh/100 km" },
+      { cell: "consEv1000Cell", val: "consEv1000Val", ent: vm.evCons1000, kind: "ev", unit: "kWh/100 km" },
+      { cell: "consEvStartCell", val: "consEvStartVal", ent: vm.evConsStart, kind: "ev", unit: "kWh/100 km" },
+      { cell: "consHyb50Cell", val: "consHyb50Val", ent: vm.avgFuel50, kind: "hybrid", unit: "L/100 km" },
+      { cell: "consHyb100Cell", val: "consHyb100Val", ent: vm.hybCons100, kind: "hybrid", unit: "L/100 km" },
+      { cell: "consHyb1000Cell", val: "consHyb1000Val", ent: vm.hybCons1000, kind: "hybrid", unit: "L/100 km" },
+      { cell: "consHybStartCell", val: "consHybStartVal", ent: vm.hybConsStart, kind: "hybrid", unit: "L/100 km" },
+    ];
+    for (var csi = 0; csi < consBindings.length; csi += 1) {
+      var cb = consBindings[csi];
+      var consCell = root.querySelector('[data-bind="' + cb.cell + '"]');
+      var consVal = root.querySelector('[data-bind="' + cb.val + '"]');
+      if (consCell) {
+        if (cb.ent && cb.ent.id) {
+          consCell.setAttribute("role", "button");
+          consCell.setAttribute("tabindex", "0");
+          consCell.setAttribute("data-e", cb.ent.id);
+        } else {
+          consCell.removeAttribute("role");
+          consCell.removeAttribute("tabindex");
+          consCell.removeAttribute("data-e");
+        }
+      }
+      if (consVal) {
+        consVal.textContent = formatConsumptionCell(hass, cb.ent, cb.kind, cb.unit, consModes[cb.kind]);
+      }
+    }
+  }
+
+  function safeNonNegNumber(raw) {
+    if (raw == null) return null;
+    var n = typeof raw === "number" ? raw : parseFloat(raw);
+    if (isNaN(n) || !isFinite(n)) return null;
+    return n < 0 ? 0 : n;
+  }
+
+  function formatCompactNumber(n) {
+    if (n == null || isNaN(n) || !isFinite(n)) return "0";
+    return String(Math.round(n * 100) / 100);
+  }
+
+  function formatChartAxisLabel(rawKey, chartRange, t) {
+    var s = String(rawKey || "").trim();
+    if (chartRange === "12m") {
+      var mm = /^\d{4}-(\d{2})$/.exec(s);
+      if (mm) {
+        var idx = parseInt(mm[1], 10) - 1;
+        if (t && Array.isArray(t.monthsShort) && t.monthsShort[idx]) return t.monthsShort[idx];
+        return mm[1];
+      }
+      return s.slice(0, 7);
+    }
+    var dm = /^\d{4}-(\d{2})-(\d{2})$/.exec(s);
+    if (dm) return dm[2] + "/" + dm[1];
+    return s.slice(-5);
+  }
+
+  function buildChargingChartData(chgToday, chgYear, scope, chartRange, t) {
+    var rawSeries = [];
+    if (chartRange === "12m") {
+      rawSeries = (chgYear && chgYear.s && chgYear.s.attributes && Array.isArray(chgYear.s.attributes.monthly_series))
+        ? chgYear.s.attributes.monthly_series.slice(-12)
+        : [];
+    } else {
+      var allDaily = (chgToday && chgToday.s && chgToday.s.attributes && Array.isArray(chgToday.s.attributes.daily_series))
+        ? chgToday.s.attributes.daily_series
+        : [];
+      rawSeries = allDaily.slice(chartRange === "30d" ? -30 : -7);
+    }
+
+    var points = [];
+    var maxTotal = 0;
+    for (var i = 0; i < rawSeries.length; i += 1) {
+      var entry = rawSeries[i];
+      if (!entry || typeof entry !== "object") continue;
+      var key = chartRange === "12m" ? String(entry.month || "") : String(entry.date || "");
+      var label = formatChartAxisLabel(key, chartRange, t);
+      var totalRaw = safeNonNegNumber(entry.total_kwh) || 0;
+      var homeRaw = safeNonNegNumber(entry.home_kwh) || 0;
+      var awayRaw = safeNonNegNumber(entry.away_kwh) || 0;
+      var sessions = (typeof entry.sessions_count === "number" && isFinite(entry.sessions_count))
+        ? Math.max(0, Math.round(entry.sessions_count))
+        : 0;
+      var homeVal = 0;
+      var awayVal = 0;
+      var otherVal = 0;
+      var barTotal = 0;
+      if (scope === "home") {
+        homeVal = homeRaw;
+        barTotal = homeRaw;
+      } else if (scope === "away") {
+        awayVal = awayRaw;
+        barTotal = awayRaw;
+      } else {
+        homeVal = homeRaw;
+        awayVal = awayRaw;
+        otherVal = Math.max(0, totalRaw - homeRaw - awayRaw);
+        barTotal = Math.max(totalRaw, homeRaw + awayRaw);
+      }
+      if (barTotal > maxTotal) maxTotal = barTotal;
+      points.push({
+        key: key,
+        label: label,
+        home: homeVal,
+        away: awayVal,
+        other: otherVal,
+        total: barTotal,
+        sessions: sessions,
+      });
+    }
+    return { points: points, maxTotal: maxTotal };
+  }
+
+  function renderChargingChartSvg(chartData, scope, chartRange, t) {
+    var points = chartData.points;
+    var maxTotal = chartData.maxTotal;
+    if (!points.length || maxTotal <= 0) {
+      return '<div class="stats-chart-empty" data-bind="statsChartEmpty">' + escapeHtml(t.statsChartEmpty) + "</div>";
+    }
+    var n = points.length;
+    var width = 360;
+    var baseY = 92;
+    var plotH = 76;
+    var slotW = width / n;
+    var barW = Math.max(4, Math.min(26, slotW * 0.62));
+    var labelStep = n > 12 ? Math.ceil(n / 6) : 1;
+
+    var colsHtml = points.map(function (pt, idx) {
+      var slotX = idx * slotW;
+      var barX = slotX + (slotW - barW) / 2;
+      var curY = baseY;
+      var segs = [];
+
+      var pushSeg = function (val, cls, segName, color) {
+        if (val <= 0) return;
+        var h = (val / maxTotal) * plotH;
+        if (h < 1.5) h = 1.5;
+        var y = curY - h;
+        if (y < 10) {
+          h = curY - 10;
+          y = 10;
+        }
+        curY = y;
+        segs.push(
+          '<rect class="chart-bar-seg ' + cls + '" data-bar-segment="' + segName + '" x="' + barX.toFixed(1) + '" y="' + y.toFixed(1) +
+          '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2" fill="' + color + '"/>'
+        );
+      };
+
+      pushSeg(pt.home, "is-home", "home", "#34D399");
+      pushSeg(pt.away, "is-away", "away", "#60A5FA");
+      if (pt.other > 0.005) {
+        pushSeg(pt.other, "is-other", "other", "#9CA3AF");
+      }
+
+      var detail;
+      if (scope === "home" || scope === "away") {
+        detail = pt.label + ": " + formatCompactNumber(pt.total) + " kWh";
+      } else {
+        detail = pt.label + ": " + formatCompactNumber(pt.total) + " kWh (" +
+          t.homeEnergy + " " + formatCompactNumber(pt.home) + " · " +
+          t.awayEnergy + " " + formatCompactNumber(pt.away) +
+          (pt.other > 0.005 ? " · " + t.statsOtherZone + " " + formatCompactNumber(pt.other) : "") +
+          ")" + (pt.sessions > 0 ? " · " + pt.sessions + " " + t.statsSessionsShort : "");
+      }
+      var showLabel = (idx === 0 || idx === n - 1 || idx % labelStep === 0);
+      var lblHtml = showLabel
+        ? '<text class="chart-axis-lbl" x="' + (slotX + slotW / 2).toFixed(1) + '" y="109" text-anchor="middle">' + escapeHtml(pt.label) + "</text>"
+        : "";
+      var safeDetail = escapeHtml(detail);
+      return '<g class="chart-bar-col" tabindex="0" role="button" data-bar-idx="' + idx + '" data-bar-detail="' + safeDetail + '" aria-label="' + safeDetail + '">' +
+        "<title>" + safeDetail + "</title>" +
+        '<rect class="chart-bar-hit" x="' + slotX.toFixed(1) + '" y="8" width="' + slotW.toFixed(1) + '" height="88" fill="transparent"/>' +
+        segs.join("") +
+        lblHtml +
+      "</g>";
+    }).join("");
+
+    return '<svg class="stats-chart-svg" viewBox="0 0 360 118" role="img" aria-label="' + escapeHtml(t.statsChartAriaLabel) + '">' +
+      '<line class="chart-baseline" x1="0" y1="' + baseY + '" x2="360" y2="' + baseY + '"/>' +
+      colsHtml +
+    "</svg>";
+  }
+
+  function buildConfirmDialogHtml(t, titleId) {
+    var id = escapeHtml(titleId || "lp-confirm-title");
+    return '<dialog class="confirm-dialog" data-bind="confirmDialog" aria-labelledby="' + id + '">' +
+      '<div class="confirm-dialog-body">' +
+        '<h2 id="' + id + '" class="confirm-dialog-title" data-bind="confirmDialogTitle">' + escapeHtml(t.confirmModalTitle) + "</h2>" +
+        '<p class="confirm-dialog-action" data-bind="confirmDialogAction"></p>' +
+        '<p class="confirm-dialog-hint" data-bind="confirmDialogHint">' + escapeHtml(t.confirmModalHint) + "</p>" +
+        '<div class="confirm-dialog-actions">' +
+          '<button type="button" class="ctrl-btn" data-dialog-action="cancel" data-bind="confirmDialogCancel" autofocus>' + escapeHtml(t.confirmCancel) + "</button>" +
+          '<button type="button" class="ctrl-btn is-primary" data-dialog-action="confirm" data-bind="confirmDialogConfirm">' + escapeHtml(t.confirmSend) + "</button>" +
+        "</div>" +
+      "</div>" +
+    "</dialog>";
+  }
+
+  function createConfirmDialogController(host, opts) {
+    var options = opts || {};
+    var closeImmediate = Boolean(options.closeOnConfirmImmediate);
+    var ctrl = {
+      pendingAction: null,
+      inFlight: false,
+      outsidePress: false,
+      boundEl: null,
+      getDialog: function () {
+        return host.shadowRoot ? host.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null;
+      },
+      isOpen: function (dlg) {
+        var d = dlg || ctrl.getDialog();
+        return Boolean(d && (d.open || (d.hasAttribute && d.hasAttribute("open"))));
+      },
+      isPointerOutside: function (ev, dlg) {
+        if (!ev || !dlg || typeof dlg.getBoundingClientRect !== "function") return false;
+        var r = dlg.getBoundingClientRect();
+        if (!r) return false;
+        var x = ev.clientX;
+        var y = ev.clientY;
+        if (typeof x !== "number" || typeof y !== "number") return false;
+        return x < r.left || x > r.right || y < r.top || y > r.bottom;
+      },
+      syncTexts: function (t, actionLabel) {
+        var dlg = ctrl.getDialog();
+        if (!dlg) return;
+        var titleEl = dlg.querySelector('[data-bind="confirmDialogTitle"]');
+        var actEl = dlg.querySelector('[data-bind="confirmDialogAction"]');
+        var hintEl = dlg.querySelector('[data-bind="confirmDialogHint"]');
+        var cancelBtn = dlg.querySelector('[data-dialog-action="cancel"]');
+        var confirmBtn = dlg.querySelector('[data-dialog-action="confirm"]');
+        var p = ctrl.pendingAction;
+        var titleTxt = (p && p.dialogTitle) ? p.dialogTitle : t.confirmModalTitle;
+        var hintTxt = (p && p.dialogHint) ? p.dialogHint : t.confirmModalHint;
+        var confirmTxt = (p && p.confirmBtnText) ? p.confirmBtnText : t.confirmSend;
+        if (titleEl && titleEl.textContent !== titleTxt) titleEl.textContent = titleTxt;
+        if (actEl && typeof actionLabel === "string" && actEl.textContent !== actionLabel) actEl.textContent = actionLabel;
+        if (hintEl && hintEl.textContent !== hintTxt) hintEl.textContent = hintTxt;
+        if (cancelBtn && cancelBtn.textContent !== t.confirmCancel) cancelBtn.textContent = t.confirmCancel;
+        if (confirmBtn) {
+          if (confirmBtn.textContent !== confirmTxt) confirmBtn.textContent = confirmTxt;
+          confirmBtn.disabled = Boolean(ctrl.inFlight);
+        }
+      },
+      open: function (spec, t, actionEl) {
+        if (ctrl.inFlight) return;
+        var dlg = ctrl.getDialog();
+        if (!dlg) return;
+        ctrl.bind();
+        var actionLabel = (spec && spec.confirmLabel)
+          ? String(spec.confirmLabel)
+          : ((actionEl && actionEl.textContent) ? actionEl.textContent.trim() : (spec.confirmKey || ""));
+        ctrl.pendingAction = {
+          domain: spec.domain,
+          service: spec.service,
+          data: spec.data,
+          pendingKey: spec.confirmKey || spec.pendingKey || "",
+          confirmLabel: actionLabel,
+          dialogTitle: spec.dialogTitle || "",
+          dialogHint: spec.dialogHint || "",
+          confirmBtnText: spec.confirmBtnText || "",
+        };
+        ctrl.outsidePress = false;
+        ctrl.syncTexts(t, actionLabel);
+        if (!ctrl.isOpen(dlg)) {
+          if (typeof dlg.showModal === "function") {
+            try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); }
+          } else {
+            dlg.setAttribute("open", "");
+          }
+        }
+      },
+      close: function (returnVal) {
+        ctrl.pendingAction = null;
+        ctrl.outsidePress = false;
+        var dlg = ctrl.getDialog();
+        if (!dlg) return;
+        var confirmBtn = dlg.querySelector('[data-dialog-action="confirm"]');
+        if (confirmBtn) confirmBtn.disabled = Boolean(ctrl.inFlight);
+        if (ctrl.isOpen(dlg)) {
+          if (typeof dlg.close === "function") {
+            try { dlg.close(returnVal || ""); } catch (e) { dlg.removeAttribute("open"); }
+          } else {
+            dlg.removeAttribute("open");
+          }
+        }
+        if ("returnValue" in dlg) dlg.returnValue = "";
+      },
+      confirm: function (onExecute) {
+        if (ctrl.inFlight) return;
+        var pending = ctrl.pendingAction;
+        if (!pending) return;
+        if (closeImmediate) {
+          ctrl.close("confirm");
+          if (typeof onExecute === "function") onExecute(pending);
+          return;
+        }
+        ctrl.inFlight = true;
+        var dlg = ctrl.getDialog();
+        var confirmBtn = dlg ? dlg.querySelector('[data-dialog-action="confirm"]') : null;
+        if (confirmBtn) confirmBtn.disabled = true;
+        var finalize = function () {
+          ctrl.inFlight = false;
+          ctrl.close("confirm");
+        };
+        if (typeof onExecute === "function") {
+          onExecute(pending, finalize);
+        } else {
+          finalize();
+        }
+      },
+      destroy: function () {
+        ctrl.inFlight = false;
+        ctrl.close();
+        ctrl.unbind();
+      },
+      onClose: function () {
+        var dlg = ctrl.boundEl || ctrl.getDialog();
+        if (dlg && ctrl.isOpen(dlg)) return;
+        if (dlg && "returnValue" in dlg) dlg.returnValue = "";
+        ctrl.pendingAction = null;
+        ctrl.outsidePress = false;
+      },
+      onCancel: function (ev) {
+        if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+        if (ctrl.inFlight) return;
+        ctrl.close("cancel");
+      },
+      onPointerDown: function (ev) {
+        var dlg = ctrl.boundEl || ctrl.getDialog();
+        ctrl.outsidePress = ctrl.isOpen(dlg) ? ctrl.isPointerOutside(ev, dlg) : false;
+      },
+      onPointerUp: function (ev) {
+        var wasOutside = ctrl.outsidePress;
+        ctrl.outsidePress = false;
+        if (!wasOutside || ctrl.inFlight) return;
+        var dlg = ctrl.boundEl || ctrl.getDialog();
+        if (dlg && ctrl.isPointerOutside(ev, dlg)) {
+          ctrl.close("cancel");
+        }
+      },
+      bind: function () {
+        var dlg = ctrl.getDialog();
+        if (!dlg || dlg === ctrl.boundEl) return;
+        ctrl.unbind();
+        dlg.addEventListener("close", ctrl.onClose);
+        dlg.addEventListener("cancel", ctrl.onCancel);
+        dlg.addEventListener("pointerdown", ctrl.onPointerDown);
+        dlg.addEventListener("pointerup", ctrl.onPointerUp);
+        ctrl.boundEl = dlg;
+      },
+      unbind: function () {
+        if (!ctrl.boundEl) return;
+        ctrl.boundEl.removeEventListener("close", ctrl.onClose);
+        ctrl.boundEl.removeEventListener("cancel", ctrl.onCancel);
+        ctrl.boundEl.removeEventListener("pointerdown", ctrl.onPointerDown);
+        ctrl.boundEl.removeEventListener("pointerup", ctrl.onPointerUp);
+        ctrl.boundEl = null;
+      },
+    };
+    return ctrl;
   }
 
   function translateOption(kind, val, lang) {
@@ -1186,7 +1772,7 @@
     return { isCharging: true, isFast: isFast, mode: isFast ? "fast" : "normal" };
   }
 
-  function buildStyles() {
+  function buildCommonCardCss() {
     return [
       ":host {",
       "  display: block;",
@@ -1213,10 +1799,57 @@
       ".hidden { display: none !important; }",
       ".num { font-variant-numeric: tabular-nums; }",
       ".lp-ico { width: 16px; height: 16px; flex-shrink: 0; display: block; }",
-      ".tab-ico { width: 18px; height: 18px; }",
       ".kpi-ico, .sec-ico, .stat-ico, .meta-ico, .tpms-ico { width: 14px; height: 14px; color: var(--lp-text-secondary); }",
       ".btn-ico { width: 16px; height: 16px; }",
       "ha-card { display: block; width: 100%; background: var(--lp-canvas); border: 1px solid var(--lp-border); border-radius: 16px; overflow: hidden; overflow-anchor: none; color: var(--lp-text); box-shadow: none; }",
+      ".error-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 10px; background: rgba(239, 68, 68, 0.16); border: 1px solid rgba(239, 68, 68, 0.4); color: #FECACA; font-size: 0.82rem; }",
+      ".error-dismiss { background: transparent; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; min-width: 32px; min-height: 32px; padding: 2px 8px; cursor: pointer; }",
+      ".surface { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }",
+      ".sec-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.76rem; font-weight: 600; color: var(--lp-text-muted); letter-spacing: 0.02em; }",
+      ".sec-hdr-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }",
+      ".ctrl-btn { position: relative; overflow: hidden; min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 10px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }",
+      ".ctrl-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
+      ".ctrl-btn:disabled { opacity: 0.55; cursor: not-allowed; }",
+      ".ctrl-btn.is-pending { opacity: 0.58; cursor: wait; }",
+      ".ctrl-btn.is-primary { background: #262B34; color: var(--lp-text); border-color: rgba(52, 211, 153, 0.55); }",
+      ".ctrl-btn.is-primary:hover { background: #2A313D; border-color: var(--lp-emerald); }",
+      ".ctrl-btn.is-emerald { border-color: rgba(52, 211, 153, 0.45); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.12); }",
+      ".ctrl-btn.is-glacier { border-color: rgba(96, 165, 250, 0.45); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.12); }",
+      ".ctrl-btn.is-amber { border-color: rgba(245, 158, 11, 0.45); color: var(--lp-amber); background: rgba(245, 158, 11, 0.12); }",
+      ".seg-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--lp-canvas); border: 1px solid var(--lp-border); }",
+      ".seg-btn { min-height: 40px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--lp-text-secondary); font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 8px; }",
+      ".seg-btn:hover { color: var(--lp-text); }",
+      ".seg-btn.is-active { background: #262B34; color: var(--lp-text); border-color: rgba(255, 255, 255, 0.16); font-weight: 700; }",
+      ".cons-rows { display: flex; flex-direction: column; gap: 8px; }",
+      ".cons-row { display: flex; flex-direction: column; gap: 5px; }",
+      ".cons-row-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); }",
+      ".cons-row-title { display: inline-flex; align-items: center; gap: 5px; color: var(--lp-text); }",
+      ".cons-unit-seg { display: inline-grid; grid-template-columns: repeat(2, auto); gap: 2px; padding: 2px; border-radius: 9px; flex-shrink: 0; }",
+      ".cons-unit-seg .seg-btn { min-height: 26px; padding: 3px 8px; border-radius: 6px; font-size: 0.68rem; line-height: 1.15; white-space: nowrap; }",
+      ".cons-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }",
+      ".cons-cell { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 7px 6px; min-height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }",
+      ".cons-cell[data-e] { cursor: pointer; }",
+      ".cons-cell[data-e]:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
+      ".cons-cell-lbl { font-size: 0.67rem; font-weight: 600; color: var(--lp-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+      ".cons-cell-val { font-size: 0.76rem; font-weight: 700; color: var(--lp-text); line-height: 1.2; overflow-wrap: break-word; }",
+      ".confirm-dialog { padding: 0; border: 1px solid var(--lp-border-strong); border-radius: 14px; background: var(--lp-surface); color: var(--lp-text); width: min(360px, calc(100vw - 32px)); max-width: 100%; margin: auto; box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56); }",
+      ".confirm-dialog[open] { display: flex; flex-direction: column; position: fixed; inset: 0; margin: auto; z-index: 999; }",
+      "dialog:modal { overscroll-behavior: contain; }",
+      "dialog::backdrop { overflow: hidden; overscroll-behavior: contain; background: rgba(10, 12, 16, 0.72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
+      ".confirm-dialog-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; }",
+      ".confirm-dialog-title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--lp-text); }",
+      ".confirm-dialog-action { margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--lp-emerald); }",
+      ".confirm-dialog-hint { margin: 0; font-size: 0.8rem; color: var(--lp-text-secondary); line-height: 1.35; }",
+      ".confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }",
+      ".confirm-dialog-actions .ctrl-btn { flex: 1; }",
+      "@container (max-width: 340px) { .cons-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }",
+      "button:focus-visible, input:focus-visible, select:focus-visible, [role=\"button\"]:focus-visible { outline: 2px solid rgba(243, 244, 246, 0.72); outline-offset: -2px; }",
+    ];
+  }
+
+  function buildStyles() {
+    return buildCommonCardCss().concat([
+      ".tab-ico { width: 18px; height: 18px; }",
       ".cockpit-grid { display: flex; flex-direction: column; gap: 10px; padding: 10px; }",
       ".hero-region { display: flex; flex-direction: column; gap: 8px; }",
       ".hero-card { border-radius: 12px; overflow: hidden; background: var(--lp-surface); border: 1px solid var(--lp-border); display: flex; flex-direction: column; }",
@@ -1232,13 +1865,12 @@
       ".soc-btn.is-charging { border-color: rgba(52, 211, 153, 0.55); }",
       ".soc-btn.is-charging.is-fast-charge { border-color: rgba(245, 158, 11, 0.65); }",
       ".soc-btn svg.soc-svg { position: absolute; inset: 2px; width: 48px; height: 48px; transform: rotate(-90deg); }",
-      ".soc-btn svg.soc-svg-orbit { position: absolute; inset: 2px; width: 48px; height: 48px; pointer-events: none; }",
-      ".soc-ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 3.2; }",
-      ".soc-ring-fg { fill: none; stroke: var(--lp-emerald); stroke-width: 3.2; stroke-linecap: round; }",
+      ".soc-ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 3; }",
+      ".soc-ring-fg { fill: none; stroke: var(--lp-emerald); stroke-width: 3; stroke-linecap: round; }",
       ".soc-ring-fg.is-warn { stroke: var(--lp-amber); }",
       ".soc-ring-fg.is-low { stroke: var(--lp-coral); }",
-      ".soc-ring-orbit { fill: none; stroke: var(--lp-emerald); stroke-width: 2.6; stroke-linecap: round; opacity: 0.92; }",
-      ".soc-btn.is-fast-charge .soc-ring-orbit { stroke: var(--lp-amber); }",
+      ".soc-ring-pulse { fill: none; stroke: var(--lp-emerald); stroke-width: 2.2; opacity: 0.85; }",
+      ".soc-btn.is-fast-charge .soc-ring-pulse { stroke: var(--lp-amber); }",
       ".soc-viewport { position: relative; width: 38px; height: 22px; overflow: hidden; }",
       ".soc-track { display: flex; flex-direction: column; will-change: transform; }",
       ".soc-slide { height: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }",
@@ -1259,8 +1891,6 @@
       ".warns-row { display: flex; flex-wrap: wrap; gap: 6px; }",
       ".warn-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; min-height: 34px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.32); color: #FCA5A5; font-size: 0.78rem; font-weight: 600; cursor: pointer; }",
       ".warn-chip.is-amber { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.32); color: #FCD34D; }",
-      ".error-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 10px; background: rgba(239, 68, 68, 0.16); border: 1px solid rgba(239, 68, 68, 0.4); color: #FECACA; font-size: 0.82rem; }",
-      ".error-dismiss { background: transparent; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; min-width: 32px; min-height: 32px; padding: 2px 8px; cursor: pointer; }",
       ".tabs-bar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; }",
       ".tab-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 50px; min-width: 44px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--lp-text-secondary); font-size: 0.74rem; font-weight: 600; cursor: pointer; padding: 6px 4px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
       ".tab-btn:hover { color: var(--lp-text); background: rgba(255, 255, 255, 0.04); }",
@@ -1269,9 +1899,6 @@
       ".tab-lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }",
       ".panel { display: none; flex-direction: column; gap: 10px; }",
       ".panel.is-active { display: flex; }",
-      ".surface { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }",
-      ".sec-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.76rem; font-weight: 600; color: var(--lp-text-muted); letter-spacing: 0.02em; }",
-      ".sec-hdr-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }",
       ".sec-subhdr { font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); display: flex; align-items: center; gap: 6px; padding-top: 2px; }",
       ".metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
       ".metric-card { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 12px; padding: 11px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 72px; }",
@@ -1281,31 +1908,10 @@
       ".metric-val { font-size: 1.08rem; font-weight: 700; color: var(--lp-text); line-height: 1.25; }",
       ".metric-bar { height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 2px; }",
       ".metric-bar-fill { height: 100%; background: var(--lp-emerald); border-radius: 999px; }",
-      ".cons-rows { display: flex; flex-direction: column; gap: 8px; }",
-      ".cons-row { display: flex; flex-direction: column; gap: 5px; }",
-      ".cons-row-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); }",
-      ".cons-row-title { display: inline-flex; align-items: center; gap: 5px; color: var(--lp-text); }",
-      ".cons-unit-seg { display: inline-grid; grid-template-columns: repeat(2, auto); gap: 2px; padding: 2px; border-radius: 9px; flex-shrink: 0; }",
-      ".cons-unit-seg .seg-btn { min-height: 26px; padding: 3px 8px; border-radius: 6px; font-size: 0.68rem; line-height: 1.15; white-space: nowrap; }",
-      ".cons-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }",
-      ".cons-cell { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 7px 6px; min-height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }",
-      ".cons-cell[data-e] { cursor: pointer; }",
-      ".cons-cell[data-e]:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
-      ".cons-cell-lbl { font-size: 0.67rem; font-weight: 600; color: var(--lp-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
-      ".cons-cell-val { font-size: 0.76rem; font-weight: 700; color: var(--lp-text); line-height: 1.2; overflow-wrap: break-word; }",
       ".btn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
       ".btn-triple { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }",
       ".btn-row { display: flex; flex-wrap: wrap; gap: 8px; }",
       ".btn-row > .ctrl-btn { flex: 1 1 120px; min-width: 0; }",
-      ".ctrl-btn { position: relative; overflow: hidden; min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 10px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }",
-      ".ctrl-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
-      ".ctrl-btn:disabled { opacity: 0.55; cursor: not-allowed; }",
-      ".ctrl-btn.is-pending { opacity: 0.58; cursor: wait; }",
-      ".ctrl-btn.is-primary { background: #262B34; color: var(--lp-text); border-color: rgba(52, 211, 153, 0.55); }",
-      ".ctrl-btn.is-primary:hover { background: #2A313D; border-color: var(--lp-emerald); }",
-      ".ctrl-btn.is-emerald { border-color: rgba(52, 211, 153, 0.45); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.12); }",
-      ".ctrl-btn.is-glacier { border-color: rgba(96, 165, 250, 0.45); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.12); }",
-      ".ctrl-btn.is-amber { border-color: rgba(245, 158, 11, 0.45); color: var(--lp-amber); background: rgba(245, 158, 11, 0.12); }",
       ".btn-compact { min-height: 40px; padding: 7px 8px; font-size: 0.76rem; }",
       ".stepper { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 4px; }",
       ".step-val { font-size: 1.15rem; font-weight: 700; color: var(--lp-text); }",
@@ -1332,10 +1938,6 @@
       ".chg-stat { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-height: 54px; }",
       ".chg-stat-lbl { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; color: var(--lp-text-secondary); }",
       ".chg-stat-val { font-size: 0.88rem; font-weight: 700; color: var(--lp-text); }",
-      ".seg-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--lp-canvas); border: 1px solid var(--lp-border); }",
-      ".seg-btn { min-height: 40px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--lp-text-secondary); font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 8px; }",
-      ".seg-btn:hover { color: var(--lp-text); }",
-      ".seg-btn.is-active { background: #262B34; color: var(--lp-text); border-color: rgba(255, 255, 255, 0.16); font-weight: 700; }",
       ".manual-charge-box { display: flex; flex-direction: column; gap: 10px; }",
       ".departure-charge-box { background: var(--lp-elevated); border: 1px solid rgba(52, 211, 153, 0.34); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }",
       ".dep-charge-title { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; color: var(--lp-emerald); }",
@@ -1350,9 +1952,6 @@
       ".charge-days-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }",
       ".charge-day-chip { min-height: 44px; min-width: 0; padding: 4px 2px; border-radius: 9px; font-size: 0.78rem; font-weight: 700; }",
       ".charge-day-chip.is-active { background: #2A313D; color: var(--lp-emerald); border-color: rgba(52, 211, 153, 0.55); }",
-      ".preset-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }",
-      ".preset-btn { min-height: 38px; padding: 4px 8px; font-size: 0.76rem; }",
-      ".preset-btn.is-active { background: #262B34; color: var(--lp-text); border-color: rgba(255, 255, 255, 0.24); }",
       ".days-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }",
       ".day-chip { min-height: 52px; min-width: 36px; border-radius: 9px; border: 1px solid var(--lp-border); background: var(--lp-elevated); color: var(--lp-text-secondary); font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; }",
       ".day-chip.is-enabled { border-color: rgba(52, 211, 153, 0.48); color: var(--lp-text); }",
@@ -1441,16 +2040,6 @@
       ".badge.is-glacier { border-color: rgba(96, 165, 250, 0.4); color: var(--lp-glacier); background: rgba(96, 165, 250, 0.1); }",
       ".badge.is-amber { border-color: rgba(245, 158, 11, 0.4); color: var(--lp-amber); background: rgba(245, 158, 11, 0.1); }",
       ".badge.is-coral { border-color: rgba(239, 68, 68, 0.45); color: #FCA5A5; background: rgba(239, 68, 68, 0.14); }",
-      ".confirm-dialog { padding: 0; border: 1px solid var(--lp-border-strong); border-radius: 14px; background: var(--lp-surface); color: var(--lp-text); width: min(360px, calc(100vw - 32px)); max-width: 100%; margin: auto; box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56); }",
-      ".confirm-dialog[open] { display: flex; flex-direction: column; position: fixed; inset: 0; margin: auto; z-index: 999; }",
-      "dialog:modal { overscroll-behavior: contain; }",
-      "dialog::backdrop { overflow: hidden; overscroll-behavior: contain; background: rgba(10, 12, 16, 0.72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
-      ".confirm-dialog-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; }",
-      ".confirm-dialog-title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--lp-text); }",
-      ".confirm-dialog-action { margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--lp-emerald); }",
-      ".confirm-dialog-hint { margin: 0; font-size: 0.8rem; color: var(--lp-text-secondary); line-height: 1.35; }",
-      ".confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }",
-      ".confirm-dialog-actions .ctrl-btn { flex: 1; }",
       ".info-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; min-height: 44px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); cursor: pointer; font-size: 0.84rem; }",
       ".info-row:hover { border-color: var(--lp-border-strong); }",
       ".info-val { font-weight: 600; color: var(--lp-text); }",
@@ -1474,7 +2063,7 @@
       "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"charging\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"charging\"] { grid-column: 2; grid-row: 2; }",
       "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"climate\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"climate\"] { grid-column: 3; grid-row: 1 / span 2; }",
       "}",
-      "@container (max-width: 340px) { .bp-stage { grid-template-columns: minmax(60px, 1fr) minmax(92px, 120px) minmax(60px, 1fr); gap: 5px; } .cons-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }",
+      "@container (max-width: 340px) { .bp-stage { grid-template-columns: minmax(60px, 1fr) minmax(92px, 120px) minmax(60px, 1fr); gap: 5px; } }",
       "@supports not (container-type: inline-size) {",
       "  @media (min-width: 680px) {",
       "    ha-card[data-layout=\"auto\"] .tabs-bar { display: none; }",
@@ -1496,8 +2085,8 @@
       "  .bp-part, .bp-sunroof-pane, .bp-sunroof-vent, .bp-light-beam, .bp-wheel, .bp-lock-shackle { transition: opacity 0.2s ease, transform 0.25s ease-out, stroke 0.2s ease, fill 0.2s ease; }",
       "  .panel.is-active { animation: lp-fade 0.18s ease-out; }",
       "  .bp-part.is-moving { animation: lp-pulse-soft 1.2s ease-in-out infinite alternate; }",
-      "  .soc-btn.is-charging .soc-svg-orbit { animation: lp-spin 2.4s linear infinite; }",
-      "  .soc-btn.is-charging.is-fast-charge .soc-svg-orbit { animation-duration: 1.35s; }",
+      "  .soc-btn.is-charging .soc-ring-pulse { animation: lp-soc-pulse 1.5s ease-in-out infinite alternate; }",
+      "  .soc-btn.is-charging.is-fast-charge .soc-ring-pulse { animation-duration: 0.9s; }",
       "  .soc-btn.is-charging .soc-track { animation: lp-soc-slide 5.2s ease-in-out infinite; }",
       "  .ctrl-btn.is-spinning .lp-ico { animation: lp-spin 2.4s linear infinite; }",
       "  .flow-bar { animation: lp-flow 1.4s linear infinite; }",
@@ -1507,13 +2096,49 @@
       "  .soc-mode-slide { display: none !important; }",
       "  .soc-btn.is-charging .soc-chg-ico:not(.hidden) { display: inline-flex; }",
       "}",
-      "button:focus-visible, input:focus-visible, select:focus-visible, [role=\"button\"]:focus-visible { outline: 2px solid rgba(243, 244, 246, 0.72); outline-offset: -2px; }",
       "@keyframes lp-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }",
       "@keyframes lp-pulse-soft { from { opacity: 0.45; } to { opacity: 0.95; } }",
+      "@keyframes lp-soc-pulse { from { opacity: 0.22; } to { opacity: 0.95; } }",
       "@keyframes lp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
       "@keyframes lp-soc-slide { 0%, 40% { transform: translateY(0); } 48%, 88% { transform: translateY(-22px); } 96%, 100% { transform: translateY(0); } }",
       "@keyframes lp-flow { from { transform: translateX(-100%); } to { transform: translateX(250%); } }",
-    ].join("\n");
+    ]).join("\n");
+  }
+
+  function buildStatsStyles() {
+    return buildCommonCardCss().concat([
+      ".stats-shell { display: flex; flex-direction: column; gap: 10px; padding: 12px; }",
+      ".stats-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; }",
+      ".stats-hdr-title { display: inline-flex; align-items: center; gap: 7px; font-size: 1.02rem; font-weight: 700; color: var(--lp-text); letter-spacing: -0.01em; min-width: 0; }",
+      ".stats-hdr-title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+      ".stats-sec-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; font-weight: 600; color: var(--lp-text-secondary); }",
+      ".stats-sec-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }",
+      ".stats-scope-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px; padding: 2px; border-radius: 9px; }",
+      ".stats-scope-seg .seg-btn, .stats-chart-seg .seg-btn { min-height: 28px; padding: 3px 9px; border-radius: 6px; font-size: 0.7rem; line-height: 1.15; white-space: nowrap; }",
+      ".stats-reset-btn { min-height: 28px; min-width: 32px; padding: 3px 9px; border-radius: 8px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); font-size: 0.7rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }",
+      ".stats-reset-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); color: var(--lp-text); }",
+      ".stats-reset-btn:disabled, .stats-reset-btn.is-pending { opacity: 0.55; cursor: wait; }",
+      ".stats-reset-btn .lp-ico { width: 13px; height: 13px; }",
+      ".stats-cell-sub { font-size: 0.64rem; color: var(--lp-text-secondary); line-height: 1.2; overflow-wrap: break-word; }",
+      ".stats-chart-box { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--lp-border); }",
+      ".stats-chart-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }",
+      ".stats-chart-title { font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); }",
+      ".stats-chart-legend { display: inline-flex; align-items: center; gap: 8px; font-size: 0.68rem; color: var(--lp-text-secondary); }",
+      ".legend-item { display: inline-flex; align-items: center; gap: 4px; }",
+      ".legend-swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }",
+      ".legend-swatch.is-home { background: var(--lp-emerald); }",
+      ".legend-swatch.is-away { background: var(--lp-glacier); }",
+      ".stats-chart-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px; padding: 2px; border-radius: 9px; }",
+      ".stats-chart-stage { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 8px 8px 4px; min-height: 112px; display: flex; align-items: center; justify-content: center; }",
+      ".stats-chart-svg { width: 100%; height: auto; display: block; overflow: visible; }",
+      ".chart-baseline { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }",
+      ".chart-axis-lbl { fill: #9CA3AF; font-size: 9px; font-weight: 600; }",
+      ".chart-bar-col { cursor: pointer; outline: none; }",
+      ".chart-bar-col:focus-visible .chart-bar-seg { stroke: #F3F4F6; stroke-width: 1; }",
+      ".stats-chart-empty { font-size: 0.76rem; color: var(--lp-text-muted); text-align: center; padding: 20px 8px; }",
+      ".stats-chart-tooltip { font-size: 0.72rem; font-weight: 600; color: var(--lp-text); background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 8px; padding: 5px 9px; }",
+      ".stats-empty-card { font-size: 0.82rem; color: var(--lp-text-secondary); text-align: center; padding: 18px 12px; }",
+    ]).join("\n");
   }
 
   function buildEditorStyles() {
@@ -1561,15 +2186,7 @@
     }
 
     _emitConfig(patch) {
-      var next = Object.assign({}, this._config, patch);
-      if (next.title === "") delete next.title;
-      if (next.image === "") delete next.image;
-      this._config = next;
-      this.dispatchEvent(new CustomEvent("config-changed", {
-        detail: { config: next },
-        bubbles: true,
-        composed: true,
-      }));
+      emitEditorConfig(this, patch, ["title", "image"]);
     }
 
     _handleFieldChange(ev) {
@@ -1656,7 +2273,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.29.1">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.30.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -1665,6 +2282,136 @@
           "</div>";
 
         this.shadowRoot.addEventListener("click", this._onEvent);
+        this.shadowRoot.addEventListener("change", this._onEvent);
+        this.shadowRoot.addEventListener("input", this._onEvent);
+        this._rendered = true;
+      }
+      this._syncValues();
+    }
+  }
+
+  class LepasStatsCardEditor extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this._config = {};
+      this._hass = null;
+      this._rendered = false;
+      this._onEvent = this._handleFieldChange.bind(this);
+    }
+
+    setConfig(config) {
+      this._config = Object.assign({}, config || {});
+      this._render();
+    }
+
+    set hass(hass) {
+      var prevLang = this._lang;
+      this._hass = hass;
+      var nextLang = getLang(hass);
+      if (prevLang !== nextLang) {
+        this._lang = nextLang;
+        this._rendered = false;
+        this._render();
+      }
+    }
+
+    _emitConfig(patch) {
+      emitEditorConfig(this, patch, ["title"]);
+    }
+
+    _handleFieldChange(ev) {
+      var target = ev.target;
+      if (!target || !target.getAttribute) return;
+      if (ev.type !== "change" && ev.type !== "input") return;
+      var field = target.getAttribute("data-field");
+      if (!field) return;
+      if (ev.type === "input" && field !== "title") return;
+      if (
+        field === "show_charging" ||
+        field === "show_consumption" ||
+        field === "show_chart" ||
+        field === "show_reset_buttons"
+      ) {
+        var bPatch = {};
+        bPatch[field] = Boolean(target.checked);
+        this._emitConfig(bPatch);
+      } else {
+        var patch = {};
+        patch[field] = String(target.value || "").trim();
+        this._emitConfig(patch);
+      }
+    }
+
+    _syncValues() {
+      if (!this.shadowRoot) return;
+      var cfg = this._config || {};
+      var titleEl = this.shadowRoot.querySelector('[data-field="title"]');
+      if (titleEl && this.shadowRoot.activeElement !== titleEl) titleEl.value = cfg.title || "";
+      var scopeEl = this.shadowRoot.querySelector('[data-field="default_scope"]');
+      if (scopeEl) scopeEl.value = VALID_STATS_SCOPES.indexOf(cfg.default_scope) >= 0 ? cfg.default_scope : "all";
+      var chartEl = this.shadowRoot.querySelector('[data-field="default_chart"]');
+      if (chartEl) chartEl.value = VALID_STATS_CHARTS.indexOf(cfg.default_chart) >= 0 ? cfg.default_chart : "7d";
+      var boolFields = ["show_charging", "show_consumption", "show_chart", "show_reset_buttons"];
+      for (var i = 0; i < boolFields.length; i += 1) {
+        var bf = boolFields[i];
+        var chk = this.shadowRoot.querySelector('[data-field="' + bf + '"]');
+        if (chk) chk.checked = cfg[bf] !== false;
+      }
+    }
+
+    _render() {
+      if (!this.shadowRoot) return;
+      var lang = getLang(this._hass);
+      this._lang = lang;
+      var t = getTexts(lang);
+      if (!this._rendered) {
+        var scopeOpts = [
+          { val: "all", lbl: t.statsScopeAll },
+          { val: "home", lbl: t.homeEnergy },
+          { val: "away", lbl: t.awayEnergy },
+        ].map(function (o) {
+          return '<option value="' + o.val + '">' + escapeHtml(o.lbl) + "</option>";
+        }).join("");
+
+        var chartOpts = [
+          { val: "7d", lbl: t.statsChart7d },
+          { val: "30d", lbl: t.statsChart30d },
+          { val: "12m", lbl: t.statsChart12m },
+        ].map(function (o) {
+          return '<option value="' + o.val + '">' + escapeHtml(o.lbl) + "</option>";
+        }).join("");
+
+        var checkRows = [
+          { field: "show_charging", lbl: t.editorShowCharging },
+          { field: "show_consumption", lbl: t.editorShowConsumption },
+          { field: "show_chart", lbl: t.editorShowChart },
+          { field: "show_reset_buttons", lbl: t.editorShowResetButtons },
+        ].map(function (r) {
+          return '<label class="ed-check-row">' +
+            '<span class="ed-lbl">' + escapeHtml(r.lbl) + "</span>" +
+            '<input type="checkbox" data-field="' + r.field + '">' +
+          "</label>";
+        }).join("");
+
+        this.shadowRoot.innerHTML =
+          "<style>" + buildEditorStyles() + "</style>" +
+          '<div class="ed-wrap">' +
+            '<div class="ed-field">' +
+              '<label class="ed-lbl">' + escapeHtml(t.editorTitle) + "</label>" +
+              '<input type="text" class="ed-input" data-field="title" placeholder="' + escapeHtml(t.statsCardDefaultTitle) + '">' +
+            "</div>" +
+            '<div class="ed-field">' +
+              '<label class="ed-lbl">' + escapeHtml(t.editorDefaultScope) + "</label>" +
+              '<select class="ed-select" data-field="default_scope">' + scopeOpts + "</select>" +
+            "</div>" +
+            '<div class="ed-field">' +
+              '<label class="ed-lbl">' + escapeHtml(t.editorDefaultChart) + "</label>" +
+              '<select class="ed-select" data-field="default_chart">' + chartOpts + "</select>" +
+            "</div>" +
+            checkRows +
+          "</div>";
+
         this.shadowRoot.addEventListener("change", this._onEvent);
         this.shadowRoot.addEventListener("input", this._onEvent);
         this._rendered = true;
@@ -1687,12 +2434,8 @@
       };
       this._hass = null;
       this._activeTab = "overview";
-      this._consUnitModes = loadConsUnitModes();
       this._expandedDay = null;
-      this._pendingDialogAction = null;
-      this._dialogOutsidePress = false;
       this._lastCmdFeedback = null;
-      this._boundDialogEl = null;
       this._pendingKeys = new Set();
       this._errorMsg = null;
       this._lastStructKey = "";
@@ -1710,13 +2453,10 @@
       this._allowedClimateExtras = [];
       this._currentEntryId = null;
       this._climateExtrasReqSeq = 0;
+      this._dialogCtrl = createConfirmDialogController(this, { closeOnConfirmImmediate: true });
       this._onClick = this._handleClick.bind(this);
       this._onChange = this._handleChange.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
-      this._onDialogClose = this._handleDialogClose.bind(this);
-      this._onDialogCancel = this._handleDialogCancel.bind(this);
-      this._onDialogPointerDown = this._handleDialogPointerDown.bind(this);
-      this._onDialogPointerUp = this._handleDialogPointerUp.bind(this);
       var isTimeInput = function (el) {
         return Boolean(el && el.tagName === "INPUT" && (el.type === "time" || (el.getAttribute && el.getAttribute("type") === "time")));
       };
@@ -1767,39 +2507,23 @@
 
     connectedCallback() {
       this._ensureShellListeners();
-      this._bindDialogListeners();
+      this._dialogCtrl.bind();
     }
 
     disconnectedCallback() {
-      this._closeConfirmDialog();
-      this._unbindDialogListeners();
-      this._pendingDialogAction = null;
-      this._dialogOutsidePress = false;
+      this._dialogCtrl.destroy();
     }
 
     _dead(s) {
-      return !s || s.state === "unavailable" || s.state === "unknown" || s.state === "";
+      return isDeadStateObj(s);
     }
 
     _num(s) {
-      var n = s ? parseFloat(s.state) : NaN;
-      return isNaN(n) ? null : n;
+      return parseStateNumber(s);
     }
 
     _disp(s) {
-      if (!s || s.state == null) return "—";
-      var rawStr = String(s.state).trim();
-      if (!rawStr || rawStr === "unavailable" || rawStr === "unknown") return "—";
-      var lang = getLang(this._hass);
-      var n = Number(rawStr);
-      if (!isNaN(n) && isFinite(n)) {
-        return formatMetric(s, lang);
-      }
-      var h = this._hass;
-      if (h && typeof h.formatEntityState === "function" && !(s.attributes && s.attributes.unit_of_measurement)) {
-        try { return h.formatEntityState(s); } catch (e) { /* fall through */ }
-      }
-      return formatMetric(s, lang);
+      return formatEntityStateDisplay(s, this._hass);
     }
 
     _h(s) {
@@ -1815,36 +2539,7 @@
     }
 
     _collect(hass) {
-      var c = this.config;
-      var out = [];
-      if (!hass || !hass.states) return out;
-      var strip = function (o) {
-        return o.indexOf(c.prefix) === 0 ? o.slice(c.prefix.length) : o;
-      };
-      var reg = hass.entities;
-      if (reg) {
-        for (var id in reg) {
-          if (!Object.prototype.hasOwnProperty.call(reg, id)) continue;
-          if (!reg[id] || reg[id].platform !== c.integration) continue;
-          var s = hass.states[id];
-          if (s) {
-            var dot = id.indexOf(".");
-            out.push({ id: id, domain: dot >= 0 ? id.slice(0, dot) : "", key: strip(id.slice(dot + 1)), s: s });
-          }
-        }
-      }
-      if (!out.length) {
-        for (var sid in hass.states) {
-          if (!Object.prototype.hasOwnProperty.call(hass.states, sid)) continue;
-          var sdot = sid.indexOf(".");
-          if (sdot < 0) continue;
-          var obj = sid.slice(sdot + 1);
-          if (obj.indexOf(c.prefix) === 0) {
-            out.push({ id: sid, domain: sid.slice(0, sdot), key: strip(obj), s: hass.states[sid] });
-          }
-        }
-      }
-      return out;
+      return collectIntegrationItems(hass, this.config);
     }
 
     _find(items) {
@@ -1858,13 +2553,7 @@
     }
 
     _findDomain(items, domain) {
-      for (var i = 2; i < arguments.length; i += 1) {
-        var k = arguments[i];
-        for (var j = 0; j < items.length; j += 1) {
-          if (items[j].domain === domain && items[j].key === k) return items[j];
-        }
-      }
-      return null;
+      return findDomainEntity.apply(null, arguments);
     }
 
     _deviceId(hass, items) {
@@ -1894,12 +2583,7 @@
     }
 
     _moreInfo(id) {
-      if (!id) return;
-      this.dispatchEvent(new CustomEvent("hass-more-info", {
-        bubbles: true,
-        composed: true,
-        detail: { entityId: id },
-      }));
+      dispatchMoreInfo(this, id);
     }
 
     _navigate(path) {
@@ -1930,7 +2614,7 @@
         if (dAction === "confirm") {
           this._confirmPendingDialogAction();
         } else {
-          this._closeConfirmDialog("cancel");
+          this._dialogCtrl.close("cancel");
         }
         return;
       }
@@ -1972,15 +2656,6 @@
         return;
       }
 
-      var chgPresetEl = target.closest("[data-charge-preset]");
-      if (chgPresetEl) {
-        ev.stopPropagation();
-        var presetKey = chgPresetEl.getAttribute("data-charge-preset");
-        var presetDays = presetDaysForKey(presetKey);
-        if (presetDays) this._handleChargeDaysSelect(presetDays);
-        return;
-      }
-
       var chgModeEl = target.closest("[data-charge-mode]");
       if (chgModeEl) {
         ev.stopPropagation();
@@ -2010,20 +2685,6 @@
           return;
         }
         this._triggerAction(actionEl.getAttribute("data-action-id"), actionEl);
-        return;
-      }
-
-      var consUnitEl = target.closest("[data-cons-unit]");
-      if (consUnitEl) {
-        ev.stopPropagation();
-        var consKind = consUnitEl.getAttribute("data-cons-kind") === "hybrid" ? "hybrid" : "ev";
-        var nextConsMode = consUnitEl.getAttribute("data-cons-unit") === "per_km" ? "per_km" : "per_100";
-        if (!this._consUnitModes) this._consUnitModes = { ev: "per_100", hybrid: "per_100" };
-        if (nextConsMode !== this._consUnitModes[consKind]) {
-          this._consUnitModes[consKind] = nextConsMode;
-          saveConsUnitMode(consKind, nextConsMode);
-          if (this._hass) this._render(this._hass);
-        }
         return;
       }
 
@@ -2093,142 +2754,19 @@
       }
     }
 
-    _bindDialogListeners() {
-      var dlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null;
-      if (!dlg || dlg === this._boundDialogEl) return;
-      this._unbindDialogListeners();
-      dlg.addEventListener("close", this._onDialogClose);
-      dlg.addEventListener("cancel", this._onDialogCancel);
-      dlg.addEventListener("pointerdown", this._onDialogPointerDown);
-      dlg.addEventListener("pointerup", this._onDialogPointerUp);
-      this._boundDialogEl = dlg;
-    }
-
-    _unbindDialogListeners() {
-      if (!this._boundDialogEl) return;
-      this._boundDialogEl.removeEventListener("close", this._onDialogClose);
-      this._boundDialogEl.removeEventListener("cancel", this._onDialogCancel);
-      this._boundDialogEl.removeEventListener("pointerdown", this._onDialogPointerDown);
-      this._boundDialogEl.removeEventListener("pointerup", this._onDialogPointerUp);
-      this._boundDialogEl = null;
-    }
-
-    _isPointerOutsideDialog(ev, dlg) {
-      if (!ev || !dlg || typeof dlg.getBoundingClientRect !== "function") return false;
-      var r = dlg.getBoundingClientRect();
-      if (!r) return false;
-      var x = ev.clientX;
-      var y = ev.clientY;
-      if (typeof x !== "number" || typeof y !== "number") return false;
-      return x < r.left || x > r.right || y < r.top || y > r.bottom;
-    }
-
-    _handleDialogClose() {
-      var dlg = this._boundDialogEl || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null);
-      if (dlg && (dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open")))) return;
-      if (dlg && "returnValue" in dlg) dlg.returnValue = "";
-      this._pendingDialogAction = null;
-      this._dialogOutsidePress = false;
-    }
-
-    _handleDialogCancel(ev) {
-      if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
-      this._closeConfirmDialog("cancel");
-    }
-
-    _handleDialogPointerDown(ev) {
-      var dlg = this._boundDialogEl || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null);
-      var isOpen = Boolean(dlg && (dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open"))));
-      this._dialogOutsidePress = isOpen ? this._isPointerOutsideDialog(ev, dlg) : false;
-    }
-
-    _handleDialogPointerUp(ev) {
-      var wasOutside = this._dialogOutsidePress;
-      this._dialogOutsidePress = false;
-      if (!wasOutside) return;
-      var dlg = this._boundDialogEl || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null);
-      if (dlg && this._isPointerOutsideDialog(ev, dlg)) {
-        this._closeConfirmDialog("cancel");
-      }
-    }
-
-    _syncConfirmDialogTexts(t, actionLabel) {
-      if (!this.shadowRoot) return;
-      var dlg = this.shadowRoot.querySelector('[data-bind="confirmDialog"]');
-      if (!dlg) return;
-      var titleEl = dlg.querySelector('[data-bind="confirmDialogTitle"]');
-      var actEl = dlg.querySelector('[data-bind="confirmDialogAction"]');
-      var hintEl = dlg.querySelector('[data-bind="confirmDialogHint"]');
-      var cancelBtn = dlg.querySelector('[data-dialog-action="cancel"]');
-      var confirmBtn = dlg.querySelector('[data-dialog-action="confirm"]');
-      if (titleEl && titleEl.textContent !== t.confirmModalTitle) titleEl.textContent = t.confirmModalTitle;
-      if (actEl && typeof actionLabel === "string" && actEl.textContent !== actionLabel) actEl.textContent = actionLabel;
-      if (hintEl && hintEl.textContent !== t.confirmModalHint) hintEl.textContent = t.confirmModalHint;
-      if (cancelBtn && cancelBtn.textContent !== t.confirmCancel) cancelBtn.textContent = t.confirmCancel;
-      if (confirmBtn && confirmBtn.textContent !== t.confirmSend) confirmBtn.textContent = t.confirmSend;
-    }
-
     _openConfirmDialog(spec, confirmKey, actionEl) {
-      if (!this.shadowRoot) return;
-      var dlg = this.shadowRoot.querySelector('[data-bind="confirmDialog"]');
-      if (!dlg) return;
-      this._bindDialogListeners();
       var lang = getLang(this._hass);
       var t = getTexts(lang);
-      var actionLabel = (spec && spec.confirmLabel)
-        ? String(spec.confirmLabel)
-        : ((actionEl && actionEl.textContent) ? actionEl.textContent.trim() : confirmKey);
-
-      this._pendingDialogAction = {
-        domain: spec.domain,
-        service: spec.service,
-        data: spec.data,
-        pendingKey: confirmKey,
-        confirmLabel: actionLabel,
-      };
-      this._dialogOutsidePress = false;
-      this._syncConfirmDialogTexts(t, actionLabel);
-
-      var isAlreadyOpen = Boolean(dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open")));
-      if (!isAlreadyOpen) {
-        if (typeof dlg.showModal === "function") {
-          try {
-            dlg.showModal();
-          } catch (e) {
-            dlg.setAttribute("open", "");
-          }
-        } else {
-          dlg.setAttribute("open", "");
-        }
-      }
-    }
-
-    _closeConfirmDialog(returnVal) {
-      this._pendingDialogAction = null;
-      this._dialogOutsidePress = false;
-      var dlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="confirmDialog"]') : null;
-      if (!dlg) return;
-      var isOpen = Boolean(dlg.open || (dlg.hasAttribute && dlg.hasAttribute("open")));
-      if (isOpen) {
-        if (typeof dlg.close === "function") {
-          try {
-            dlg.close(returnVal || "");
-          } catch (e) {
-            dlg.removeAttribute("open");
-          }
-        } else {
-          dlg.removeAttribute("open");
-        }
-      }
-      if ("returnValue" in dlg) dlg.returnValue = "";
+      this._dialogCtrl.open(Object.assign({}, spec, { confirmKey: confirmKey }), t, actionEl);
     }
 
     _confirmPendingDialogAction() {
-      var pending = this._pendingDialogAction;
-      this._closeConfirmDialog("confirm");
-      if (pending && this._hass) {
-        this._callService(pending.domain, pending.service, pending.data, pending.pendingKey);
-      }
+      var self = this;
+      this._dialogCtrl.confirm(function (pending) {
+        if (pending && self._hass) {
+          self._callService(pending.domain, pending.service, pending.data, pending.pendingKey);
+        }
+      });
     }
 
     _triggerAction(actionId, actionEl) {
@@ -2472,17 +3010,6 @@
       var chgSwitch = this._findDomain(items, "switch", "charging");
       var plug = this._findDomain(items, "binary_sensor", "charging_cable");
       var odo = this._findDomain(items, "sensor", "odometer");
-      var avgEnergy50 = this._findDomain(items, "sensor", "average_energy_consumption");
-      var evCons100 = this._findDomain(items, "sensor", "ev_consumption_100km");
-      var evCons1000 = this._findDomain(items, "sensor", "ev_consumption_1000km");
-      var evConsStart = this._findDomain(items, "sensor", "ev_consumption_from_start");
-      var avgFuel50 = this._findDomain(items, "sensor", "average_fuel_consumption");
-      var hybCons100 = this._findDomain(items, "sensor", "hybrid_consumption_100km");
-      var hybCons1000 = this._findDomain(items, "sensor", "hybrid_consumption_1000km");
-      var hybConsStart = this._findDomain(items, "sensor", "hybrid_consumption_from_start");
-      var hasEvCons = Boolean(avgEnergy50 || evCons100 || evCons1000 || evConsStart);
-      var hasHybridCons = Boolean(avgFuel50 || hybCons100 || hybCons1000 || hybConsStart);
-      var hasAnyCons = hasEvCons || hasHybridCons;
       var lock = this._findDomain(items, "lock", "lock");
       var climate = this._findDomain(items, "climate", "climate");
       var trunk = this._findDomain(items, "cover", "trunk");
@@ -2784,8 +3311,6 @@
         extraSig,
         warnSig,
         allowedExtrasSig,
-        hasEvCons ? "1" : "0",
-        hasHybridCons ? "1" : "0",
         entityIdsSig,
       ].join("#");
 
@@ -2794,10 +3319,8 @@
         var activeUid = activeEl && activeEl.getAttribute ? activeEl.getAttribute("data-uid") : null;
         var activeVal = (activeEl && activeEl.tagName === "INPUT") ? activeEl.value : null;
 
-        this._closeConfirmDialog();
-        this._unbindDialogListeners();
-        this._pendingDialogAction = null;
-        this._dialogOutsidePress = false;
+        this._dialogCtrl.close();
+        this._dialogCtrl.unbind();
 
         this.shadowRoot.innerHTML = this._buildSkeletonHtml({
           lang: lang,
@@ -2816,17 +3339,6 @@
           chgSwitch: chgSwitch,
           plug: plug,
           odo: odo,
-          avgEnergy50: avgEnergy50,
-          evCons100: evCons100,
-          evCons1000: evCons1000,
-          evConsStart: evConsStart,
-          avgFuel50: avgFuel50,
-          hybCons100: hybCons100,
-          hybCons1000: hybCons1000,
-          hybConsStart: hybConsStart,
-          hasEvCons: hasEvCons,
-          hasHybridCons: hasHybridCons,
-          hasAnyCons: hasAnyCons,
           lock: lock,
           climate: climate,
           trunk: trunk,
@@ -2891,7 +3403,7 @@
           }
         }
       }
-      this._bindDialogListeners();
+      this._dialogCtrl.bind();
 
       // Always patch live values, classes, SVG offsets, pending states, and non-focused inputs
       this._applyBindings(hass, {
@@ -2916,17 +3428,6 @@
         chgSwitch: chgSwitch,
         plug: plug,
         odo: odo,
-        avgEnergy50: avgEnergy50,
-        evCons100: evCons100,
-        evCons1000: evCons1000,
-        evConsStart: evConsStart,
-        avgFuel50: avgFuel50,
-        hybCons100: hybCons100,
-        hybCons1000: hybCons1000,
-        hybConsStart: hybConsStart,
-        hasEvCons: hasEvCons,
-        hasHybridCons: hasHybridCons,
-        hasAnyCons: hasAnyCons,
         lock: lock,
         climate: climate,
         trunk: trunk,
@@ -3007,11 +3508,9 @@
       var socRingHtml = ctx.bat ? (
         '<div class="soc-btn" data-bind="socBtn" role="button" tabindex="0" data-e="' + self._h(ctx.bat.id) + '">' +
           '<svg class="soc-svg" viewBox="0 0 52 52" aria-hidden="true">' +
-            '<circle class="soc-ring-bg" cx="26" cy="26" r="21"/>' +
-            '<circle class="soc-ring-fg" data-soc-ring cx="26" cy="26" r="21" stroke-dasharray="131.95" stroke-dashoffset="131.95"/>' +
-          "</svg>" +
-          '<svg class="soc-svg-orbit hidden" data-bind="socOrbit" viewBox="0 0 52 52" aria-hidden="true">' +
-            '<circle class="soc-ring-orbit" cx="26" cy="26" r="21" stroke-dasharray="28 103.95"/>' +
+            '<circle class="soc-ring-bg" cx="26" cy="26" r="22"/>' +
+            '<circle class="soc-ring-fg" data-soc-ring cx="26" cy="26" r="22" stroke-dasharray="138.23" stroke-dashoffset="138.23"/>' +
+            '<circle class="soc-ring-pulse hidden" data-bind="socPulse" cx="26" cy="26" r="17"/>' +
           "</svg>" +
           '<div class="soc-viewport">' +
             '<div class="soc-track">' +
@@ -3077,8 +3576,6 @@
         var usedIds = new Set(
           [
             ctx.bat, ctx.evRange, ctx.totalRange, ctx.fuelRange, ctx.chgPower, ctx.chgStatus, ctx.chgSwitch, ctx.plug, ctx.odo,
-            ctx.avgEnergy50, ctx.evCons100, ctx.evCons1000, ctx.evConsStart,
-            ctx.avgFuel50, ctx.hybCons100, ctx.hybCons1000, ctx.hybConsStart,
             ctx.autoUpdatesSw,
           ]
             .filter(Boolean).map(function (r) { return r.id; })
@@ -3094,46 +3591,6 @@
             }).join("") + "</div>";
         }
       }
-
-      var buildConsRowHtml = function (rowBind, hiddenFlag, iconName, rowLabel, kind, u100Lbl, uKmLbl, b100, bKm, cells) {
-        return '<div class="cons-row' + (hiddenFlag ? ' hidden" hidden' : '"') + ' data-bind="' + rowBind + '">' +
-          '<div class="cons-row-hdr">' +
-            '<span class="cons-row-title">' + svgIcon(iconName, "sec-ico") + "<span>" + self._h(rowLabel) + "</span></span>" +
-            '<div class="seg-switch cons-unit-seg" role="group" aria-label="' + self._h(t.consUnitToggleTitle) + '" title="' + self._h(t.consUnitToggleTitle) + '">' +
-              '<button type="button" class="seg-btn is-active" data-cons-kind="' + kind + '" data-cons-unit="per_100" data-bind="' + b100 + '" aria-pressed="true">' + self._h(u100Lbl) + "</button>" +
-              '<button type="button" class="seg-btn" data-cons-kind="' + kind + '" data-cons-unit="per_km" data-bind="' + bKm + '" aria-pressed="false">' + self._h(uKmLbl) + "</button>" +
-            "</div>" +
-          "</div>" +
-          '<div class="cons-grid">' +
-            cells.map(function (c) {
-              var entAttr = c.ent ? (' role="button" tabindex="0" data-e="' + self._h(c.ent.id) + '"') : "";
-              return '<div class="cons-cell" data-bind="' + c.cellBind + '"' + entAttr + ">" +
-                '<span class="cons-cell-lbl">' + self._h(c.label) + "</span>" +
-                '<span class="cons-cell-val num" data-bind="' + c.valBind + '">—</span>' +
-              "</div>";
-            }).join("") +
-          "</div>" +
-        "</div>";
-      };
-
-      var consHtml =
-        '<div class="surface cons-section' + (ctx.hasAnyCons ? '"' : ' hidden" hidden') + ' data-bind="consSection">' +
-          '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("gauge", "sec-ico") + "<span>" + self._h(t.avgConsumption) + "</span></span></div>" +
-          '<div class="cons-rows">' +
-            buildConsRowHtml("consEvRow", !ctx.hasEvCons, "bolt", t.consEv, "ev", "kWh/100", "kWh/km", "consEvPer100Btn", "consEvPerKmBtn", [
-              { cellBind: "consEv50Cell", valBind: "consEv50Val", label: t.cons50, ent: ctx.avgEnergy50 },
-              { cellBind: "consEv100Cell", valBind: "consEv100Val", label: t.cons100, ent: ctx.evCons100 },
-              { cellBind: "consEv1000Cell", valBind: "consEv1000Val", label: t.cons1000, ent: ctx.evCons1000 },
-              { cellBind: "consEvStartCell", valBind: "consEvStartVal", label: t.consFromStart, ent: ctx.evConsStart },
-            ]) +
-            buildConsRowHtml("consHybridRow", !ctx.hasHybridCons, "flame", t.consHybrid, "hybrid", "L/100", "km/L", "consHybPer100Btn", "consHybPerKmBtn", [
-              { cellBind: "consHyb50Cell", valBind: "consHyb50Val", label: t.cons50, ent: ctx.avgFuel50 },
-              { cellBind: "consHyb100Cell", valBind: "consHyb100Val", label: t.cons100, ent: ctx.hybCons100 },
-              { cellBind: "consHyb1000Cell", valBind: "consHyb1000Val", label: t.cons1000, ent: ctx.hybCons1000 },
-              { cellBind: "consHybStartCell", valBind: "consHybStartVal", label: t.consFromStart, ent: ctx.hybConsStart },
-            ]) +
-          "</div>" +
-        "</div>";
 
       var overviewHtml =
         '<section class="panel" data-panel="overview">' +
@@ -3156,7 +3613,6 @@
               '<span class="metric-val num" data-bind="mOdoVal">—</span>' +
             "</div>" +
           "</div>" +
-          consHtml +
           ((quickPrimaryBtns.length || quickSecondaryBtns.length)
             ? '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.quickActions) + "</span></div>" +
                 (quickPrimaryBtns.length ? '<div class="btn-grid">' + quickPrimaryBtns.join("") + "</div>" : "") +
@@ -3285,7 +3741,6 @@
             (ctx.remTime ? chgStatHtml("remTimeBadge", "clock", t.remaining) : "") +
             (ctx.hvVolt ? chgStatHtml("hvVoltBadge", "volt", t.voltage) : "") +
             (ctx.hvCurr ? chgStatHtml("hvCurrBadge", "current", t.current) : "") +
-            (ctx.fastPort ? chgStatHtml("fastPortBadge", "plug", t.fastPort) : "") +
           "</div>" +
         "</div>"
       ) : "";
@@ -3298,17 +3753,12 @@
       ) : "";
 
       var chargeDaysStripHtml = (ctx.chgDays || ctx.schedWindow) ? (
-        '<div class="field-row"><span class="field-lbl">' + self._h(t.chargeDays) + '</span><span class="badge" data-bind="chgDaysPresetLbl"></span></div>' +
+        '<div class="field-row"><span class="field-lbl">' + self._h(t.chargeDays) + "</span></div>" +
         '<div class="charge-days-strip" role="group">' + t.weekdays.map(function (letter, idx) {
           var dayNum = idx + 1;
           return '<button type="button" class="chip-btn charge-day-chip" data-charge-day="' + dayNum + '" data-uid="chgday:' + dayNum + '">' +
             "<span>" + self._h(letter) + "</span></button>";
-        }).join("") + "</div>" +
-        '<div class="preset-row" role="group">' +
-          '<button type="button" class="chip-btn preset-btn" data-charge-preset="all_days" data-uid="chgpreset:all_days">' + self._h(t.presetAll) + "</button>" +
-          '<button type="button" class="chip-btn preset-btn" data-charge-preset="weekdays" data-uid="chgpreset:weekdays">' + self._h(t.presetWeekdays) + "</button>" +
-          '<button type="button" class="chip-btn preset-btn" data-charge-preset="weekend" data-uid="chgpreset:weekend">' + self._h(t.presetWeekend) + "</button>" +
-        "</div>"
+        }).join("") + "</div>"
       ) : "";
 
       var chargeModeSwitchHtml = ctx.syncCharge ? (
@@ -3514,17 +3964,7 @@
             chargingHtml +
             securityHtml +
           "</div>" +
-          '<dialog class="confirm-dialog" data-bind="confirmDialog" aria-labelledby="lp-confirm-title">' +
-            '<div class="confirm-dialog-body">' +
-              '<h2 id="lp-confirm-title" class="confirm-dialog-title" data-bind="confirmDialogTitle">' + self._h(t.confirmModalTitle) + "</h2>" +
-              '<p class="confirm-dialog-action" data-bind="confirmDialogAction"></p>' +
-              '<p class="confirm-dialog-hint" data-bind="confirmDialogHint">' + self._h(t.confirmModalHint) + "</p>" +
-              '<div class="confirm-dialog-actions">' +
-                '<button type="button" class="ctrl-btn" data-dialog-action="cancel" data-bind="confirmDialogCancel" autofocus>' + self._h(t.confirmCancel) + "</button>" +
-                '<button type="button" class="ctrl-btn is-primary" data-dialog-action="confirm" data-bind="confirmDialogConfirm">' + self._h(t.confirmSend) + "</button>" +
-              "</div>" +
-            "</div>" +
-          "</dialog>" +
+          buildConfirmDialogHtml(t, "lp-confirm-title") +
         "</ha-card>";
     }
 
@@ -3637,8 +4077,8 @@
         socBtn.classList.toggle("is-charging", Boolean(isCharging));
         socBtn.classList.toggle("is-fast-charge", Boolean(isFastCharge));
       }
-      var socOrbit = root.querySelector('[data-bind="socOrbit"]');
-      if (socOrbit) socOrbit.classList.toggle("hidden", !isCharging);
+      var socPulse = root.querySelector('[data-bind="socPulse"]');
+      if (socPulse) socPulse.classList.toggle("hidden", !isCharging);
       var socModeSlide = root.querySelector('[data-bind="socModeSlide"]');
       if (socModeSlide) socModeSlide.classList.toggle("hidden", !isCharging);
       var socChgIco = root.querySelector('[data-bind="socChgIco"]');
@@ -3671,7 +4111,7 @@
         }
         var socRing = root.querySelector("[data-soc-ring]");
         if (socRing) {
-          var circ = 131.95;
+          var circ = 138.23;
           var offset = circ * (1 - pct / 100);
           socRing.setAttribute("stroke-dashoffset", offset.toFixed(2));
           socRing.classList.toggle("is-low", !isCharging && pct <= 15);
@@ -3768,71 +4208,6 @@
         if (odoCard) odoCard.setAttribute("data-e", vm.plug.id);
         if (odoLbl) odoLbl.textContent = t.cable;
         if (odoVal) odoVal.textContent = this._isOn(vm.plug) ? t.plugged : t.unplugged;
-      }
-
-      // Overview Consumption grid
-      var consModes = this._consUnitModes || { ev: "per_100", hybrid: "per_100" };
-      var consSection = root.querySelector('[data-bind="consSection"]');
-      if (consSection) {
-        consSection.classList.toggle("hidden", !vm.hasAnyCons);
-        consSection.hidden = !vm.hasAnyCons;
-      }
-      var consSegPairs = [
-        { kind: "ev", b100: "consEvPer100Btn", bKm: "consEvPerKmBtn" },
-        { kind: "hybrid", b100: "consHybPer100Btn", bKm: "consHybPerKmBtn" },
-      ];
-      for (var cpi = 0; cpi < consSegPairs.length; cpi += 1) {
-        var pair = consSegPairs[cpi];
-        var isKm = consModes[pair.kind] === "per_km";
-        var b100El = root.querySelector('[data-bind="' + pair.b100 + '"]');
-        var bKmEl = root.querySelector('[data-bind="' + pair.bKm + '"]');
-        if (b100El) {
-          b100El.setAttribute("aria-pressed", !isKm ? "true" : "false");
-          b100El.classList.toggle("is-active", !isKm);
-        }
-        if (bKmEl) {
-          bKmEl.setAttribute("aria-pressed", isKm ? "true" : "false");
-          bKmEl.classList.toggle("is-active", isKm);
-        }
-      }
-      var consEvRow = root.querySelector('[data-bind="consEvRow"]');
-      if (consEvRow) {
-        consEvRow.classList.toggle("hidden", !vm.hasEvCons);
-        consEvRow.hidden = !vm.hasEvCons;
-      }
-      var consHybridRow = root.querySelector('[data-bind="consHybridRow"]');
-      if (consHybridRow) {
-        consHybridRow.classList.toggle("hidden", !vm.hasHybridCons);
-        consHybridRow.hidden = !vm.hasHybridCons;
-      }
-      var consBindings = [
-        { cell: "consEv50Cell", val: "consEv50Val", ent: vm.avgEnergy50, kind: "ev", unit: "kWh/100 km" },
-        { cell: "consEv100Cell", val: "consEv100Val", ent: vm.evCons100, kind: "ev", unit: "kWh/100 km" },
-        { cell: "consEv1000Cell", val: "consEv1000Val", ent: vm.evCons1000, kind: "ev", unit: "kWh/100 km" },
-        { cell: "consEvStartCell", val: "consEvStartVal", ent: vm.evConsStart, kind: "ev", unit: "kWh/100 km" },
-        { cell: "consHyb50Cell", val: "consHyb50Val", ent: vm.avgFuel50, kind: "hybrid", unit: "L/100 km" },
-        { cell: "consHyb100Cell", val: "consHyb100Val", ent: vm.hybCons100, kind: "hybrid", unit: "L/100 km" },
-        { cell: "consHyb1000Cell", val: "consHyb1000Val", ent: vm.hybCons1000, kind: "hybrid", unit: "L/100 km" },
-        { cell: "consHybStartCell", val: "consHybStartVal", ent: vm.hybConsStart, kind: "hybrid", unit: "L/100 km" },
-      ];
-      for (var csi = 0; csi < consBindings.length; csi += 1) {
-        var cb = consBindings[csi];
-        var consCell = root.querySelector('[data-bind="' + cb.cell + '"]');
-        var consVal = root.querySelector('[data-bind="' + cb.val + '"]');
-        if (consCell) {
-          if (cb.ent && cb.ent.id) {
-            consCell.setAttribute("role", "button");
-            consCell.setAttribute("tabindex", "0");
-            consCell.setAttribute("data-e", cb.ent.id);
-          } else {
-            consCell.removeAttribute("role");
-            consCell.removeAttribute("tabindex");
-            consCell.removeAttribute("data-e");
-          }
-        }
-        if (consVal) {
-          consVal.textContent = formatConsumptionCell(this, cb.ent, cb.kind, cb.unit, consModes[cb.kind]);
-        }
       }
 
       // Overview Quick Dock + Security Action Buttons (synchronized confirmation keys!)
@@ -4119,7 +4494,6 @@
       setStat("remTimeBadge", vm.remTime);
       setStat("hvVoltBadge", vm.hvVolt);
       setStat("hvCurrBadge", vm.hvCurr);
-      setStat("fastPortBadge", vm.fastPort);
 
       var schedToggleBtn = root.querySelector('[data-bind="schedToggleBtn"]');
       if (schedToggleBtn && vm.schedSwitch) {
@@ -4235,18 +4609,6 @@
         chgDayChips[cdi].classList.toggle("is-active", dayOn);
         chgDayChips[cdi].classList.toggle("is-pending", isDaysPending);
         chgDayChips[cdi].setAttribute("aria-pressed", dayOn ? "true" : "false");
-      }
-      var matchedPreset = presetForDays(activeChargeDays);
-      var chgPresets = root.querySelectorAll("[data-charge-preset]");
-      for (var cpi = 0; cpi < chgPresets.length; cpi += 1) {
-        var pKey = chgPresets[cpi].getAttribute("data-charge-preset");
-        var pOn = pKey === matchedPreset;
-        chgPresets[cpi].classList.toggle("is-active", pOn);
-        chgPresets[cpi].setAttribute("aria-pressed", pOn ? "true" : "false");
-      }
-      var presetLblEl = root.querySelector('[data-bind="chgDaysPresetLbl"]');
-      if (presetLblEl) {
-        presetLblEl.textContent = translateOption("charge_days", matchedPreset, vm.lang);
       }
 
       var syncInputVal = function (ent, slice5) {
@@ -4515,8 +4877,703 @@
         else if (st === "not_home") trkEl.textContent = t.away;
         else trkEl.textContent = this._dead(vm.tracker.s) ? "—" : st;
       }
-      if (this._pendingDialogAction) {
-        this._syncConfirmDialogTexts(t, this._pendingDialogAction.confirmLabel);
+      if (this._dialogCtrl.pendingAction) {
+        this._dialogCtrl.syncTexts(t, this._dialogCtrl.pendingAction.confirmLabel);
+      }
+    }
+  }
+
+  class LepasStatsCard extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this.config = {
+        integration: "lepas",
+        prefix: "lepas_",
+        title: "",
+        default_scope: "all",
+        default_chart: "7d",
+        show_charging: true,
+        show_consumption: true,
+        show_chart: true,
+        show_reset_buttons: true,
+      };
+      this._hass = null;
+      this._scope = "all";
+      this._chartRange = "7d";
+      this._lastDefaultScope = "all";
+      this._lastDefaultChart = "7d";
+      this._consUnitModes = loadConsUnitModes();
+      this._pendingKeys = new Set();
+      this._errorMsg = null;
+      this._lastStructKey = "";
+      this._lastChartSig = "";
+      this._listenersBound = false;
+      this._latestResetTargets = Object.create(null);
+      this._dialogCtrl = createConfirmDialogController(this, { closeOnConfirmImmediate: false });
+      this._onClick = this._handleClick.bind(this);
+      this._onKeyDown = this._handleKeyDown.bind(this);
+      this._onBarFocusOrHover = this._handleBarFocusOrHover.bind(this);
+    }
+
+    static getStubConfig() {
+      return { type: "custom:lepas-stats-card" };
+    }
+
+    static getGridOptions() {
+      return { columns: 12, min_columns: 4, rows: "auto" };
+    }
+
+    static getConfigElement() {
+      return document.createElement("lepas-stats-card-editor");
+    }
+
+    getCardSize() {
+      return 4;
+    }
+
+    setConfig(config) {
+      var raw = config || {};
+      var merged = Object.assign(
+        {
+          integration: "lepas",
+          prefix: "lepas_",
+          title: "",
+          default_scope: "all",
+          default_chart: "7d",
+        },
+        raw
+      );
+      merged.show_charging = raw.show_charging !== false;
+      merged.show_consumption = raw.show_consumption !== false;
+      merged.show_chart = raw.show_chart !== false;
+      merged.show_reset_buttons = raw.show_reset_buttons !== false;
+      if (VALID_STATS_SCOPES.indexOf(merged.default_scope) < 0) merged.default_scope = "all";
+      if (VALID_STATS_CHARTS.indexOf(merged.default_chart) < 0) merged.default_chart = "7d";
+
+      var prevScope = this._lastDefaultScope;
+      var prevChart = this._lastDefaultChart;
+      this.config = merged;
+      if (!this._lastStructKey || merged.default_scope !== prevScope) {
+        this._scope = merged.default_scope;
+      }
+      if (!this._lastStructKey || merged.default_chart !== prevChart) {
+        this._chartRange = merged.default_chart;
+      }
+      this._lastDefaultScope = merged.default_scope;
+      this._lastDefaultChart = merged.default_chart;
+      this._lastChartSig = "";
+      if (this._hass) this._render(this._hass);
+    }
+
+    connectedCallback() {
+      this._ensureShellListeners();
+      this._dialogCtrl.bind();
+    }
+
+    disconnectedCallback() {
+      this._dialogCtrl.destroy();
+      this._pendingKeys.clear();
+    }
+
+    set hass(hass) {
+      this._hass = hass;
+      this._ensureShellListeners();
+      try {
+        this._render(hass);
+      } catch (e) {
+        if (this.shadowRoot) {
+          this.shadowRoot.innerHTML =
+            "<style>" + buildStatsStyles() + "</style>" +
+            '<ha-card><div class="error-banner" role="alert">Lepas stats card error: ' +
+              escapeHtml(e && e.message ? e.message : e) +
+            "</div></ha-card>";
+          this._lastStructKey = "";
+        }
+      }
+    }
+
+    _ensureShellListeners() {
+      if (this._listenersBound || !this.shadowRoot) return;
+      this.shadowRoot.addEventListener("click", this._onClick);
+      this.shadowRoot.addEventListener("keydown", this._onKeyDown);
+      this.shadowRoot.addEventListener("focusin", this._onBarFocusOrHover);
+      this.shadowRoot.addEventListener("mouseover", this._onBarFocusOrHover);
+      this._listenersBound = true;
+    }
+
+    _showBarTooltip(barEl) {
+      if (!this.shadowRoot || !barEl) return;
+      var tipEl = this.shadowRoot.querySelector('[data-bind="chartTooltip"]');
+      if (!tipEl) return;
+      var detail = barEl.getAttribute("data-bar-detail");
+      if (!detail) return;
+      tipEl.textContent = detail;
+      tipEl.classList.remove("hidden");
+    }
+
+    _handleBarFocusOrHover(ev) {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      var barEl = target.closest("[data-bar-idx]");
+      if (barEl) this._showBarTooltip(barEl);
+    }
+
+    _handleClick(ev) {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+
+      var dialogActEl = target.closest("[data-dialog-action]");
+      if (dialogActEl) {
+        ev.stopPropagation();
+        var dAction = dialogActEl.getAttribute("data-dialog-action");
+        if (dAction === "confirm") {
+          this._confirmPendingDialogAction();
+        } else if (!this._dialogCtrl.inFlight) {
+          this._dialogCtrl.close("cancel");
+        }
+        return;
+      }
+
+      var dismiss = target.closest("[data-dismiss-error]");
+      if (dismiss) {
+        ev.stopPropagation();
+        this._errorMsg = null;
+        if (this._hass) this._render(this._hass);
+        return;
+      }
+
+      var scopeEl = target.closest("[data-stats-scope]");
+      if (scopeEl) {
+        ev.stopPropagation();
+        var nextScope = scopeEl.getAttribute("data-stats-scope");
+        if (VALID_STATS_SCOPES.indexOf(nextScope) >= 0 && nextScope !== this._scope) {
+          this._scope = nextScope;
+          this._lastChartSig = "";
+          if (this._hass) this._render(this._hass);
+        }
+        return;
+      }
+
+      var chartEl = target.closest("[data-stats-chart]");
+      if (chartEl) {
+        ev.stopPropagation();
+        var nextChart = chartEl.getAttribute("data-stats-chart");
+        if (VALID_STATS_CHARTS.indexOf(nextChart) >= 0 && nextChart !== this._chartRange) {
+          this._chartRange = nextChart;
+          this._lastChartSig = "";
+          if (this._hass) this._render(this._hass);
+        }
+        return;
+      }
+
+      var resetEl = target.closest("[data-stats-reset]");
+      if (resetEl) {
+        ev.stopPropagation();
+        if (resetEl.disabled || this._dialogCtrl.inFlight) return;
+        var kind = resetEl.getAttribute("data-stats-reset");
+        this._openResetDialog(kind, resetEl);
+        return;
+      }
+
+      var consUnitEl = target.closest("[data-cons-unit]");
+      if (consUnitEl) {
+        ev.stopPropagation();
+        var consKind = consUnitEl.getAttribute("data-cons-kind") === "hybrid" ? "hybrid" : "ev";
+        var nextConsMode = consUnitEl.getAttribute("data-cons-unit") === "per_km" ? "per_km" : "per_100";
+        if (!this._consUnitModes) this._consUnitModes = { ev: "per_100", hybrid: "per_100" };
+        if (nextConsMode !== this._consUnitModes[consKind]) {
+          this._consUnitModes[consKind] = nextConsMode;
+          saveConsUnitMode(consKind, nextConsMode);
+          if (this._hass) this._render(this._hass);
+        }
+        return;
+      }
+
+      var barEl = target.closest("[data-bar-idx]");
+      if (barEl) {
+        ev.stopPropagation();
+        this._showBarTooltip(barEl);
+        return;
+      }
+
+      if (target.closest("input, select, button")) return;
+
+      var entEl = target.closest("[data-e]");
+      if (entEl) {
+        dispatchMoreInfo(this, entEl.getAttribute("data-e"));
+      }
+    }
+
+    _handleKeyDown(ev) {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      if (target.tagName === "BUTTON" || target.tagName === "INPUT" || target.tagName === "SELECT") return;
+      var barEl = target.closest("[data-bar-idx]");
+      if (barEl) {
+        ev.preventDefault();
+        this._showBarTooltip(barEl);
+        return;
+      }
+      var actionable = target.closest("[data-e]");
+      if (!actionable) return;
+      ev.preventDefault();
+      dispatchMoreInfo(this, actionable.getAttribute("data-e"));
+    }
+
+    _openResetDialog(kind, actionEl) {
+      var targetEnt = this._latestResetTargets ? this._latestResetTargets[kind] : null;
+      if (!targetEnt || !targetEnt.id || !this._hass) return;
+      var lang = getLang(this._hass);
+      var t = getTexts(lang);
+      var isChg = kind === "charging";
+      var pendingKey = isChg ? "reset_charging_from_start" : "reset_consumption_from_start";
+      if (this._pendingKeys.has(pendingKey) || this._dialogCtrl.inFlight) return;
+      this._dialogCtrl.open({
+        domain: "button",
+        service: "press",
+        data: { entity_id: targetEnt.id },
+        confirmKey: pendingKey,
+        confirmLabel: isChg ? t.statsResetChargingConfirm : t.statsResetConsumptionConfirm,
+        dialogTitle: t.statsResetTitle,
+        dialogHint: t.statsResetHint,
+        confirmBtnText: t.statsConfirmReset,
+      }, t, actionEl);
+    }
+
+    _confirmPendingDialogAction() {
+      var self = this;
+      this._dialogCtrl.confirm(function (pending, finalize) {
+        if (!pending || !self._hass || typeof self._hass.callService !== "function") {
+          finalize();
+          return;
+        }
+        var lang = getLang(self._hass);
+        var t = getTexts(lang);
+        self._errorMsg = null;
+        self._pendingKeys.add(pending.pendingKey);
+        self._syncResetButtonsState();
+
+        var settle = function (err) {
+          self._pendingKeys.delete(pending.pendingKey);
+          if (err) {
+            self._errorMsg = (err && err.message) ? String(err.message) : t.commandFailed;
+          }
+          finalize();
+          self._syncResetButtonsState();
+          if (self._hass) self._render(self._hass);
+        };
+
+        try {
+          Promise.resolve(self._hass.callService(pending.domain, pending.service, pending.data)).then(
+            function () { settle(null); },
+            function (err) { settle(err || new Error(t.commandFailed)); }
+          );
+        } catch (syncErr) {
+          settle(syncErr);
+        }
+      });
+    }
+
+    _syncResetButtonsState() {
+      if (!this.shadowRoot) return;
+      var chgBtn = this.shadowRoot.querySelector('[data-stats-reset="charging"]');
+      if (chgBtn) {
+        var chgBusy = this._pendingKeys.has("reset_charging_from_start") || this._dialogCtrl.inFlight;
+        chgBtn.disabled = chgBusy;
+        chgBtn.classList.toggle("is-pending", chgBusy);
+      }
+      var consBtn = this.shadowRoot.querySelector('[data-stats-reset="consumption"]');
+      if (consBtn) {
+        var consBusy = this._pendingKeys.has("reset_consumption_from_start") || this._dialogCtrl.inFlight;
+        consBtn.disabled = consBusy;
+        consBtn.classList.toggle("is-pending", consBusy);
+      }
+    }
+
+    _render(hass) {
+      if (!this.shadowRoot) return;
+      var cfg = this.config;
+      var lang = getLang(hass);
+      var t = getTexts(lang);
+      var items = collectIntegrationItems(hass, cfg);
+
+      var chgToday = findDomainEntity(items, "sensor", "charging_energy_today");
+      var chgMonth = findDomainEntity(items, "sensor", "charging_energy_month");
+      var chgYear = findDomainEntity(items, "sensor", "charging_energy_year");
+      var chgFromStart = findDomainEntity(items, "sensor", "charging_energy_from_start");
+      var resetChargingBtn = findDomainEntity(items, "button", "reset_charging_from_start");
+
+      var avgEnergy50 = findDomainEntity(items, "sensor", "average_energy_consumption");
+      var evCons100 = findDomainEntity(items, "sensor", "ev_consumption_100km");
+      var evCons1000 = findDomainEntity(items, "sensor", "ev_consumption_1000km");
+      var evConsStart = findDomainEntity(items, "sensor", "ev_consumption_from_start");
+      var avgFuel50 = findDomainEntity(items, "sensor", "average_fuel_consumption");
+      var hybCons100 = findDomainEntity(items, "sensor", "hybrid_consumption_100km");
+      var hybCons1000 = findDomainEntity(items, "sensor", "hybrid_consumption_1000km");
+      var hybConsStart = findDomainEntity(items, "sensor", "hybrid_consumption_from_start");
+      var resetConsBtn = findDomainEntity(items, "button", "reset_consumption_from_start");
+
+      var hasEvCons = Boolean(avgEnergy50 || evCons100 || evCons1000 || evConsStart);
+      var hasHybridCons = Boolean(avgFuel50 || hybCons100 || hybCons1000 || hybConsStart);
+      var hasAnyCons = hasEvCons || hasHybridCons;
+      var showCharging = cfg.show_charging !== false;
+      var showConsumption = cfg.show_consumption !== false && hasAnyCons;
+      var showChart = cfg.show_chart !== false;
+      var showReset = cfg.show_reset_buttons !== false;
+
+      this._latestResetTargets = {
+        charging: resetChargingBtn,
+        consumption: resetConsBtn,
+      };
+
+      var structKey = [
+        lang,
+        showCharging ? "1" : "0",
+        showConsumption ? "1" : "0",
+        showChart ? "1" : "0",
+        showReset ? "1" : "0",
+        resetChargingBtn ? resetChargingBtn.id : "",
+        resetConsBtn ? resetConsBtn.id : "",
+        hasEvCons ? "1" : "0",
+        hasHybridCons ? "1" : "0",
+        chgToday ? chgToday.id : "",
+        chgMonth ? chgMonth.id : "",
+        chgYear ? chgYear.id : "",
+        chgFromStart ? chgFromStart.id : "",
+        avgEnergy50 ? avgEnergy50.id : "",
+        evCons100 ? evCons100.id : "",
+        evCons1000 ? evCons1000.id : "",
+        evConsStart ? evConsStart.id : "",
+        avgFuel50 ? avgFuel50.id : "",
+        hybCons100 ? hybCons100.id : "",
+        hybCons1000 ? hybCons1000.id : "",
+        hybConsStart ? hybConsStart.id : "",
+      ].join("|");
+
+      if (structKey !== this._lastStructKey) {
+        this._dialogCtrl.close();
+        this._dialogCtrl.unbind();
+        this._lastChartSig = "";
+        this.shadowRoot.innerHTML = this._buildSkeletonHtml({
+          t: t,
+          cfg: cfg,
+          showCharging: showCharging,
+          showConsumption: showConsumption,
+          showChart: showChart,
+          showReset: showReset,
+          resetChargingBtn: resetChargingBtn,
+          resetConsBtn: resetConsBtn,
+          chgToday: chgToday,
+          chgMonth: chgMonth,
+          chgYear: chgYear,
+          chgFromStart: chgFromStart,
+          hasEvCons: hasEvCons,
+          hasHybridCons: hasHybridCons,
+          avgEnergy50: avgEnergy50,
+          evCons100: evCons100,
+          evCons1000: evCons1000,
+          evConsStart: evConsStart,
+          avgFuel50: avgFuel50,
+          hybCons100: hybCons100,
+          hybCons1000: hybCons1000,
+          hybConsStart: hybConsStart,
+        });
+        this._lastStructKey = structKey;
+      }
+      this._dialogCtrl.bind();
+
+      this._applyBindings(hass, {
+        lang: lang,
+        t: t,
+        cfg: cfg,
+        showCharging: showCharging,
+        showConsumption: showConsumption,
+        showChart: showChart,
+        chgToday: chgToday,
+        chgMonth: chgMonth,
+        chgYear: chgYear,
+        chgFromStart: chgFromStart,
+        hasEvCons: hasEvCons,
+        hasHybridCons: hasHybridCons,
+        avgEnergy50: avgEnergy50,
+        evCons100: evCons100,
+        evCons1000: evCons1000,
+        evConsStart: evConsStart,
+        avgFuel50: avgFuel50,
+        hybCons100: hybCons100,
+        hybCons1000: hybCons1000,
+        hybConsStart: hybConsStart,
+      });
+    }
+
+    _buildSkeletonHtml(ctx) {
+      var t = ctx.t;
+      var kpiCells = [
+        { cellBind: "chgTodayCell", valBind: "chgTodayVal", subBind: "chgTodaySub", period: "today", label: t.statsPeriodToday, ent: ctx.chgToday },
+        { cellBind: "chgMonthCell", valBind: "chgMonthVal", subBind: "chgMonthSub", period: "month", label: t.statsPeriodMonth, ent: ctx.chgMonth },
+        { cellBind: "chgYearCell", valBind: "chgYearVal", subBind: "chgYearSub", period: "year", label: t.statsPeriodYear, ent: ctx.chgYear },
+        { cellBind: "chgStartCell", valBind: "chgStartVal", subBind: "chgStartSub", period: "from_start", label: t.statsPeriodFromStart, ent: ctx.chgFromStart },
+      ].map(function (k) {
+        var entAttr = k.ent ? (' role="button" tabindex="0" data-e="' + escapeHtml(k.ent.id) + '"') : "";
+        return '<div class="cons-cell" data-bind="' + k.cellBind + '" data-stats-period="' + k.period + '"' + entAttr + ">" +
+          '<span class="cons-cell-lbl">' + escapeHtml(k.label) + "</span>" +
+          '<span class="cons-cell-val num" data-bind="' + k.valBind + '">—</span>' +
+          '<span class="stats-cell-sub num hidden" data-bind="' + k.subBind + '"></span>' +
+        "</div>";
+      }).join("");
+
+      var chgResetHtml = (ctx.showReset && ctx.resetChargingBtn)
+        ? '<button type="button" class="stats-reset-btn" data-stats-reset="charging" data-bind="resetChargingBtn" title="' +
+            escapeHtml(t.statsResetTitle) + '" aria-label="' + escapeHtml(t.statsResetTitle) + '">' +
+            svgIcon("refresh", "btn-ico") + "<span>" + escapeHtml(t.statsResetBtn) + "</span></button>"
+        : "";
+
+      var chartHtml = ctx.showChart ? (
+        '<div class="stats-chart-box" data-bind="chartBox">' +
+          '<div class="stats-chart-hdr">' +
+            '<span class="stats-chart-title">' + escapeHtml(t.statsChartAriaLabel) + "</span>" +
+            '<div class="stats-chart-legend" data-bind="chartLegend"></div>' +
+            '<div class="seg-switch stats-chart-seg" role="group">' +
+              '<button type="button" class="seg-btn" data-stats-chart="7d" aria-pressed="false">' + escapeHtml(t.statsChart7d) + "</button>" +
+              '<button type="button" class="seg-btn" data-stats-chart="30d" aria-pressed="false">' + escapeHtml(t.statsChart30d) + "</button>" +
+              '<button type="button" class="seg-btn" data-stats-chart="12m" aria-pressed="false">' + escapeHtml(t.statsChart12m) + "</button>" +
+            "</div>" +
+          "</div>" +
+          '<div class="stats-chart-stage" data-bind="chartStage"></div>' +
+          '<div class="stats-chart-tooltip num hidden" data-bind="chartTooltip" aria-live="polite"></div>' +
+        "</div>"
+      ) : "";
+
+      var chargingHtml = ctx.showCharging ? (
+        '<div class="surface stats-charging-section" data-bind="chargingSection">' +
+          '<div class="stats-sec-hdr">' +
+            '<span class="sec-hdr-title">' + svgIcon("bolt", "sec-ico") + "<span>" + escapeHtml(t.statsChargingTitle) + "</span></span>" +
+            '<div class="stats-sec-actions">' +
+              '<div class="seg-switch stats-scope-seg" role="group">' +
+                '<button type="button" class="seg-btn" data-stats-scope="all" aria-pressed="false">' + escapeHtml(t.statsScopeAll) + "</button>" +
+                '<button type="button" class="seg-btn" data-stats-scope="home" aria-pressed="false">' + escapeHtml(t.homeEnergy) + "</button>" +
+                '<button type="button" class="seg-btn" data-stats-scope="away" aria-pressed="false">' + escapeHtml(t.awayEnergy) + "</button>" +
+              "</div>" +
+              chgResetHtml +
+            "</div>" +
+          "</div>" +
+          '<div class="cons-grid stats-chg-grid">' + kpiCells + "</div>" +
+          chartHtml +
+        "</div>"
+      ) : "";
+
+      var consResetHtml = (ctx.showReset && ctx.resetConsBtn)
+        ? '<button type="button" class="stats-reset-btn" data-stats-reset="consumption" data-bind="resetConsBtn" title="' +
+            escapeHtml(t.statsResetTitle) + '" aria-label="' + escapeHtml(t.statsResetTitle) + '">' +
+            svgIcon("refresh", "btn-ico") + "<span>" + escapeHtml(t.statsResetBtn) + "</span></button>"
+        : "";
+
+      var consHtml = ctx.showConsumption ? (
+        '<div class="surface cons-section" data-bind="consSection">' +
+          '<div class="stats-sec-hdr">' +
+            '<span class="sec-hdr-title">' + svgIcon("gauge", "sec-ico") + "<span>" + escapeHtml(t.avgConsumption) + "</span></span>" +
+            consResetHtml +
+          "</div>" +
+          '<div class="cons-rows">' +
+            buildConsRowHtml({
+              rowBind: "consEvRow",
+              hidden: !ctx.hasEvCons,
+              iconName: "bolt",
+              rowLabel: t.consEv,
+              kind: "ev",
+              u100Lbl: "kWh/100",
+              uKmLbl: "kWh/km",
+              b100: "consEvPer100Btn",
+              bKm: "consEvPerKmBtn",
+              toggleTitle: t.consUnitToggleTitle,
+              cells: [
+                { cellBind: "consEv50Cell", valBind: "consEv50Val", label: t.cons50, ent: ctx.avgEnergy50 },
+                { cellBind: "consEv100Cell", valBind: "consEv100Val", label: t.cons100, ent: ctx.evCons100 },
+                { cellBind: "consEv1000Cell", valBind: "consEv1000Val", label: t.cons1000, ent: ctx.evCons1000 },
+                { cellBind: "consEvStartCell", valBind: "consEvStartVal", label: t.consFromStart, ent: ctx.evConsStart },
+              ],
+            }) +
+            buildConsRowHtml({
+              rowBind: "consHybridRow",
+              hidden: !ctx.hasHybridCons,
+              iconName: "flame",
+              rowLabel: t.consHybrid,
+              kind: "hybrid",
+              u100Lbl: "L/100",
+              uKmLbl: "km/L",
+              b100: "consHybPer100Btn",
+              bKm: "consHybPerKmBtn",
+              toggleTitle: t.consUnitToggleTitle,
+              cells: [
+                { cellBind: "consHyb50Cell", valBind: "consHyb50Val", label: t.cons50, ent: ctx.avgFuel50 },
+                { cellBind: "consHyb100Cell", valBind: "consHyb100Val", label: t.cons100, ent: ctx.hybCons100 },
+                { cellBind: "consHyb1000Cell", valBind: "consHyb1000Val", label: t.cons1000, ent: ctx.hybCons1000 },
+                { cellBind: "consHybStartCell", valBind: "consHybStartVal", label: t.consFromStart, ent: ctx.hybConsStart },
+              ],
+            }) +
+          "</div>" +
+        "</div>"
+      ) : "";
+
+      var emptyHtml = (!ctx.showCharging && !ctx.showConsumption)
+        ? '<div class="surface stats-empty-card" data-bind="statsEmptyCard">' + escapeHtml(t.statsNoData) + "</div>"
+        : "";
+
+      return "<style>" + buildStatsStyles() + "</style>" +
+        "<ha-card>" +
+          '<div class="stats-shell">' +
+            '<div class="stats-hdr">' +
+              '<span class="stats-hdr-title">' + svgIcon("charging", "sec-ico") + '<span data-bind="statsTitle"></span></span>' +
+            "</div>" +
+            '<div class="error-banner hidden" role="alert" data-bind="errorBanner">' +
+              '<span data-bind="errorText"></span>' +
+              '<button type="button" class="error-dismiss" data-dismiss-error aria-label="Dismiss">×</button>' +
+            "</div>" +
+            chargingHtml +
+            consHtml +
+            emptyHtml +
+          "</div>" +
+          buildConfirmDialogHtml(t, "lp-stats-confirm-title") +
+        "</ha-card>";
+    }
+
+    _applyBindings(hass, vm) {
+      var root = this.shadowRoot;
+      if (!root) return;
+      var t = vm.t;
+      var titleEl = root.querySelector('[data-bind="statsTitle"]');
+      if (titleEl) {
+        var titleStr = vm.cfg.title ? String(vm.cfg.title) : t.statsCardDefaultTitle;
+        titleEl.textContent = titleStr;
+      }
+
+      var errBanner = root.querySelector('[data-bind="errorBanner"]');
+      var errText = root.querySelector('[data-bind="errorText"]');
+      if (errBanner && errText) {
+        errBanner.classList.toggle("hidden", !this._errorMsg);
+        errText.textContent = this._errorMsg || "";
+      }
+
+      this._syncResetButtonsState();
+
+      if (vm.showCharging) {
+        var scopeBtns = root.querySelectorAll("[data-stats-scope]");
+        for (var si = 0; si < scopeBtns.length; si += 1) {
+          var sVal = scopeBtns[si].getAttribute("data-stats-scope");
+          var sOn = sVal === this._scope;
+          scopeBtns[si].classList.toggle("is-active", sOn);
+          scopeBtns[si].setAttribute("aria-pressed", sOn ? "true" : "false");
+        }
+
+        var kpiList = [
+          { valBind: "chgTodayVal", subBind: "chgTodaySub", ent: vm.chgToday },
+          { valBind: "chgMonthVal", subBind: "chgMonthSub", ent: vm.chgMonth },
+          { valBind: "chgYearVal", subBind: "chgYearSub", ent: vm.chgYear },
+          { valBind: "chgStartVal", subBind: "chgStartSub", ent: vm.chgFromStart },
+        ];
+        for (var ki = 0; ki < kpiList.length; ki += 1) {
+          var item = kpiList[ki];
+          var valEl = root.querySelector('[data-bind="' + item.valBind + '"]');
+          var subEl = root.querySelector('[data-bind="' + item.subBind + '"]');
+          var ent = item.ent;
+          if (!ent || isDeadStateObj(ent.s)) {
+            if (valEl) valEl.textContent = "—";
+            if (subEl) {
+              subEl.classList.add("hidden");
+              subEl.textContent = "";
+            }
+            continue;
+          }
+          var attrs = ent.s.attributes || {};
+          var unit = attrs.unit_of_measurement ? String(attrs.unit_of_measurement) : "kWh";
+          var dp = typeof attrs.suggested_display_precision === "number" ? attrs.suggested_display_precision : null;
+          var homeNum = safeNonNegNumber(attrs.home_kwh);
+          var awayNum = safeNonNegNumber(attrs.away_kwh);
+          var sessions = (typeof attrs.sessions_count === "number" && isFinite(attrs.sessions_count))
+            ? Math.max(0, Math.round(attrs.sessions_count))
+            : 0;
+          if (valEl) {
+            if (this._scope === "home") {
+              valEl.textContent = homeNum !== null
+                ? formatMetric({ state: String(homeNum), attributes: { unit_of_measurement: unit, suggested_display_precision: dp } }, vm.lang)
+                : "—";
+            } else if (this._scope === "away") {
+              valEl.textContent = awayNum !== null
+                ? formatMetric({ state: String(awayNum), attributes: { unit_of_measurement: unit, suggested_display_precision: dp } }, vm.lang)
+                : "—";
+            } else {
+              var disp = formatEntityStateDisplay(ent.s, hass);
+              valEl.textContent = (disp !== "—" && !(attrs.unit_of_measurement) && parseStateNumber(ent.s) !== null)
+                ? (disp + " " + unit)
+                : disp;
+            }
+          }
+          if (subEl) {
+            if (this._scope === "all" && (homeNum !== null || awayNum !== null)) {
+              var subTxt = t.homeEnergy + " " + formatCompactNumber(homeNum || 0) + " · " +
+                t.awayEnergy + " " + formatCompactNumber(awayNum || 0) +
+                (sessions > 0 ? " · " + sessions + " " + t.statsSessionsShort : "");
+              subEl.textContent = subTxt;
+              subEl.classList.remove("hidden");
+            } else {
+              subEl.textContent = "";
+              subEl.classList.add("hidden");
+            }
+          }
+        }
+
+        if (vm.showChart) {
+          var chartBtns = root.querySelectorAll("[data-stats-chart]");
+          for (var ci = 0; ci < chartBtns.length; ci += 1) {
+            var cVal = chartBtns[ci].getAttribute("data-stats-chart");
+            var cOn = cVal === this._chartRange;
+            chartBtns[ci].classList.toggle("is-active", cOn);
+            chartBtns[ci].setAttribute("aria-pressed", cOn ? "true" : "false");
+          }
+
+          var legendEl = root.querySelector('[data-bind="chartLegend"]');
+          if (legendEl) {
+            if (this._scope === "home") {
+              legendEl.innerHTML = '<span class="legend-item"><span class="legend-swatch is-home"></span>' + escapeHtml(t.homeEnergy) + "</span>";
+            } else if (this._scope === "away") {
+              legendEl.innerHTML = '<span class="legend-item"><span class="legend-swatch is-away"></span>' + escapeHtml(t.awayEnergy) + "</span>";
+            } else {
+              legendEl.innerHTML =
+                '<span class="legend-item"><span class="legend-swatch is-home"></span>' + escapeHtml(t.homeEnergy) + "</span>" +
+                '<span class="legend-item"><span class="legend-swatch is-away"></span>' + escapeHtml(t.awayEnergy) + "</span>";
+            }
+          }
+
+          var seriesRaw = this._chartRange === "12m"
+            ? (vm.chgYear && vm.chgYear.s && vm.chgYear.s.attributes ? vm.chgYear.s.attributes.monthly_series : null)
+            : (vm.chgToday && vm.chgToday.s && vm.chgToday.s.attributes ? vm.chgToday.s.attributes.daily_series : null);
+          var seriesSig = "";
+          try { seriesSig = JSON.stringify(seriesRaw || []); } catch (e) { seriesSig = ""; }
+          var chartSig = vm.lang + "|" + this._scope + "|" + this._chartRange + "|" + seriesSig;
+          if (chartSig !== this._lastChartSig) {
+            this._lastChartSig = chartSig;
+            var chartStage = root.querySelector('[data-bind="chartStage"]');
+            if (chartStage) {
+              var chartData = buildChargingChartData(vm.chgToday, vm.chgYear, this._scope, this._chartRange, t);
+              chartStage.innerHTML = renderChargingChartSvg(chartData, this._scope, this._chartRange, t);
+            }
+            var tipEl = root.querySelector('[data-bind="chartTooltip"]');
+            if (tipEl) {
+              tipEl.textContent = "";
+              tipEl.classList.add("hidden");
+            }
+          }
+        }
+      }
+
+      if (vm.showConsumption) {
+        applyConsumptionBindings(root, hass, this._consUnitModes, vm);
+      }
+
+      if (this._dialogCtrl.pendingAction) {
+        this._dialogCtrl.syncTexts(t, this._dialogCtrl.pendingAction.confirmLabel);
       }
     }
   }
@@ -4527,6 +5584,8 @@
     COLOR_ALIASES: Object.assign({}, COLOR_ALIASES),
     VALID_TABS: VALID_TABS.slice(),
     VALID_LAYOUTS: VALID_LAYOUTS.slice(),
+    VALID_STATS_SCOPES: VALID_STATS_SCOPES.slice(),
+    VALID_STATS_CHARTS: VALID_STATS_CHARTS.slice(),
     CONFIRM_ACTIONS: CONFIRM_ACTIONS,
     resolveColor: resolveColor,
     resolveHeroImage: resolveHeroImage,
@@ -4545,6 +5604,7 @@
     computeToggleClimateExtras: computeToggleClimateExtras,
     formatCarNextDeparture: formatCarNextDeparture,
     resolveSocChargingState: resolveSocChargingState,
+    buildChargingChartData: buildChargingChartData,
     svgIcon: svgIcon,
   };
 
@@ -4554,6 +5614,12 @@
   if (!customElements.get("lepas-card")) {
     customElements.define("lepas-card", LepasCard);
   }
+  if (!customElements.get("lepas-stats-card-editor")) {
+    customElements.define("lepas-stats-card-editor", LepasStatsCardEditor);
+  }
+  if (!customElements.get("lepas-stats-card")) {
+    customElements.define("lepas-stats-card", LepasStatsCard);
+  }
   window.customCards = window.customCards || [];
   if (!window.customCards.some(function (c) { return c.type === "lepas-card"; })) {
     window.customCards.push({
@@ -4561,6 +5627,14 @@
       name: "Lepas Card",
       preview: true,
       description: "Matte Titanium OEM dashboard card for Lepas Connect (responsive 4-tab / cockpit, blueprint SVG, TPMS, climate, charging, departures).",
+    });
+  }
+  if (!window.customCards.some(function (c) { return c.type === "lepas-stats-card"; })) {
+    window.customCards.push({
+      type: "lepas-stats-card",
+      name: "Lepas Stats Card",
+      preview: true,
+      description: "Matte Titanium charging energy and average consumption statistics card for Lepas Connect (today/month/year/from-start KPIs, 7d/30d/12m chart, EV & hybrid averages).",
     });
   }
 })();

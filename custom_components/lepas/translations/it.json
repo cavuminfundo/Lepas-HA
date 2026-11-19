@@ -253,6 +253,9 @@
       },
       "reset_consumption_from_start": {
         "name": "Azzera consumi (da inizio)"
+      },
+      "reset_charging_from_start": {
+        "name": "Azzera energia ricarica (da inizio)"
       }
     },
     "climate": {
@@ -466,6 +469,18 @@
       },
       "hybrid_consumption_from_start": {
         "name": "Consumo ibrido (da inizio)"
+      },
+      "charging_energy_today": {
+        "name": "Energia ricarica (oggi)"
+      },
+      "charging_energy_month": {
+        "name": "Energia ricarica (mese)"
+      },
+      "charging_energy_year": {
+        "name": "Energia ricarica (anno)"
+      },
+      "charging_energy_from_start": {
+        "name": "Energia ricarica (da inizio)"
       }
     },
     "switch": {

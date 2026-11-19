@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.30.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Persistent Charging Energy Statistics Engine (`charging_stats.py`, `coordinator.py`, `sensor.py`, `button.py`)**: Added autonomous Home Assistant `Store`-backed charging statistics with hybrid energy integration (trapezoidal `chargingPower` for gaps `<= 300s` plus SoC-delta reconciliation for polling gaps `> 300s` and restarts, guarding against degraded battery frames and odometer advances), local-timezone rollover across **Today**, **Month**, **Year**, and **From start**, session counting, compact 30-day / 12-month history series, 4 new periodic energy sensors (`sensor.lepas_charging_energy_{today,month,year,from_start}`) with `home_kwh` / `away_kwh` attributes, and `button.lepas_reset_charging_from_start` (`142 → 147` entities).
+- **Hybrid Upgrade for Energy Dashboard Counters (`sensor.py`)**: Updated `LepasChargedEnergy` (`home_charging_energy`, `away_charging_energy`) to share `compute_charge_delta_kwh()` so slow AC polling gaps `> 300s` reconcile from SoC deltas while preserving `TOTAL_INCREASING` monotonicity and `zone.home` isolation.
+- **Dedicated `LepasStatsCard` & Main Card Cleanup (`lepas-card.js`)**: Registered a new `lepas-stats-card` (`LepasStatsCard` + `LepasStatsCardEditor`) in the Lovelace bundle unifying **Charging** (`All | Home | Away` scope toggle, 4 KPI tiles, stacked SVG bar chart `7d | 30d | 12m`, confirmed reset button) and **Average consumption** (EV + Hybrid grids with unit toggles and confirmed reset button); removed `consSection`, the redundant `fastPortBadge` tile (keeping AC/DC detection), and scheduled-charging preset buttons/badge (`preset-row` / `chgDaysPresetLbl`) from `LepasCard`; redesigned the hero SoC badge with two concentric rings (outer SoC % arc + inner charging pulse ring) and bumped card assets to `?v=1.30.0`.
+
+### 🇮🇹 Italiano
+
+- **Motore Statistiche di Ricarica Persistenti (`charging_stats.py`, `coordinator.py`, `sensor.py`, `button.py`)**: Introdotte statistiche di ricarica persistenti su `Store` di Home Assistant con integratore ibrido (`chargingPower` trapezoidale per intervalli `<= 300s` + riconciliazione delta SoC per buchi `> 300s` e riavvii, scartando frame batteria degradati e spostamenti odometro), rollover nel fuso locale su **Oggi**, **Mese**, **Anno** e **Da inizio**, conteggio sessioni, serie storiche compatte 30 giorni / 12 mesi, 4 nuovi sensori periodici (`sensor.lepas_charging_energy_{today,month,year,from_start}`) con attributi `home_kwh` / `away_kwh`, e `button.lepas_reset_charging_from_start` (`142 → 147` entità).
+- **Upgrade Ibrido per Contatori Dashboard Energia (`sensor.py`)**: Aggiornato `LepasChargedEnergy` (`home_charging_energy`, `away_charging_energy`) con l'helper condiviso `compute_charge_delta_kwh()` per recuperare i buchi `> 300s` su cariche AC lente mantenendo monotonicità `TOTAL_INCREASING` e isolamento `zone.home`.
+- **Nuova Card Dedicata `LepasStatsCard` e Pulizia Card Principale (`lepas-card.js`)**: Registrata nel bundle Lovelace la nuova card `lepas-stats-card` (`LepasStatsCard` + `LepasStatsCardEditor`) che unifica **Ricarica** (selettore `Tutte | Casa | Fuori`, 4 KPI, grafico a barre SVG `7g | 30g | 12m`, pulsante reset con conferma) e **Consumi medi** (EV + Ibrido con cambio unità e reset con conferma); rimossi dalla card principale `LepasCard` la sezione *Consumi medi*, il riquadro ridondante `Presa rapida` (mantenendo il rilevamento AC/DC) e i pulsanti/badge preset nella *Ricarica programmata*; ridisegnato il badge SoC in alto con due cerchi concentrici (anello esterno SoC % fisso + anello interno con effetto pulse in ricarica) e aggiornati gli asset a `?v=1.30.0`.
+
 ## v1.29.1 — 2026-11-19
 
 ### 🇬🇧 English

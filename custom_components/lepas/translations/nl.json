@@ -253,6 +253,9 @@
       },
       "reset_consumption_from_start": {
         "name": "Verbruik resetten (vanaf begin)"
+      },
+      "reset_charging_from_start": {
+        "name": "Laadenergie resetten (vanaf begin)"
       }
     },
     "climate": {
@@ -466,6 +469,18 @@
       },
       "hybrid_consumption_from_start": {
         "name": "Hybride verbruik (vanaf begin)"
+      },
+      "charging_energy_today": {
+        "name": "Laadenergie (vandaag)"
+      },
+      "charging_energy_month": {
+        "name": "Laadenergie (deze maand)"
+      },
+      "charging_energy_year": {
+        "name": "Laadenergie (dit jaar)"
+      },
+      "charging_energy_from_start": {
+        "name": "Laadenergie (vanaf begin)"
       }
     },
     "switch": {

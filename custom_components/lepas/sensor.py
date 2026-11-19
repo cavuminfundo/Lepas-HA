@@ -39,9 +39,16 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import CHARGE_ENERGY_MAX_GAP, DOMAIN, FIELDS_AS_RICH_ENTITY, entity_allowed
-from .consumption import WINDOW_100_KM, WINDOW_1000_KM, is_degraded_battery_frame
-from .coordinator import SENSORS
+from .charging_stats import compute_charge_delta_kwh
+from .const import (
+    CHARGE_ENERGY_MAX_GAP,
+    DEFAULT_BATTERY_CAPACITY_KWH,
+    DOMAIN,
+    FIELDS_AS_RICH_ENTITY,
+    entity_allowed,
+)
+from .consumption import WINDOW_100_KM, WINDOW_1000_KM, _safe_float, is_degraded_battery_frame
+from .coordinator import SENSORS, _pick_field
 from .entity import LepasEntity, field_on, in_zona_casa
 from .naming import ID_PREFIX
 from .scheduler import (
@@ -477,6 +484,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         for spec in _CONSUMPTION_SPECS
         if not (bev and spec.mode == "hev")
     )
+    ents.extend(LepasChargingStatsSensor(coord, spec) for spec in _CHARGING_STATS_SPECS)
     add(ents)
 
 
@@ -623,26 +631,25 @@ class LepasChargedEnergy(LepasEntity, RestoreSensor):
     """Energia caricata mentre l'auto sta DENTRO (`home=True`) o FUORI (`home=False`) dalla
     zona `home` di Home Assistant.
 
-    E' una STIMA: l'integrale trapezoidale di `chargingPower` (kW, solo BEV) nel tempo,
-    accumulato solo mentre l'auto sta effettivamente caricando E la sua posizione GPS viva
-    cade dentro o fuori dalla zona di casa — la stessa logica di zona che HA usa per il
-    device_tracker — ma chiedendo il CONTENIMENTO in `zone.home` (`in_zona_casa`) e non
-    la zona attiva, perche' un garage disegnato dentro casa non deve spostare l'energia.
+    E' una STIMA ibrida: per intervalli ravvicinati (`<= CHARGE_ENERGY_MAX_GAP`) integra
+    trapezoidalmente `chargingPower` (kW) nel tempo; per buchi di polling piu' larghi a
+    veicolo fermo e collegato nella stessa zona riconcilia la variazione positiva di SoC
+    (`dumpEnergy` * capacità batteria) tramite `compute_charge_delta_kwh()`. L'accumulo
+    avviene solo quando la posizione GPS viva ricade dentro (`home=True`) o fuori
+    (`home=False`) dalla zona `home` (`in_zona_casa`).
 
     Contatore di vita (`TOTAL_INCREASING`, kWh): si mette direttamente nella dashboard
     Energia come sorgente. Casa + Fuori ≈ energia totale caricata, divisa per luogo.
 
-    Note sull'accuratezza, da leggere prima di fidarsi del numero:
+    Note sull'accuratezza:
       - i campioni arrivano dal poll realtime (~120 s durante la carica) → qualche punto
         percentuale di scarto da un contatore vero. Va bene per la dashboard Energia, NON
         e' una lettura fiscale;
-      - gli intervalli piu' larghi di `CHARGE_ENERGY_MAX_GAP` NON vengono integrati, cosi'
-        un buco di sonno non puo' inventare energia. **Il rovescio e' un difetto noto: su
-        cariche AC lente con polling rado quasi tutta la sessione cade nei buchi e il
-        contatore sottostima** (misurato: 0,53 kWh contati contro ~8,2 ricavati dal SoC).
-        Portato cosi' di proposito, si corregge a parte;
+      - se l'auto ha guidato nel frattempo (`odometer` avanzato) o il frame batteria e'
+        degradato (`pureElectricRange == 0`), il buco non inventa energia;
       - quando la posizione viva e' ignota NESSUNO dei due contatori accumula: l'energia non
-        viene mai attribuita alla zona sbagliata.
+        viene mai attribuita alla zona sbagliata (la continuità cross-riavvio è gestita da
+        `ChargingStatsTracker` su `Store`).
     """
 
     _attr_device_class = SensorDeviceClass.ENERGY
@@ -661,9 +668,12 @@ class LepasChargedEnergy(LepasEntity, RestoreSensor):
                          entity_id_format=ENTITY_ID_FORMAT)
         self._attr_icon = "mdi:home-lightning-bolt" if home else "mdi:ev-station"
         self._energia_wh: float = 0.0
-        self._ultimo_ts = None
+        self._ultimo_ts: float | None = None
         self._ultima_potenza: float = 0.0
         self._era_attivo: bool = False
+        self._ultimo_soc: float | None = None
+        self._ultimo_odo: float | None = None
+        self._ultimo_rt: dict | None = None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -677,28 +687,89 @@ class LepasChargedEnergy(LepasEntity, RestoreSensor):
                 self._energia_wh = val * 1000.0
 
     def _campiona(self) -> None:
-        """Un passo di integrazione trapezoidale, a ogni aggiornamento del coordinator."""
-        try:
-            potenza = float(_rt(self.coordinator, "chargingPower") or 0.0)
-        except (TypeError, ValueError):
-            potenza = 0.0
-        carica = _in_ricarica(_rt(self.coordinator, "chargeState")) and potenza > 0
-        # CONTENIMENTO in `zone.home`, non "in che zona sei": chi carica nel proprio garage
-        # sta caricando a casa, e una zona piu' stretta disegnata sopra non deve spostare
-        # l'energia da un contatore all'altro. Vedi `in_zona_casa` per il perche'.
-        a_casa = in_zona_casa(self.hass, self.coordinator.data.get("position"))
-        attivo = carica and a_casa is not None and a_casa == self._home
+        """Hybrid integration step on coordinator update (trapezoid <= 300s, SoC delta > 300s)."""
+        data = getattr(self.coordinator, "data", None) or {}
+        rt = data.get("realtime")
+        if not isinstance(rt, dict):
+            return
+        if rt is getattr(self, "_ultimo_rt", None):
+            return
+        if is_degraded_battery_frame(rt):
+            self._ultimo_rt = rt
+            return
 
-        ora = dt_util.utcnow()
-        # si integra SOLO su un intervallo i cui DUE estremi erano attivi e vicini nel tempo
-        if attivo and self._era_attivo and self._ultimo_ts is not None:
-            dt_s = (ora - self._ultimo_ts).total_seconds()
-            if 0 < dt_s <= CHARGE_ENERGY_MAX_GAP:
-                # kW·h → Wh:  media(kW) * (s/3600) * 1000
-                self._energia_wh += 0.5 * (self._ultima_potenza + potenza) * (dt_s / 3600.0) * 1000.0
-        self._ultimo_ts = ora
-        self._ultima_potenza = potenza if attivo else 0.0
-        self._era_attivo = attivo
+        fields = data.get("fields") or {}
+        sources = (rt, fields)
+        potenza = _safe_float(_pick_field(sources, "chargingPower"))
+        if potenza is None or potenza < 0.0:
+            potenza = 0.0
+        carica = _in_ricarica(_pick_field(sources, "chargeState")) and potenza > 0.0
+        plugged = (
+            field_on(_pick_field(sources, "chargeGunState")) is True
+            or field_on(_pick_field(sources, "fastChargingGunStatus")) is True
+        )
+        soc_raw = _safe_float(_pick_field(sources, "dumpEnergy"))
+        soc = soc_raw if (soc_raw is not None and 0.0 < soc_raw <= 100.0) else None
+        odo_raw = _safe_float(_pick_field(sources, "odometer"))
+        odo = odo_raw if (odo_raw is not None and odo_raw >= 0.0) else None
+
+        a_casa = in_zona_casa(self.hass, data.get("position"))
+        ultimo_odo = getattr(self, "_ultimo_odo", None)
+
+        if a_casa is None:
+            self._ultimo_rt = rt
+            if ultimo_odo is not None and odo is not None and odo > ultimo_odo + 0.1:
+                self._ultimo_ts = None
+                self._era_attivo = False
+                self._ultima_potenza = 0.0
+                self._ultimo_odo = odo
+                self._ultimo_soc = soc
+            return
+
+        if a_casa != self._home:
+            self._ultimo_rt = rt
+            self._era_attivo = False
+            self._ultimo_ts = None
+            self._ultima_potenza = 0.0
+            self._ultimo_soc = soc
+            self._ultimo_odo = odo
+            return
+
+        now_ts = dt_util.utcnow().timestamp()
+        cap = _safe_float(
+            getattr(self.coordinator, "battery_capacity_kwh", DEFAULT_BATTERY_CAPACITY_KWH)
+        )
+        if cap is None or cap <= 0.0:
+            cap = DEFAULT_BATTERY_CAPACITY_KWH
+        ultimo_ts = getattr(self, "_ultimo_ts", None)
+        if isinstance(ultimo_ts, datetime):
+            ultimo_ts = ultimo_ts.timestamp()
+
+        delta_kwh, reset_cont = compute_charge_delta_kwh(
+            ultimo_ts,
+            self._ultima_potenza,
+            getattr(self, "_ultimo_soc", None),
+            ultimo_odo,
+            self._era_attivo,
+            now_ts=now_ts,
+            power_kw=potenza,
+            soc_pct=soc,
+            odo_km=odo,
+            charging=carica,
+            plugged=plugged,
+            degraded_battery=False,
+            battery_capacity_kwh=cap,
+        )
+        if delta_kwh > 0.0:
+            self._energia_wh += delta_kwh * 1000.0
+        self._ultimo_rt = rt
+        self._ultimo_ts = now_ts
+        self._ultima_potenza = 0.0 if reset_cont else potenza
+        self._ultimo_soc = (
+            soc if (soc is not None or reset_cont) else getattr(self, "_ultimo_soc", None)
+        )
+        self._ultimo_odo = odo if (odo is not None or reset_cont) else ultimo_odo
+        self._era_attivo = False if reset_cont else carica
 
     def _handle_coordinator_update(self) -> None:
         self._campiona()
@@ -1335,5 +1406,66 @@ class LepasConsumptionSensor(LepasEntity, SensorEntity):
         }
         if self._spec.mode == "hev":
             attrs["electric_consumption_kwh_100km"] = stats.get("electric_kwh_100km")
+        return attrs
+
+
+@dataclass(frozen=True)
+class _ChargingStatsSpec:
+    """Descriptor for a periodic charging energy statistics sensor."""
+
+    key: str
+    period: str
+    icon: str
+
+
+_CHARGING_STATS_SPECS: tuple[_ChargingStatsSpec, ...] = (
+    _ChargingStatsSpec("charging_energy_today", "today", "mdi:calendar-today"),
+    _ChargingStatsSpec("charging_energy_month", "month", "mdi:calendar-month"),
+    _ChargingStatsSpec("charging_energy_year", "year", "mdi:calendar"),
+    _ChargingStatsSpec("charging_energy_from_start", "from_start", "mdi:ev-plug-type2"),
+)
+
+
+class LepasChargingStatsSensor(LepasEntity, SensorEntity):
+    """Periodic charging energy sensor backed by ChargingStatsTracker."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coord, spec: _ChargingStatsSpec) -> None:
+        super().__init__(
+            coord,
+            f"Lepas {spec.key}",
+            spec.key,
+            object_id=f"{ID_PREFIX}_{spec.key}",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key=spec.key,
+        )
+        self._spec = spec
+        self._attr_icon = spec.icon
+
+    def _stats(self) -> dict[str, object]:
+        return self.coordinator.charging_stats(self._spec.period)
+
+    @property
+    def native_value(self) -> float:
+        val = self._stats().get("total_kwh", 0.0)
+        return float(val) if val is not None else 0.0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        stats = self._stats()
+        attrs: dict[str, object] = {
+            "home_kwh": stats.get("home_kwh", 0.0),
+            "away_kwh": stats.get("away_kwh", 0.0),
+            "sessions_count": stats.get("sessions_count", 0),
+            "period_key": stats.get("period_key"),
+        }
+        if self._spec.period == "today":
+            attrs["daily_series"] = stats.get("daily_series", [])
+        elif self._spec.period == "year":
+            attrs["monthly_series"] = stats.get("monthly_series", [])
         return attrs
 

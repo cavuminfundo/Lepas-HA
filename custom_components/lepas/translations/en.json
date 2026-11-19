@@ -253,6 +253,9 @@
       },
       "reset_consumption_from_start": {
         "name": "Reset consumption (from start)"
+      },
+      "reset_charging_from_start": {
+        "name": "Reset charging energy (from start)"
       }
     },
     "climate": {
@@ -466,6 +469,18 @@
       },
       "hybrid_consumption_from_start": {
         "name": "Hybrid consumption (from start)"
+      },
+      "charging_energy_today": {
+        "name": "Charging energy (today)"
+      },
+      "charging_energy_month": {
+        "name": "Charging energy (this month)"
+      },
+      "charging_energy_year": {
+        "name": "Charging energy (this year)"
+      },
+      "charging_energy_from_start": {
+        "name": "Charging energy (from start)"
       }
     },
     "switch": {

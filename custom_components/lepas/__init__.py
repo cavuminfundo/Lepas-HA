@@ -565,6 +565,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # async_stop è bloccante (loop_stop fa join del thread paho) → executor.
             await hass.async_add_executor_job(coordinator.async_stop)
             await coordinator.async_flush_consumption()
+            await coordinator.async_flush_charging_stats()
         # P1-4/P2-6: in passato si ripulivano i segreti da `os.environ`, dove il
         # config flow li scriveva per passarli ai moduli core/. Non serve più — ed è la
         # garanzia più forte: con il contesto per-chiamata quei segreti nell'ambiente del
