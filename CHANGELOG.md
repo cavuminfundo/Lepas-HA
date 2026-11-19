@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.23.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Guarded `A07900` Wake-and-Retry via Reactive MQTT Sync (`const.py`, `coordinator.py`)**: Added protected single wake-and-retry in `LepasCoordinator.async_send_command()` when `tspconsole-eu` rejects a command with `CommandError(code="A07900")` (*vehicle asleep*). Releases `_cmd_gate` in the attempt-1 `finally` block before calling `async_assicura_sveglia()` (`localizza`, preventing any deadlock), waits up to `POLL_WAKE_WAIT` (25 s) on `_wait_for_car_wake()` using a race-free double-check around `asyncio.Event` signalled via `call_soon_threadsafe` from `_on_car_message` (and unblocked on `async_stop`), and retries once with `_allow_wake_retry=False` (reusing cached `taskId` without consuming PIN attempts). Enforces `A07900_WAKE_COOLDOWN_S = 60`, skips when `auto_sveglia` is already `True`, `key == "localizza"`, or `closing`, and restores the original `A07900` `cmd_status` / notes before `_instrada_rimedio()` and re-raising on wake timeout.
+- **Native Departure `appointmentTravelAOS` Write Schema & Post-Settle Sync (`commands.py`, `coordinator.py`)**: Updated `/asc/vehicleControl/appointmentTravel` write payloads (`partenza_prog_on` / `partenza_prog_off` and `LepasCoordinator._build_native_departure_payload()`) to send `"appointmentTravelAOS"` with `"travelWeekday"` as `list[str]` (keeping `"appointmentTravelSetVOS"` for read queries), added `_post_settle_travel_refresh()` after `async_apply_departure_schedule()`, and preserved `mainSwitcher` / `appointmentTravelSetVOS` in `_on_probe_data()` when omitted by `probe_once()`, bumping `?v=1.23.0`.
+
+### 🇮🇹 Italiano
+
+- **Retry Automatico Protetto con Sveglia MQTT su `A07900` (`const.py`, `coordinator.py`)**: Aggiunto in `LepasCoordinator.async_send_command()` un retry singolo protetto su `CommandError(code="A07900")` (*auto a riposo*). Lo slot `_cmd_gate` viene rilasciato nel `finally` del tentativo 1 prima di chiamare `async_assicura_sveglia()` (`localizza`, zero deadlock); `_wait_for_car_wake()` attende fino a `POLL_WAKE_WAIT` (25 s) il risveglio MQTT tramite `asyncio.Event` segnalato da `_on_car_message` con `call_soon_threadsafe` (e sbloccato in `async_stop()`) con double-check anti-race sotto `_state_lock`, rieseguendo il comando una sola volta con `_allow_wake_retry=False` (riuso del `taskId` in cache senza consumo PIN). Protetto da `A07900_WAKE_COOLDOWN_S = 60`, escluso se `auto_sveglia` è attiva, `key == "localizza"` o in chiusura, con ripristino di `cmd_status` / note originali e chiamata a `_instrada_rimedio()` su timeout.
+- **Schema Scrittura Partenza Programmata `appointmentTravelAOS` & Sync Post-Settle (`commands.py`, `coordinator.py`)**: Aggiornati i payload di scrittura verso `/asc/vehicleControl/appointmentTravel` (`partenza_prog_on` / `partenza_prog_off` e `LepasCoordinator._build_native_departure_payload()`) a `"appointmentTravelAOS"` con `"travelWeekday"` come `list[str]` (mantenendo `"appointmentTravelSetVOS"` in lettura), aggiunto `_post_settle_travel_refresh()` dopo `async_apply_departure_schedule()` e preservati `mainSwitcher` / `appointmentTravelSetVOS` in `_on_probe_data()` quando omessi da `probe_once()`, con bump `?v=1.23.0`.
+
 ## v1.22.3 — 2026-11-18
 
 ### 🇬🇧 English

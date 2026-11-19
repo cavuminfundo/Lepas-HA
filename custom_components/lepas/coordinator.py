@@ -39,7 +39,8 @@ from .const import (
     CONF_BFF, CONF_TSP_HOST, CONF_CAR_MQTT_HOST, CONF_CAR_MQTT_PORT, CONF_CHANNEL_ID,
     CONF_TENANT_CODE, CONF_COUNTRY_ID,
     CONF_POLL_NORMAL, CONF_POLL_CHARGING, DEFAULT_POLL_NORMAL_MIN,
-    DEFAULT_POLL_CHARGING_MIN, POLL_WAKE_WAIT, COMMAND_SETTLE_S, COMMAND_QUEUE_WAIT,
+    DEFAULT_POLL_CHARGING_MIN, POLL_WAKE_WAIT, A07900_WAKE_COOLDOWN_S,
+    COMMAND_SETTLE_S, COMMAND_QUEUE_WAIT,
     HV_ON_POLL_EVERY, HV_ON_POLL_MAX,
     CHARGING_POLL_EVERY, CHARGING_POLL_MAX, DRIVE_WATCH_EVERY,
     CONF_VEHICLE_NAME, DATA_VEHICLE_MODEL, DATA_VEHICLE_BRAND,
@@ -383,6 +384,8 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._fields: dict[str, str] = {}
         self._state_lock = threading.Lock()  # [H2] serializza _fields/position tra thread paho/executor/loop
         self._last_msg_ts: float = 0.0
+        self._last_a07900_wake_ts: float = 0.0
+        self._mqtt_msg_event: asyncio.Event = asyncio.Event()
         # contatore dei push di CONFERMA comando (non della telemetria): è l'ancora di
         # `_settle_after_command`. Vedi lì perché non basta `last_seen`.
         self._confirm_n: int = 0
@@ -845,13 +848,13 @@ class LepasCoordinator(DataUpdateCoordinator):
                 "planId": 1,
                 "switcher": "0",
                 "travelTime": existing_time if existing_time is not None else "420",
-                "travelWeekday": ",".join(str(d) for d in off_days),
+                "travelWeekday": [str(d) for d in off_days],
             }
             if server_id is not None:
                 plan["id"] = server_id
             return (
                 "partenza_prog_off",
-                {"mainSwitcher": "0", "appointmentTravelSetVOS": [plan]},
+                {"mainSwitcher": "0", "appointmentTravelAOS": [plan]},
                 ("0", 0, ()),
             )
 
@@ -878,13 +881,13 @@ class LepasCoordinator(DataUpdateCoordinator):
             "planId": 1,
             "switcher": "1",
             "travelTime": str(utc_min),
-            "travelWeekday": ",".join(str(d) for d in utc_days),
+            "travelWeekday": [str(d) for d in utc_days],
         }
         if server_id is not None:
             plan["id"] = server_id
         return (
             "partenza_prog_on",
-            {"mainSwitcher": "1", "appointmentTravelSetVOS": [plan]},
+            {"mainSwitcher": "1", "appointmentTravelAOS": [plan]},
             ("1", utc_min, tuple(utc_days)),
         )
 
@@ -908,6 +911,16 @@ class LepasCoordinator(DataUpdateCoordinator):
             rt.pop("appointmentTravelSetVOS", None)
         self._apply_update({"realtime": rt})
 
+    async def _post_settle_travel_refresh(self) -> None:
+        if self._timers.closing:
+            return
+        try:
+            await self._settle_after_command()
+            if not self._timers.closing:
+                await self._async_refresh_travel_appoint_realtime()
+        except asyncio.CancelledError:
+            return
+
     async def async_apply_departure_schedule(self) -> None:
         """Override manuale: invia subito appointmentTravel (ON o OFF) ignorando dedup."""
         if self._timers.closing:
@@ -923,6 +936,11 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._last_synced_native_dep_sig = sig
         self._last_attempted_native_dep_sig = None
         await self._async_refresh_travel_appoint_realtime()
+        if not self._timers.closing and hasattr(self.hass, "async_create_background_task"):
+            self.hass.async_create_background_task(
+                self._post_settle_travel_refresh(),
+                f"{DOMAIN}_travel_refresh",
+            )
 
     async def _async_sync_native_departure(self, occ: DepartureOccurrence | None) -> None:
         if self._timers.closing:
@@ -1636,6 +1654,10 @@ class LepasCoordinator(DataUpdateCoordinator):
         # non ci riesce più. Prima ogni timer si cancellava a mano qui, e bastava
         # dimenticarne uno (o ri-armarlo altrove) per lasciare un poll orfano sul cloud.
         self._timers.close()
+        try:
+            self.hass.loop.call_soon_threadsafe(self._mqtt_msg_event.set)
+        except RuntimeError:
+            pass
         if self._diag_stop_unsub is not None:
             self._diag_stop_unsub()
             self._diag_stop_unsub = None
@@ -1742,6 +1764,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         # `_auto_e_sveglia`). Si ri-arma a ogni messaggio, dal loop perché qui siamo nel
         # thread di paho.
         self.hass.loop.call_soon_threadsafe(self._arma_scadenza_sveglia)
+        self.hass.loop.call_soon_threadsafe(self._mqtt_msg_event.set)
 
         # [H3] fronte di risveglio → una sonda realtime (sola lettura). Lo schedule del
         # task DEVE avvenire sul loop: dal thread paho usa call_soon_threadsafe.
@@ -2006,8 +2029,55 @@ class LepasCoordinator(DataUpdateCoordinator):
             if self._sveglia_task is task and task.done():
                 self._sveglia_task = None   # non trattenere un task concluso
 
+    async def _wait_for_car_wake(
+        self, baseline_ts: float, timeout: float = POLL_WAKE_WAIT
+    ) -> bool:
+        """Attende fino a `timeout` s che arrivi un push MQTT successivo a `baseline_ts`."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        while True:
+            if self._timers.closing:
+                return False
+            with self._state_lock:
+                if self._last_msg_ts > baseline_ts:
+                    return True
+            self._mqtt_msg_event.clear()
+            with self._state_lock:
+                if self._last_msg_ts > baseline_ts:
+                    return True
+            if self._timers.closing:
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            try:
+                await asyncio.wait_for(self._mqtt_msg_event.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                with self._state_lock:
+                    return (not self._timers.closing) and (self._last_msg_ts > baseline_ts)
+
+    def _should_wake_retry_on_a07900(
+        self, key: str, err: Exception, allow_wake_retry: bool
+    ) -> bool:
+        """True sse `err` è un A07900 idoneo a una singola sveglia + retry protetto."""
+        if not allow_wake_retry or key == "localizza" or self._timers.closing:
+            return False
+        if getattr(err, "code", None) != "A07900":
+            return False
+        if self.auto_sveglia:
+            return False
+        return (
+            self._last_a07900_wake_ts == 0.0
+            or (time.monotonic() - self._last_a07900_wake_ts) >= A07900_WAKE_COOLDOWN_S
+        )
+
     # ───────────────── azioni (delega a core/, in executor) ─────────────────
-    async def async_send_command(self, key: str, params: dict | None = None) -> str:
+    async def async_send_command(
+        self,
+        key: str,
+        params: dict | None = None,
+        *,
+        _allow_wake_retry: bool = True,
+    ) -> str:
         """Invia un comando serializzato dietro una coda: l'auto ne esegue uno alla volta, quindi
         un secondo comando ASPETTA il suo turno invece di fallire. Limite d'attesa COMMAND_QUEUE_WAIT.
 
@@ -2021,6 +2091,20 @@ class LepasCoordinator(DataUpdateCoordinator):
                 "L'auto è ancora impegnata coi comandi precedenti — riprova tra qualche istante."
             ) from err
         t0 = time.monotonic()
+
+        def _abort_command(err: Exception) -> None:
+            if self._diag is not None:
+                self._diag.record("command", key=key, ok=False,
+                                  duration_ms=int((time.monotonic() - t0) * 1000),
+                                  reason=getattr(err, "reason", None),
+                                  code=getattr(err, "code", None),
+                                  err_type=type(err).__name__, msg=str(err))
+            # P2-5: instradamento per CAUSA tramite la tabella unica. Entrambi i percorsi
+            # (questo e il fallback di `_wake`) chiamano lo STESSO helper: prima erano due
+            # catene di `if` scritte a mano, e quella del fallback classificava come «PIN
+            # errato» rifiuti che erano di permessi o di sessione.
+            self._instrada_rimedio(err)
+
         # ⚠️ Il rilascio dello slot NON può stare solo nei rami che si vedono. Prima era
         # scritto in due punti — il ramo `except Exception` qui sotto e il task di rilascio
         # differito, creato solo in caso di successo — e in mezzo restava un buco: la
@@ -2036,28 +2120,53 @@ class LepasCoordinator(DataUpdateCoordinator):
         # ⚠️ Rilasciare non ferma il thread dell'executor: il comando parte comunque verso
         # l'auto, mentre Home Assistant lo considera annullato.
         consegnato = False
+        wake_err: Exception | None = None
+        pre_cmd_status = self.data.get("cmd_status")
+        err_cmd_status: str | None = None
+        err_note_cmd: list[str] = []
+        err_note_cmd_at: float | None = None
         try:
             res = await self.hass.async_add_executor_job(self._send_command, key, params)
             consegnato = True
         except Exception as err:  # noqa: BLE001 — instrada il rimedio, poi RILANCIA
-            if self._diag is not None:
-                self._diag.record("command", key=key, ok=False,
-                                  duration_ms=int((time.monotonic() - t0) * 1000),
-                                  reason=getattr(err, "reason", None),
-                                  code=getattr(err, "code", None),
-                                  err_type=type(err).__name__, msg=str(err))
-            # P2-5: instradamento per CAUSA tramite la tabella unica. Entrambi i percorsi
-            # (questo e il fallback di `_wake`) chiamano lo STESSO helper: prima erano due
-            # catene di `if` scritte a mano, e quella del fallback classificava come «PIN
-            # errato» rifiuti che erano di permessi o di sessione.
-            self._instrada_rimedio(err)
-            raise
+            if self._should_wake_retry_on_a07900(key, err, _allow_wake_retry):
+                wake_err = err
+                cur_status = self.data.get("cmd_status")
+                err_cmd_status = (
+                    cur_status if (cur_status and cur_status != pre_cmd_status)
+                    else str(err)[:STATO_MAX]
+                )
+                err_note_cmd = list(self._note_cmd)
+                err_note_cmd_at = self._note_cmd_at
+            else:
+                _abort_command(err)
+                raise
         finally:
             # invio non andato a buon fine (errore, cancellazione, arresto): libera lo slot.
             # In caso di successo NON si rilascia qui: lo slot resta occupato ancora un po',
             # ed è `_hold_then_release` a restituirlo dopo la pausa di rispetto.
             if not consegnato:
                 self._cmd_gate.release()
+
+        if wake_err is not None:
+            self._last_a07900_wake_ts = time.monotonic()
+            with self._state_lock:
+                baseline_ts = self._last_msg_ts
+            await self.async_assicura_sveglia()
+            woke = (
+                not self._timers.closing
+                and await self._wait_for_car_wake(baseline_ts, timeout=POLL_WAKE_WAIT)
+            )
+            if woke:
+                return await self.async_send_command(
+                    key, params, _allow_wake_retry=False
+                )
+            self._note_cmd = err_note_cmd
+            self._note_cmd_at = err_note_cmd_at
+            self._apply_update({"cmd_status": err_cmd_status})
+            _abort_command(wake_err)
+            raise wake_err
+
         if self._diag is not None:
             self._diag.record("command", key=key, ok=True,
                               duration_ms=int((time.monotonic() - t0) * 1000), result=res)
@@ -2338,10 +2447,18 @@ class LepasCoordinator(DataUpdateCoordinator):
 
         Gira nel thread executor: gli accessi a self.position e self._fields sono
         serializzati col lock e si emette sempre una COPIA (no condivisione per riferimento)."""
-        patch: dict = {"realtime": dict(data) if isinstance(data, dict) else data}
         if not isinstance(data, dict):
-            self._update(patch)
+            self._update({"realtime": data})
             return
+        rt_copy = dict(data)
+        if "mainSwitcher" not in rt_copy and "appointmentTravelSetVOS" not in rt_copy:
+            prev_rt = (self.data or {}).get("realtime")
+            if isinstance(prev_rt, dict):
+                if "mainSwitcher" in prev_rt:
+                    rt_copy["mainSwitcher"] = prev_rt["mainSwitcher"]
+                if "appointmentTravelSetVOS" in prev_rt:
+                    rt_copy["appointmentTravelSetVOS"] = prev_rt["appointmentTravelSetVOS"]
+        patch: dict = {"realtime": rt_copy}
         # Freschezza del dato batteria/odometro. NON si usa più `resultTime`: misurato il
         # 22/07 che resta indietro mentre i valori cambiano davvero — resultTime fermo alle
         # 08:37:37 con la batteria passata da 41% a 40% dopo le 08:59, e `time` a 09:01:59.

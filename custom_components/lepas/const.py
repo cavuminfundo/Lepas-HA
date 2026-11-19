@@ -445,6 +445,8 @@ DEFAULT_POLL_NORMAL_MIN = 60
 DEFAULT_POLL_CHARGING_MIN = 30
 # attesa tra la sveglia (localizza) e la lettura realtime forzata, perché l'auto torni online
 POLL_WAKE_WAIT = 25
+# cooldown minimo (secondi) tra due sveglie automatiche innescate da A07900 (evita tempeste)
+A07900_WAKE_COOLDOWN_S = 60
 # Alta tensione (HV) e telemetria FRESCA. Scoperta verificata dal vivo 2026-06-22: il canale
 # /asr/manager/realtime riporta odometro/SOC/tensione/corrente VERI solo quando l'alta tensione
 # è accesa (hVoltageState=1: marcia, ricarica o clima acceso); ad HV spento ritorna uno snapshot

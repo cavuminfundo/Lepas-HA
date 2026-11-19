@@ -150,9 +150,10 @@ def test_commands_catalog_and_rich_entity_gating(core):
 
     assert commands.CMD_MAP["partenza_prog_on"]["endpoint"] == "appointmentTravel"
     assert commands.CMD_MAP["partenza_prog_on"]["body"]["mainSwitcher"] == "1"
+    assert commands.CMD_MAP["partenza_prog_on"]["body"]["appointmentTravelAOS"][0]["travelWeekday"] == ["1", "2", "3", "4", "5"]
     assert commands.CMD_MAP["partenza_prog_off"]["endpoint"] == "appointmentTravel"
     assert commands.CMD_MAP["partenza_prog_off"]["body"]["mainSwitcher"] == "0"
-    assert commands.CMD_MAP["partenza_prog_off"]["body"]["appointmentTravelSetVOS"][0]["travelWeekday"] == "1,2,3,4,5"
+    assert commands.CMD_MAP["partenza_prog_off"]["body"]["appointmentTravelAOS"][0]["travelWeekday"] == ["1", "2", "3", "4", "5"]
 
     assert commands.CMD_MAP["battery_heat_on"]["endpoint"] == "batteryPackHeat"
     assert commands.CMD_MAP["battery_heat_on"]["body"]["switchState"] == "1"
@@ -216,22 +217,22 @@ def test_permessi_travel_and_battery_tables_and_csv_giorni(core):
     assert P.CATEGORIA["batteryPackHeat"] == 216
     assert P.CICLO["appointmentTravel"] == (2121, 2122, "travelWeekday")
 
-    # CSV parsing
-    body_csv = {
+    # List[str] weekday parsing (appointmentTravelAOS schema)
+    body_aos = {
         "mainSwitcher": "1",
-        "appointmentTravelSetVOS": [{"planId": 1, "switcher": "1", "travelTime": "305", "travelWeekday": "1,3,5"}],
+        "appointmentTravelAOS": [{"planId": 1, "switcher": "1", "travelTime": "305", "travelWeekday": ["1", "3", "5"]}],
     }
-    assert P._giorni(body_csv, "travelWeekday") == [1, 3, 5]
-    assert P.ciclo_non_autorizzato("appointmentTravel", body_csv, {212: 1, 2121: 0, 2122: 1}) is not None
-    assert P.ciclo_non_autorizzato("appointmentTravel", body_csv, {212: 1, 2121: 1, 2122: 0}) is None
+    assert P._giorni(body_aos, "travelWeekday") == ["1", "3", "5"]
+    assert P.ciclo_non_autorizzato("appointmentTravel", body_aos, {212: 1, 2121: 0, 2122: 1}) is not None
+    assert P.ciclo_non_autorizzato("appointmentTravel", body_aos, {212: 1, 2121: 1, 2122: 0}) is None
 
-    # All 7 days CSV triggers 2122 check
-    body_all = {"appointmentTravelSetVOS": [{"travelWeekday": "1,2,3,4,5,6,7"}]}
+    # All 7 days list triggers 2122 check
+    body_all = {"appointmentTravelAOS": [{"travelWeekday": ["1", "2", "3", "4", "5", "6", "7"]}]}
     assert P.ciclo_non_autorizzato("appointmentTravel", body_all, {212: 1, 2121: 1, 2122: 0}) is not None
 
-    # Disabling (mainSwitcher == "0") sends non-empty travelWeekday (API rejects "") and never warns on cycle
+    # Disabling (mainSwitcher == "0") sends non-empty travelWeekday list (API rejects "") and never warns on cycle
     off_body = dict(commands.CMD_MAP["partenza_prog_off"]["body"])
-    assert P._giorni(off_body, "travelWeekday") == [1, 2, 3, 4, 5]
+    assert P._giorni(off_body, "travelWeekday") == ["1", "2", "3", "4", "5"]
     assert P.ciclo_non_autorizzato("appointmentTravel", off_body, {212: 1, 2121: 0, 2122: 0}) is None
 
 
@@ -373,13 +374,14 @@ async def test_native_departure_sync_weekly_grouping_server_id_and_off(hass, mon
     await coord.async_apply_departure_schedule()
     assert len(sent) == 1
     assert sent[0][0] == "partenza_prog_on"
-    vo = sent[0][1]["appointmentTravelSetVOS"][0]
+    vo = sent[0][1]["appointmentTravelAOS"][0]
+    assert "appointmentTravelSetVOS" not in sent[0][1]
     assert sent[0][1]["mainSwitcher"] == "1"
     assert vo["id"] == 777123
     assert vo["planId"] == 1
     assert vo["switcher"] == "1"
     assert vo["travelTime"] == "360"
-    assert vo["travelWeekday"] == "1,3,5"
+    assert vo["travelWeekday"] == ["1", "3", "5"]
 
     # With 2121 == 0 -> fallback to 1,2,3,4,5,6,7
     coord2 = _make_coord(
@@ -395,10 +397,10 @@ async def test_native_departure_sync_weekly_grouping_server_id_and_off(hass, mon
     coord2.departure_weekly[1] = (True, 30)  # 00:30 CET Mon -> 23:30 UTC Sun
     monkeypatch.setattr(coord2, "async_send_command", fake_send)
     await coord2.async_apply_departure_schedule()
-    vo2 = sent[1][1]["appointmentTravelSetVOS"][0]
+    vo2 = sent[1][1]["appointmentTravelAOS"][0]
     assert "id" not in vo2
     assert vo2["travelTime"] == str(23 * 60 + 30)
-    assert vo2["travelWeekday"] == "1,2,3,4,5,6,7"
+    assert vo2["travelWeekday"] == ["1", "2", "3", "4", "5", "6", "7"]
 
     # No active departure -> partenza_prog_off (non-empty travelWeekday + preserved travelTime)
     # and refreshes realtime from travelQuery (clearing stale appointmentTravelSetVOS on mainSwitcher=0)
@@ -411,9 +413,9 @@ async def test_native_departure_sync_weekly_grouping_server_id_and_off(hass, mon
     await coord.async_apply_departure_schedule()
     assert sent[2][0] == "partenza_prog_off"
     assert sent[2][1]["mainSwitcher"] == "0"
-    assert sent[2][1]["appointmentTravelSetVOS"][0]["switcher"] == "0"
-    assert sent[2][1]["appointmentTravelSetVOS"][0]["travelTime"] == "305"
-    assert sent[2][1]["appointmentTravelSetVOS"][0]["travelWeekday"] == "1"
+    assert sent[2][1]["appointmentTravelAOS"][0]["switcher"] == "0"
+    assert sent[2][1]["appointmentTravelAOS"][0]["travelTime"] == "305"
+    assert sent[2][1]["appointmentTravelAOS"][0]["travelWeekday"] == ["1"]
     assert coord.data["realtime"]["mainSwitcher"] == 0
     assert "appointmentTravelSetVOS" not in coord.data["realtime"]
 
@@ -465,7 +467,7 @@ async def test_quick_departure_hold_across_preclimate_and_expiry_in_all_modes(ha
     monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 17, 40, tzinfo=tz))
     await coord.async_set_quick_departure(18 * 60, True)
     assert sent[0][0] == "partenza_prog_on"
-    assert sent[0][1]["appointmentTravelSetVOS"][0]["travelWeekday"] == "1"
+    assert sent[0][1]["appointmentTravelAOS"][0]["travelWeekday"] == ["1"]
 
     await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 18, 1, tzinfo=tz))
     assert coord.quick_departure_enabled is False
@@ -473,8 +475,8 @@ async def test_quick_departure_hold_across_preclimate_and_expiry_in_all_modes(ha
     assert coord._quick_native_until is None
     # Restored to Tuesday 07:00 native & 06:30 battery heat
     assert sent[-2][0] == "partenza_prog_on"
-    assert sent[-2][1]["appointmentTravelSetVOS"][0]["travelWeekday"] == "2"
-    assert sent[-2][1]["appointmentTravelSetVOS"][0]["travelTime"] == str(7 * 60)
+    assert sent[-2][1]["appointmentTravelAOS"][0]["travelWeekday"] == ["2"]
+    assert sent[-2][1]["appointmentTravelAOS"][0]["travelTime"] == str(7 * 60)
     assert sent[-1][0] == "battery_heat_on"
     assert sent[-1][1]["startTime"] == str(6 * 60 + 30)
 
@@ -687,7 +689,7 @@ async def test_query_caching_and_closing_guards(hass, cloud, monkeypatch):
 
     monkeypatch.setattr(coord, "async_send_command", fake_send)
     await coord.async_apply_departure_schedule()
-    assert sent[0][1]["appointmentTravelSetVOS"][0]["id"] == 445566
+    assert sent[0][1]["appointmentTravelAOS"][0]["id"] == 445566
 
     # Closing mid-await aborts battery sync and extra loop cleanly
     coord.sync_battery_heat_to_departure = True
@@ -721,7 +723,7 @@ def test_appointment_travel_endpoint_and_http_error_raises(core, cloud, ctx, mon
     res = commands.send(
         ctx,
         "partenza_prog_off",
-        params={"mainSwitcher": "0", "appointmentTravelSetVOS": [{"planId": 1, "switcher": "0", "travelTime": "0", "travelWeekday": ""}]},
+        params={"mainSwitcher": "0", "appointmentTravelAOS": [{"planId": 1, "switcher": "0", "travelTime": "420", "travelWeekday": ["1"]}]},
     )
     assert "HTTP 200" in res
     assert cloud.count("/asc/vehicleControl/appointmentTravel") == 1
@@ -735,3 +737,86 @@ def test_appointment_travel_endpoint_and_http_error_raises(core, cloud, ctx, mon
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen_404)
     with pytest.raises(commands.CommandError, match="HTTP 404"):
         commands.send(ctx, "partenza_prog_off")
+
+
+def test_tsp_sign_and_permessi_appointment_travel_aos_list(core):
+    tsp_sign = core["tsp_sign"]
+    permessi = core["permessi"]
+    body = {
+        "mainSwitcher": "1",
+        "appointmentTravelAOS": [
+            {"planId": 1, "switcher": "1", "travelTime": "420", "travelWeekday": ["1", "3", "5"]},
+        ],
+    }
+    signed = tsp_sign.sign_body(body, 1731974400000)
+    assert isinstance(signed.get("sign"), str) and signed["sign"]
+    assert signed["appId"] == tsp_sign.APP_ID
+    assert signed["appointmentTravelAOS"][0]["travelWeekday"] == ["1", "3", "5"]
+    assert tsp_sign._flatten_value(body["appointmentTravelAOS"]) == (
+        "planId=1&switcher=1&travelTime=420&travelWeekday=135"
+    )
+    assert permessi.ciclo_non_autorizzato("appointmentTravel", body, {212: 1, 2121: 0, 2122: 1}) is not None
+    assert permessi.ciclo_non_autorizzato("appointmentTravel", body, {212: 1, 2121: 1, 2122: 0}) is None
+
+
+async def test_on_probe_data_preserves_travel_appoint_when_omitted(hass):
+    coord = _make_coord(hass, entry_id="probe_preserve_travel")
+    cached_vos = [{"planId": 1, "switcher": "1", "travelTime": "420", "travelWeekday": ["1", "3"]}]
+    coord._apply_update(
+        {
+            "realtime": {
+                "soc": 80,
+                "mainSwitcher": 1,
+                "appointmentTravelSetVOS": cached_vos,
+            }
+        }
+    )
+
+    # Probe omitting both keys must preserve existing travel appointment state/attributes
+    coord._on_probe_data({"soc": 81})
+    await hass.async_block_till_done()
+    rt = coord.data["realtime"]
+    assert rt["soc"] == 81
+    assert rt["mainSwitcher"] == 1
+    assert rt["appointmentTravelSetVOS"] == cached_vos
+
+    # Probe explicitly reporting mainSwitcher=0 clears stale appointmentTravelSetVOS when absent
+    coord._on_probe_data({"soc": 82, "mainSwitcher": 0})
+    await hass.async_block_till_done()
+    rt2 = coord.data["realtime"]
+    assert rt2["mainSwitcher"] == 0
+    assert "appointmentTravelSetVOS" not in rt2
+
+
+async def test_apply_departure_schedule_schedules_post_settle_refresh(hass, monkeypatch):
+    coord = _make_coord(hass, entry_id="post_settle_travel")
+    coord.departure_weekly[1] = (True, 420)
+
+    calls: list[str] = []
+
+    async def fake_send(key: str, params: dict | None = None) -> str:
+        calls.append(f"send:{key}")
+        return "ok"
+
+    async def fake_settle() -> None:
+        calls.append("settle")
+
+    async def fake_query() -> dict:
+        calls.append("query")
+        if "settle" in calls:
+            return {
+                "mainSwitcher": 1,
+                "appointmentTravelSetVOS": [{"planId": 1, "switcher": "1", "travelTime": "360", "travelWeekday": ["1"]}],
+            }
+        return {"mainSwitcher": 0}
+
+    monkeypatch.setattr(coord, "async_send_command", fake_send)
+    monkeypatch.setattr(coord, "_settle_after_command", fake_settle)
+    monkeypatch.setattr(coord, "async_query_travel_appoint", fake_query)
+
+    await coord.async_apply_departure_schedule()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert calls == ["send:partenza_prog_on", "query", "settle", "query"]
+    assert coord.data["realtime"]["mainSwitcher"] == 1
+    assert coord.data["realtime"]["appointmentTravelSetVOS"][0]["travelWeekday"] == ["1"]
