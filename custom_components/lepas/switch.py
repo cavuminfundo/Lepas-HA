@@ -865,7 +865,7 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         "charge": lambda en: {"sync_charge": en},
         "native": lambda en: {"sync_native": en},
         "battery": lambda en: {"sync_battery": en},
-        "departure": lambda en: {"sync_charge": en, "sync_native": True, "sync_battery": True},
+        "departure": lambda en: {"sync_charge": en, "sync_native": False, "sync_battery": True},
     }
 
     def __init__(
@@ -1024,7 +1024,7 @@ class LepasWeeklyDepartureSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         self.coordinator.departure_weekly[self._day] = (enabled, mins)
         if hasattr(self.coordinator, "notify_schedule_changed"):
             self.coordinator.notify_schedule_changed(
-                sync_charge=enabled, sync_native=True, sync_battery=True
+                sync_charge=enabled, sync_native=False, sync_battery=True
             )
         self.async_write_ha_state()
 

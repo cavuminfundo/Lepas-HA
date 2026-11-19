@@ -916,7 +916,7 @@ async def test_native_departure_entities_restore_and_apply_button(
         assert sent[0][0] == "partenza_prog_on"
         assert sent[0][1]["mainSwitcher"] == "1"
 
-        # Turn off native sync & quick departure -> off sync when no departure active
+        # Turn off quick departure & weekday switches -> stays local draft until explicit Apply/Disable
         await hass.services.async_call(
             "switch",
             "turn_off",
@@ -930,7 +930,19 @@ async def test_native_departure_entities_restore_and_apply_button(
             blocking=True,
         )
         await hass.async_block_till_done(wait_background_tasks=True)
+        assert not any(k == "partenza_prog_off" for k, _ in sent)
+        assert coord.has_pending_departure_changes() is True
+
+        # Explicit apply when no departure is active sends partenza_prog_off & disables auto-sync
+        await hass.services.async_call(
+            "button",
+            "press",
+            {"entity_id": "button.lepas_apply_departure_schedule"},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
         assert any(k == "partenza_prog_off" for k, _ in sent)
+        assert coord.native_departure_sync is False
 
         sent.clear()
         await hass.services.async_call(
@@ -1114,7 +1126,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
         )
         assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
 
-        # LepasWeeklyDepartureSwitch: sync_charge=enabled, sync_native=True, sync_battery=True
+        # LepasWeeklyDepartureSwitch: sync_charge=enabled, sync_native=False (draft until Apply), sync_battery=True
         calls.clear()
         await hass.services.async_call(
             "switch",
@@ -1122,7 +1134,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
             {"entity_id": "switch.lepas_departure_mon_enabled"},
             blocking=True,
         )
-        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
         calls.clear()
         await hass.services.async_call(
             "switch",
@@ -1130,9 +1142,9 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
             {"entity_id": "switch.lepas_departure_mon_enabled"},
             blocking=True,
         )
-        assert calls == [{"sync_charge": True, "sync_native": True, "sync_battery": True}]
+        assert calls == [{"sync_charge": True, "sync_native": False, "sync_battery": True}]
 
-        # LepasWeeklyDepartureTime: sync_charge untouched when day disabled, sync_native=True, sync_battery=True
+        # LepasWeeklyDepartureTime: sync_charge untouched when day disabled, sync_native=False, sync_battery=True
         calls.clear()
         await hass.services.async_call(
             "time",
@@ -1140,9 +1152,9 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
             {"entity_id": "time.lepas_departure_tue_time", "time": "08:15:00"},
             blocking=True,
         )
-        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
 
-        # quick_departure switch off/on + quick_departure_time set_value
+        # quick_departure switch off/on + quick_departure_time set_value (draft until Apply/apply_native)
         calls.clear()
         await hass.services.async_call(
             "switch",
@@ -1150,7 +1162,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
             {"entity_id": "switch.lepas_quick_departure"},
             blocking=True,
         )
-        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
         calls.clear()
         await hass.services.async_call(
             "time",
@@ -1158,7 +1170,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
             {"entity_id": "time.lepas_quick_departure_time", "time": "09:10:00"},
             blocking=True,
         )
-        assert calls == [{"sync_charge": False, "sync_native": True, "sync_battery": True}]
+        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
     finally:
         await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()

@@ -9,7 +9,7 @@ arriva un dato live dall'auto.
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
@@ -895,6 +895,21 @@ class LepasDeparturePlan(_LepasRestoreSensor):
     def __init__(self, coord) -> None:
         super().__init__(coord, "Lepas Partenza programmata", "rt_partenza_programmata")
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None or not isinstance(last_state.attributes, Mapping):
+            return
+        raw_sig = last_state.attributes.get("applied_schedule_sig")
+        restore_fn = getattr(self.coordinator, "restore_applied_schedule_sig", None)
+        if (
+            callable(restore_fn)
+            and getattr(self.coordinator, "_applied_schedule_sig", None) is None
+            and isinstance(raw_sig, str)
+            and raw_sig.strip()
+        ):
+            restore_fn(raw_sig)
+
     def _piano(self) -> dict | None:
         rt = self.coordinator.data.get("realtime") or {}
         piani = rt.get("appointmentTravelSetVOS")
@@ -986,13 +1001,23 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         piano = self._piano()
         lang = _ux_lang(getattr(self, "hass", None))
         txt = _UX_TEXT[lang]
+        has_pending_fn = getattr(self.coordinator, "has_pending_departure_changes", None)
+        pending_attrs = (
+            {
+                "has_pending_changes": has_pending_fn(),
+                "applied_schedule_sig": getattr(self.coordinator, "_applied_schedule_sig", None),
+            }
+            if callable(has_pending_fn)
+            else {}
+        )
         if piano is None:
             if not self._main_switcher_off():
-                return None
+                return pending_attrs or None
             return {
                 "attiva": False,
                 "riepilogo": txt["disabled"],
                 "synced_with_ha": self._synced_with_ha(None),
+                **pending_attrs,
             }
         giorni = piano.get("travelDate")
         giorni = list(giorni) if isinstance(giorni, list) else []
@@ -1012,6 +1037,7 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         else:
             attrs["riepilogo"] = f"{txt['disabled']} ({summary})" if summary else txt["disabled"]
         attrs["synced_with_ha"] = self._synced_with_ha(piano)
+        attrs.update(pending_attrs)
         return attrs
 
 

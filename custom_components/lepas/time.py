@@ -147,7 +147,7 @@ class LepasConfigTime(LepasEntity, TimeEntity, RestoreEntity):
                     is_quick
                     and bool(getattr(self.coordinator, "quick_departure_enabled", False))
                 ),
-                sync_native=is_quick,
+                sync_native=False,
                 sync_battery=is_quick,
             )
         self.async_write_ha_state()
@@ -201,6 +201,6 @@ class LepasWeeklyDepartureTime(LepasEntity, TimeEntity, RestoreEntity):
         enabled = self._push_minutes(cleaned.hour * 60 + cleaned.minute)
         if hasattr(self.coordinator, "notify_schedule_changed"):
             self.coordinator.notify_schedule_changed(
-                sync_charge=bool(enabled), sync_native=True, sync_battery=True
+                sync_charge=bool(enabled), sync_native=False, sync_battery=True
             )
         self.async_write_ha_state()

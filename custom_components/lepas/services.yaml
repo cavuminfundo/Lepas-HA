@@ -130,3 +130,15 @@ set_battery_pack_heat:
       required: false
       selector:
         boolean:
+
+disable_departure_schedule:
+  name: Disable departure schedule
+  description: Disable the active departure schedule on the vehicle and turn off all scheduled departure switches in Home Assistant.
+  fields:
+    entry_id:
+      name: Vehicle entry
+      description: Config entry ID of the vehicle (optional when only one vehicle is configured).
+      required: false
+      selector:
+        config_entry:
+          integration: lepas

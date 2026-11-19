@@ -589,6 +589,13 @@ class MiniElement extends MiniNodeContainer {
     if (this._disabled) this._attrs.disabled = "";
     else delete this._attrs.disabled;
   }
+  get hidden() {
+    return this.hasAttribute("hidden");
+  }
+  set hidden(v) {
+    if (v) this.setAttribute("hidden", "");
+    else this.removeAttribute("hidden");
+  }
   attachShadow() {
     if (!this.shadowRoot) {
       this.shadowRoot = new MiniShadowRoot(this);
@@ -645,7 +652,7 @@ class MiniElement extends MiniNodeContainer {
   }
   get outerHTML() {
     const attrEntries = Object.entries(this._attrs).map(([k, v]) =>
-      v === "" && (k === "checked" || k === "disabled" || k === "selected" || k === "open")
+      v === "" && (k === "checked" || k === "disabled" || k === "hidden" || k === "selected" || k === "open")
         ? k
         : `${k}="${escapeAttr(v)}"`
     );
@@ -911,16 +918,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.23.0");
+  assert.equal(h.CARD_VERSION, "1.24.0");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.23.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.24.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.23.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.24.0`
     );
   }
 
@@ -939,7 +946,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.23.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.24.0`
     );
   }
 
@@ -2037,6 +2044,8 @@ test("v1.21.0 IT/EN/NL i18n labels for native departure, battery heat, and all 1
     "tomorrow",
     "departureActive",
     "noScheduledDeparture",
+    "departureStatus",
+    "disableDeparturePlan",
     "disableOnCar",
     "applyDeparture",
     "carDeparturePlan",
@@ -2152,6 +2161,7 @@ test("v1.22.0 CONFIRM_ACTIONS helper contract, dynamic departure label, fail-clo
     "remote_start",
     "apply_charging_schedule",
     "apply_departure_schedule",
+    "disable_departure_schedule",
     "unlock",
     "quick_unlock",
     "trunk_open",
@@ -2396,3 +2406,174 @@ test("v1.22.1 stopPropagation on internal controls, incremental dayEditor withou
   assert.equal(outerHost.scrollTop, 415, "scrollTop of Shadow DOM scrollable ancestor must be preserved across _render");
   await Promise.resolve();
 });
+
+test("v1.24.0 Departure status label vs Overview nextDeparture, 3-state button machine, hidden a11y, and null-safe schedDep", async () => {
+  const h = LepasCard._helpers;
+  assert.equal(h.getTexts("it").departureStatus, "Stato");
+  assert.equal(h.getTexts("en").departureStatus, "Status");
+  assert.equal(h.getTexts("nl").departureStatus, "Status");
+  assert.equal(h.getTexts("it").disableDeparturePlan, "Disattiva piano");
+  assert.equal(h.getTexts("en").disableDeparturePlan, "Disable schedule");
+  assert.equal(h.getTexts("nl").disableDeparturePlan, "Schema uitschakelen");
+  assert.equal(h.CONFIRM_ACTIONS.disable_departure_schedule, true);
+
+  // (a) dep-summary row uses departureStatus ("Stato"/"Status") while Overview mOdoCard fallback keeps nextDeparture
+  const hassOverviewAndDep = makeFullHass({
+    "sensor.lepas_odometer": null,
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      orario: "06:35",
+      giorni: [5],
+      synced_with_ha: true,
+      has_pending_changes: true,
+    }),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it");
+  const cardIt = createCard({ layout: "compact", default_tab: "overview" }, hassOverviewAndDep);
+  const depSummaryRows = cardIt.shadowRoot.querySelectorAll(".dep-summary .dep-summary-row");
+  assert.equal(depSummaryRows.length, 2);
+  assert.equal(depSummaryRows[0].querySelector(".meta-inline span").textContent, "Stato");
+  assert.equal(cardIt.shadowRoot.querySelector('[data-bind="mOdoLbl"]').textContent, "Prossima partenza");
+
+  const cardEn = createCard({ layout: "compact", default_tab: "overview" }, makeFullHass({
+    "sensor.lepas_odometer": null,
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      orario: "06:35",
+      giorni: [5],
+      synced_with_ha: true,
+      has_pending_changes: true,
+    }),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "en"));
+  assert.equal(cardEn.shadowRoot.querySelector(".dep-summary .dep-summary-row .meta-inline span").textContent, "Status");
+  assert.equal(cardEn.shadowRoot.querySelector('[data-bind="mOdoLbl"]').textContent, "Next departure");
+
+  // (b) has_pending_changes: true (even when synced_with_ha: true) + haHasActiveDep -> "Applica su auto"
+  const applyBtn = cardIt.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
+  assert.ok(applyBtn);
+  assert.equal(applyBtn.hidden, false);
+  assert.equal(applyBtn.classList.contains("hidden"), false);
+  assert.equal(applyBtn.classList.contains("is-primary"), true);
+  assert.equal(applyBtn.getAttribute("data-action-id"), "apply_departure_schedule");
+  assert.ok(applyBtn.textContent.includes("Applica su auto"));
+
+  // (c) has_pending_changes: false && synced_with_ha: true && carActive && haHasActiveDep -> "Disattiva piano" + lepas.disable_departure_schedule
+  const hassSynced = makeFullHass({
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      orario: "06:35",
+      giorni: [5],
+      synced_with_ha: true,
+      has_pending_changes: false,
+    }),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it");
+  for (const ent of Object.values(hassSynced.entities)) {
+    ent.config_entry_id = "entry_dep_123";
+  }
+  const card3State = createCard({ layout: "compact", default_tab: "charging" }, hassSynced);
+  const btn3 = card3State.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
+  assert.equal(btn3.hidden, false);
+  assert.equal(btn3.classList.contains("hidden"), false);
+  assert.equal(btn3.classList.contains("is-primary"), false);
+  assert.equal(btn3.getAttribute("data-action-id"), "disable_departure_schedule");
+  assert.equal(btn3.getAttribute("data-confirm-key"), "disable_departure_schedule");
+  assert.ok(btn3.textContent.includes("Disattiva piano"));
+
+  const dlg = card3State.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
+  btn3.click();
+  assert.equal(hassSynced.calls.length, 0, "Confirmation dialog must block immediate disable service call");
+  assert.equal(dlg.open, true);
+  assert.equal(card3State.shadowRoot.querySelector('[data-bind="confirmDialogAction"]').textContent, "Disattiva piano");
+  card3State.shadowRoot.querySelector('[data-dialog-action="confirm"]').click();
+  await Promise.resolve();
+  assert.equal(dlg.open, false);
+  assert.deepEqual(hassSynced.calls[0], {
+    domain: "lepas",
+    service: "disable_departure_schedule",
+    data: { entry_id: "entry_dep_123" },
+  });
+
+  // (c2) !haHasActiveDep && carActive && has_pending_changes: true -> "Disattiva piano" (disable_departure_schedule)
+  card3State.hass = makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "off"),
+    "switch.lepas_departure_mon_enabled": makeState("switch.lepas_departure_mon_enabled", "off"),
+    "switch.lepas_departure_wed_enabled": makeState("switch.lepas_departure_wed_enabled", "off"),
+    "switch.lepas_departure_fri_enabled": makeState("switch.lepas_departure_fri_enabled", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", { departure_at: null }),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      orario: "06:35",
+      giorni: [5],
+      synced_with_ha: false,
+      has_pending_changes: true,
+    }),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it");
+  const btnCarOnly = card3State.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
+  assert.equal(btnCarOnly.hidden, false);
+  assert.equal(btnCarOnly.classList.contains("hidden"), false);
+  assert.equal(btnCarOnly.getAttribute("data-action-id"), "disable_departure_schedule");
+  assert.ok(btnCarOnly.textContent.includes("Disattiva piano"));
+
+  // (d) Transition hidden=true <-> hidden=false (and .hidden class synced)
+  card3State.hass = makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "off"),
+    "switch.lepas_departure_mon_enabled": makeState("switch.lepas_departure_mon_enabled", "off"),
+    "switch.lepas_departure_wed_enabled": makeState("switch.lepas_departure_wed_enabled", "off"),
+    "switch.lepas_departure_fri_enabled": makeState("switch.lepas_departure_fri_enabled", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", { departure_at: null }),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+      synced_with_ha: true,
+      has_pending_changes: false,
+    }),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it");
+  const btnAfterHide = card3State.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
+  assert.equal(btnAfterHide.hidden, true);
+  assert.equal(btnAfterHide.classList.contains("hidden"), true);
+
+  card3State.hass = makeFullHass({
+    "switch.lepas_departure_fri_enabled": makeState("switch.lepas_departure_fri_enabled", "on"),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+      synced_with_ha: false,
+      has_pending_changes: true,
+    }),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it");
+  const btnAfterShow = card3State.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
+  assert.equal(btnAfterShow.hidden, false);
+  assert.equal(btnAfterShow.classList.contains("hidden"), false);
+  assert.equal(btnAfterShow.getAttribute("data-action-id"), "apply_departure_schedule");
+  assert.ok(btnAfterShow.textContent.includes("Applica su auto"));
+
+  // (e) schedDep absent or unavailable/unknown without TypeError (legacy fallback preserved)
+  const cardNoSchedDep = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "on"),
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it"));
+  const btnNoSched = cardNoSchedDep.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
+  assert.equal(btnNoSched.hidden, false);
+  assert.equal(btnNoSched.classList.contains("hidden"), false);
+  assert.equal(btnNoSched.getAttribute("data-action-id"), "apply_departure_schedule");
+
+  const unavailSchedState = makeState("sensor.lepas_scheduled_departure", "unavailable");
+  delete unavailSchedState.attributes;
+  const cardUnavailSched = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "off"),
+    "switch.lepas_departure_mon_enabled": makeState("switch.lepas_departure_mon_enabled", "off"),
+    "switch.lepas_departure_wed_enabled": makeState("switch.lepas_departure_wed_enabled", "off"),
+    "switch.lepas_departure_fri_enabled": makeState("switch.lepas_departure_fri_enabled", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", { departure_at: null }),
+    "sensor.lepas_scheduled_departure": unavailSchedState,
+    "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
+  }, "it"));
+  assert.equal(cardUnavailSched.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "—");
+  const btnUnavail = cardUnavailSched.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
+  assert.equal(btnUnavail.hidden, true);
+  assert.equal(btnUnavail.classList.contains("hidden"), true);
+});
+

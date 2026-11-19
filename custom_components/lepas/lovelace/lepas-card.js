@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.23.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.24.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.23.0";
+  var CARD_VERSION = "1.24.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.23.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.23.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.23.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.23.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.23.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.24.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.24.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.24.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.24.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.24.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.23.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.24.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -102,6 +102,7 @@
     remote_start: true,
     apply_charging_schedule: true,
     apply_departure_schedule: true,
+    disable_departure_schedule: true,
     unlock: true,
     quick_unlock: true,
     trunk_open: true,
@@ -211,6 +212,7 @@
       pendingSync: "Da sincronizzare",
       daysFallback2131: "Ripiego tutti i giorni (permesso 2131)",
       departures: "Partenze programmate",
+      departureStatus: "Stato",
       nextDeparture: "Prossima partenza",
       quickDeparture: "Partenza rapida",
       syncCharge: "Allinea ricarica",
@@ -259,6 +261,7 @@
       securityGroup: "Sicurezza e posizione",
       applyDeparture: "Applica su auto",
       disableOnCar: "Disattiva su auto",
+      disableDeparturePlan: "Disattiva piano",
       carDeparturePlan: "Prossima partenza pianificata",
       noScheduledDeparture: "Nessuna partenza programmata",
       depClimateExtras: "Extra clima alla partenza",
@@ -378,6 +381,7 @@
       pendingSync: "Pending sync",
       daysFallback2131: "All-days fallback (permission 2131)",
       departures: "Departure scheduler",
+      departureStatus: "Status",
       nextDeparture: "Next departure",
       quickDeparture: "Quick departure",
       syncCharge: "Sync charging",
@@ -426,6 +430,7 @@
       securityGroup: "Security and location",
       applyDeparture: "Apply to car",
       disableOnCar: "Disable on car",
+      disableDeparturePlan: "Disable schedule",
       carDeparturePlan: "Next scheduled departure",
       noScheduledDeparture: "No scheduled departure",
       depClimateExtras: "Departure climate extras",
@@ -545,6 +550,7 @@
       pendingSync: "Wacht op sync",
       daysFallback2131: "Alle dagen (permissie 2131)",
       departures: "Vertrekschema",
+      departureStatus: "Status",
       nextDeparture: "Volgend vertrek",
       quickDeparture: "Snel vertrek",
       syncCharge: "Laden synchroniseren",
@@ -593,6 +599,7 @@
       securityGroup: "Beveiliging en locatie",
       applyDeparture: "Toepassen op auto",
       disableOnCar: "Uitschakelen op auto",
+      disableDeparturePlan: "Schema uitschakelen",
       carDeparturePlan: "Volgend gepland vertrek",
       noScheduledDeparture: "Geen gepland vertrek",
       depClimateExtras: "Extra vertrekklimaat",
@@ -1364,7 +1371,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.23.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.24.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -2285,9 +2292,9 @@
         warns.push({ id: lock.id, text: t.ajarLocked, amber: true });
       }
 
+      var sdRawAttrs = (schedDep && schedDep.s && !this._dead(schedDep.s) && schedDep.s.attributes) ? schedDep.s.attributes : {};
       var carActive = false;
       if (schedDep && schedDep.s && !this._dead(schedDep.s)) {
-        var sdRawAttrs = schedDep.s.attributes || {};
         if (typeof sdRawAttrs.attiva === "boolean") {
           carActive = sdRawAttrs.attiva;
         } else {
@@ -2397,6 +2404,15 @@
           true,
           "apply_departure_schedule",
           haHasActiveDep ? t.applyDeparture : t.disableOnCar
+        );
+        regAction(
+          "disable_departure_schedule",
+          "lepas",
+          "disable_departure_schedule",
+          this._currentEntryId ? { entry_id: this._currentEntryId } : {},
+          true,
+          "disable_departure_schedule",
+          t.disableDeparturePlan
         );
       }
 
@@ -2945,7 +2961,7 @@
 
       var depSummaryHtml = (ctx.nextDep || ctx.schedDep) ? (
         '<div class="dep-summary">' +
-          (ctx.nextDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.nextDeparture) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
+          (ctx.nextDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.departureStatus) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
           (ctx.schedDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.schedDep.id) + '"><span class="meta-inline">' + svgIcon("calendar", "meta-ico") + "<span>" + self._h(t.carDeparturePlan) + '</span></span><span class="info-val num" data-bind="schedDepText"></span></div>' : "") +
         "</div>"
       ) : "";
@@ -3774,50 +3790,59 @@
       }
 
       // Car scheduled departure readout & adaptive Apply/Disable on car button
+      var sdRawAttrs = (vm.schedDep && vm.schedDep.s && !this._dead(vm.schedDep.s) && vm.schedDep.s.attributes)
+        ? vm.schedDep.s.attributes
+        : {};
       var schedDepTxt = root.querySelector('[data-bind="schedDepText"]');
       if (schedDepTxt && vm.schedDep) {
         if (this._dead(vm.schedDep.s)) {
           schedDepTxt.textContent = "—";
         } else if (carActive) {
-          var sdAttrsActive = vm.schedDep.s.attributes || {};
-          var rawOrario = sdAttrsActive.orario
-            ? String(sdAttrsActive.orario)
+          var rawOrario = sdRawAttrs.orario
+            ? String(sdRawAttrs.orario)
             : (typeof vm.schedDep.s.state === "string" && /^\d{1,2}:\d{2}$/.test(vm.schedDep.s.state.trim())
               ? vm.schedDep.s.state.trim()
               : "");
           schedDepTxt.textContent = rawOrario
-            ? formatCarNextDeparture(rawOrario, sdAttrsActive.giorni, new Date(), t)
-            : (sdAttrsActive.riepilogo ? String(sdAttrsActive.riepilogo) : String(vm.schedDep.s.state));
+            ? formatCarNextDeparture(rawOrario, sdRawAttrs.giorni, new Date(), t)
+            : (sdRawAttrs.riepilogo ? String(sdRawAttrs.riepilogo) : String(vm.schedDep.s.state));
         } else {
           schedDepTxt.textContent = t.noScheduledDeparture;
         }
       }
       var applyDepBtnEl = root.querySelector('[data-bind="applyDepBtn"]');
       if (applyDepBtnEl && vm.applyDepBtn) {
-        if (haHasActiveDep) {
+        var hasPending = typeof sdRawAttrs.has_pending_changes === "boolean" ? sdRawAttrs.has_pending_changes : null;
+        var isSynced = typeof sdRawAttrs.synced_with_ha === "boolean" ? sdRawAttrs.synced_with_ha : null;
+        var showDepBtn = function (label, actionId, variant, iconName) {
           applyDepBtnEl.classList.remove("hidden");
-          this._applyBtnState(
-            applyDepBtnEl,
-            t.applyDeparture,
-            "apply_departure_schedule",
-            "apply_departure_schedule",
-            "is-primary",
-            t,
-            "check"
-          );
+          applyDepBtnEl.hidden = false;
+          self._applyBtnState(applyDepBtnEl, label, actionId, actionId, variant, t, iconName);
+        };
+        if (hasPending !== null) {
+          if (!haHasActiveDep && !carActive) {
+            applyDepBtnEl.classList.add("hidden");
+            applyDepBtnEl.hidden = true;
+          } else if (hasPending || isSynced === false) {
+            if (haHasActiveDep) {
+              showDepBtn(t.applyDeparture, "apply_departure_schedule", "is-primary", "check");
+            } else {
+              showDepBtn(t.disableDeparturePlan, "disable_departure_schedule", "", "wake");
+            }
+          } else if (haHasActiveDep && !hasPending && isSynced === true && carActive) {
+            showDepBtn(t.disableDeparturePlan, "disable_departure_schedule", "", "wake");
+          } else if (haHasActiveDep) {
+            showDepBtn(t.applyDeparture, "apply_departure_schedule", "is-primary", "check");
+          } else {
+            showDepBtn(t.disableDeparturePlan, "disable_departure_schedule", "", "wake");
+          }
+        } else if (haHasActiveDep) {
+          showDepBtn(t.applyDeparture, "apply_departure_schedule", "is-primary", "check");
         } else if (carActive) {
-          applyDepBtnEl.classList.remove("hidden");
-          this._applyBtnState(
-            applyDepBtnEl,
-            t.disableOnCar,
-            "apply_departure_schedule",
-            "apply_departure_schedule",
-            "",
-            t,
-            "wake"
-          );
+          showDepBtn(t.disableOnCar, "apply_departure_schedule", "", "wake");
         } else {
           applyDepBtnEl.classList.add("hidden");
+          applyDepBtnEl.hidden = true;
         }
       }
 

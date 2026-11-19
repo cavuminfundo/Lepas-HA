@@ -1,15 +1,17 @@
 """Tests for native departure scheduling, battery pack heat, climate extras & services."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import fixtures as FX
 import pytest
+from homeassistant.core import State
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, mock_restore_cache
 
 from custom_components.lepas.const import (
     COMMANDS_AS_RICH_ENTITY,
@@ -457,11 +459,13 @@ async def test_quick_departure_hold_across_preclimate_and_expiry_in_all_modes(ha
     # Tick at 18:00 expires _quick_native_until and sends partenza_prog_off + battery_heat_off
     await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 18, 0, tzinfo=tz))
     assert coord._quick_native_until is None
+    assert coord.native_departure_sync is False
     assert [s[0] for s in sent[3:]] == ["partenza_prog_off", "battery_heat_off"]
     assert sent[-1][1] == {"switchState": "0", "startTime": "0"}
 
     # Now verify departure_climate_mode == "off" expires cleanly to weekly restore!
     sent.clear()
+    coord.native_departure_sync = True
     coord.departure_climate_mode = "off"
     coord.departure_weekly[2] = (True, 7 * 60)  # Tuesday 07:00
     monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 17, 40, tzinfo=tz))
@@ -496,7 +500,15 @@ async def test_notify_schedule_changed_isolation_and_stale_quick_hold_cleanup(ha
         sent.append(key)
         return "ok"
 
+    async def fast_settle() -> None:
+        return None
+
+    async def fake_query() -> None:
+        return None
+
     monkeypatch.setattr(coord, "async_send_command", fake_send)
+    monkeypatch.setattr(coord, "_settle_after_command", fast_settle)
+    monkeypatch.setattr(coord, "async_query_travel_appoint", fake_query)
     monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 5, 0, tzinfo=tz))
 
     # Boot restore: all sync flags default False -> clears stale hold, sends NO commands
@@ -526,6 +538,8 @@ async def test_read_only_queries_never_called_in_tick_or_passive_poll(hass, monk
     coord = _make_coord(hass, entry_id="no_poll_query")
     coord.native_departure_sync = True
     coord.sync_battery_heat_to_departure = True
+    # Already synced in OFF state so the idle tick does not emit a write command
+    coord._last_synced_native_dep_sig = ("0", 0, ())
 
     async def fake_send(key: str, params: dict | None = None) -> str:
         return "ok"
@@ -820,3 +834,524 @@ async def test_apply_departure_schedule_schedules_post_settle_refresh(hass, monk
     assert calls == ["send:partenza_prog_on", "query", "settle", "query"]
     assert coord.data["realtime"]["mainSwitcher"] == 1
     assert coord.data["realtime"]["appointmentTravelSetVOS"][0]["travelWeekday"] == ["1"]
+
+
+# ───────────────────────────── 8. Full-Plan Dirty Tracking, Disable & Lock ─────────────────────────────
+
+
+def _patch_entry_io(monkeypatch, sent: list[tuple[str, dict | None]], travel_resp: dict | None = None) -> None:
+    async def fake_send(self, key: str, params: dict | None = None) -> str:
+        sent.append((key, params))
+        return "ok"
+
+    async def no_backfill(self) -> None:
+        return None
+
+    async def fast_settle(self) -> None:
+        return None
+
+    async def fake_query(self) -> dict | None:
+        return travel_resp
+
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs", lambda self: (True, "ok"))
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_keepalive", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_telemetry_poll", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_drive_watch", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_ensure_vehicle_identity", no_backfill)
+    monkeypatch.setattr(LepasCoordinator, "async_send_command", fake_send)
+    monkeypatch.setattr(LepasCoordinator, "_settle_after_command", fast_settle)
+    monkeypatch.setattr(LepasCoordinator, "async_query_travel_appoint", fake_query)
+
+
+async def test_full_plan_dirty_tracking_friday_edit_while_thursday_synced(hass, cloud, monkeypatch):
+    rome = ZoneInfo("Europe/Rome")
+    hass.config.time_zone = "Europe/Rome"
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 19, 10, 0, tzinfo=rome))
+
+    sent: list[tuple[str, dict | None]] = []
+    # Thu 13:25 CET == 12:25 UTC (745 min) on [4]
+    travel_resp = {
+        "mainSwitcher": 1,
+        "appointmentTravelSetVOS": [
+            {"planId": 1, "switcher": "1", "travelTime": "745", "travelDate": [4]}
+        ],
+    }
+    _patch_entry_io(monkeypatch, sent, travel_resp=travel_resp)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=f"Lepas ({FX.VIN})",
+        unique_id=FX.VIN,
+        data={
+            CONF_VIN: FX.VIN,
+            CONF_TUSERID: FX.TUSERID,
+            "email": FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            DATA_CAPS_PROBED_V5: True,
+            DATA_VEHICLE_FEATURES: {
+                "scheduled_departure_control": True,
+                "scheduled_departure_custom_days": True,
+            },
+        },
+        entry_id="dirty_plan_entry",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        coord.departure_weekly[4] = (True, 13 * 60 + 25)
+        coord.departure_weekly[5] = (True, 6 * 60)
+        coord.departure_weekly[6] = (True, 6 * 60)
+
+        await coord.async_apply_departure_schedule()
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert coord.native_departure_sync is True
+        assert coord.has_pending_departure_changes() is False
+        dp = hass.states.get("sensor.lepas_scheduled_departure")
+        assert dp.attributes["synced_with_ha"] is True
+        assert dp.attributes["has_pending_changes"] is False
+        assert dp.attributes["applied_schedule_sig"] == coord.departure_schedule_signature()
+
+        # Editing Friday time and toggling Sunday stays local (0 TSP commands) and dirties full-plan sig
+        sent.clear()
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_departure_fri_time", "time": "07:30:00"},
+            blocking=True,
+        )
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.lepas_departure_sun_enabled"},
+            blocking=True,
+        )
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_departure_sun_enabled"},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert sent == []
+        assert coord.has_pending_departure_changes() is True
+        dp_dirty = hass.states.get("sensor.lepas_scheduled_departure")
+        assert dp_dirty.attributes["synced_with_ha"] is True
+        assert dp_dirty.attributes["has_pending_changes"] is True
+
+        # Editing an inactive weekday's time does NOT dirty the signature
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_departure_fri_time", "time": "06:00:00"},
+            blocking=True,
+        )
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_departure_sun_time", "time": "09:15:00"},
+            blocking=True,
+        )
+        assert coord.has_pending_departure_changes() is False
+
+        # When HA has no active schedule and official app already disabled the car -> False
+        for d in range(1, 8):
+            coord.departure_weekly[d] = (False, 420)
+        assert coord.has_pending_departure_changes() is True  # car still active
+        coord._apply_update({"realtime": {"mainSwitcher": 0}})
+        assert coord.has_pending_departure_changes() is False
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_tick_auto_advance_thursday_to_friday_saturday_and_draft_guard(hass, monkeypatch):
+    rome = ZoneInfo("Europe/Rome")
+    hass.config.time_zone = "Europe/Rome"
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 19, 10, 0, tzinfo=rome))
+
+    coord = _make_coord(
+        hass,
+        data={
+            DATA_VEHICLE_FEATURES: {
+                "scheduled_departure_control": True,
+                "scheduled_departure_custom_days": True,
+            }
+        },
+        entry_id="tick_advance",
+    )
+    coord.departure_climate_mode = "off"
+    coord.departure_weekly[4] = (True, 13 * 60 + 25)
+    coord.departure_weekly[5] = (True, 6 * 60)
+    coord.departure_weekly[6] = (True, 6 * 60)
+
+    sent: list[tuple[str, dict | None]] = []
+
+    async def fake_send(key: str, params: dict | None = None) -> str:
+        sent.append((key, params))
+        return "ok"
+
+    async def fast_settle() -> None:
+        return None
+
+    async def fake_query() -> dict:
+        if len(sent) >= 2:
+            return {
+                "mainSwitcher": 1,
+                "appointmentTravelSetVOS": [
+                    {"planId": 1, "switcher": "1", "travelTime": "300", "travelDate": [5, 6]}
+                ],
+            }
+        return {
+            "mainSwitcher": 1,
+            "appointmentTravelSetVOS": [
+                {"planId": 1, "switcher": "1", "travelTime": "745", "travelDate": [4]}
+            ],
+        }
+
+    monkeypatch.setattr(coord, "async_send_command", fake_send)
+    monkeypatch.setattr(coord, "_settle_after_command", fast_settle)
+    monkeypatch.setattr(coord, "async_query_travel_appoint", fake_query)
+
+    await coord.async_apply_departure_schedule()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(sent) == 1
+    assert coord.native_departure_sync is True
+
+    # Advance past Thu 13:25 CET -> auto-advances to Fri & Sat 06:00 CET (05:00 UTC = 300)
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 19, 13, 26, tzinfo=rome))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(sent) == 2
+    assert sent[1][0] == "partenza_prog_on"
+    vo = sent[1][1]["appointmentTravelAOS"][0]
+    assert vo["travelTime"] == "300"
+    assert vo["travelWeekday"] == ["5", "6"]
+    assert coord.data["realtime"]["appointmentTravelSetVOS"][0]["travelTime"] == "300"
+
+    # Unapplied weekly draft (e.g. Friday time changed or all days toggled OFF) must NOT be pushed by tick
+    coord.departure_weekly[5] = (True, 7 * 60 + 30)
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 19, 13, 27, tzinfo=rome))
+    assert len(sent) == 2
+
+    for d in range(1, 8):
+        coord.departure_weekly[d] = (False, 420)
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 19, 13, 28, tzinfo=rome))
+    assert len(sent) == 2
+
+
+async def test_disable_departure_schedule_success_and_fail_closed(hass, monkeypatch):
+    tz = timezone.utc
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 6, 0, tzinfo=tz))
+    coord = _make_coord(hass, entry_id="disable_dep")
+    coord.departure_weekly[1] = (True, 7 * 60)
+    coord.departure_weekly[5] = (True, 8 * 60 + 15)
+    coord.quick_departure_enabled = True
+    coord.quick_departure_minutes = 18 * 60
+    coord.native_departure_sync = True
+    coord.sync_battery_heat_to_departure = True
+    coord.battery_heat_enabled = True
+    coord._applied_schedule_sig = coord.departure_schedule_signature()
+
+    async def fail_send(key: str, params: dict | None = None) -> str:
+        raise HomeAssistantError("vehicle unreachable")
+
+    monkeypatch.setattr(coord, "async_send_command", fail_send)
+    with pytest.raises(HomeAssistantError):
+        await coord.async_disable_departure_schedule()
+
+    # Fail-closed: HA state and signature preserved on command error
+    assert coord.departure_weekly[1] == (True, 7 * 60)
+    assert coord.departure_weekly[5] == (True, 8 * 60 + 15)
+    assert coord.quick_departure_enabled is True
+    assert coord.native_departure_sync is True
+    assert coord._applied_schedule_sig is not None
+
+    sent: list[tuple[str, dict | None]] = []
+
+    async def ok_send(key: str, params: dict | None = None) -> str:
+        sent.append((key, params))
+        return "ok"
+
+    async def fast_settle() -> None:
+        return None
+
+    async def fake_query() -> dict:
+        return {"mainSwitcher": 0}
+
+    monkeypatch.setattr(coord, "async_send_command", ok_send)
+    monkeypatch.setattr(coord, "_settle_after_command", fast_settle)
+    monkeypatch.setattr(coord, "async_query_travel_appoint", fake_query)
+
+    await coord.async_disable_departure_schedule()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert [k for k, _ in sent] == ["partenza_prog_off", "battery_heat_off"]
+    for d in range(1, 8):
+        assert coord.departure_weekly[d][0] is False
+    assert coord.departure_weekly[1][1] == 7 * 60
+    assert coord.departure_weekly[5][1] == 8 * 60 + 15
+    assert coord.quick_departure_enabled is False
+    assert coord.native_departure_sync is False
+    assert coord._applied_schedule_sig is None
+    assert coord._last_synced_native_dep_sig is None
+    assert coord._last_attempted_native_dep_sig is None
+    assert coord._quick_applied_native is False
+    assert coord.battery_heat_enabled is False
+    assert coord.data["realtime"]["mainSwitcher"] == 0
+    assert coord.has_pending_departure_changes() is False
+
+
+async def test_quick_departure_service_apply_native_preserves_manual_sync_and_expiry(hass, monkeypatch):
+    tz = timezone.utc
+    coord = _make_coord(hass, entry_id="quick_apply_native")
+    coord.departure_climate_mode = "off"
+
+    sent: list[tuple[str, dict | None]] = []
+    fail_next = False
+
+    async def fake_send(key: str, params: dict | None = None) -> str:
+        if fail_next:
+            raise HomeAssistantError("transient failure")
+        sent.append((key, params))
+        return "ok"
+
+    async def fast_settle() -> None:
+        return None
+
+    async def fake_query() -> dict:
+        return {"mainSwitcher": 0}
+
+    monkeypatch.setattr(coord, "async_send_command", fake_send)
+    monkeypatch.setattr(coord, "_settle_after_command", fast_settle)
+    monkeypatch.setattr(coord, "async_query_travel_appoint", fake_query)
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 17, 40, tzinfo=tz))
+
+    # 1) apply_native=True with native_departure_sync=False preserves manual sync=False and arms _quick_applied_native
+    await coord.async_set_quick_departure(18 * 60, True, apply_native=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coord.native_departure_sync is False
+    assert coord._quick_applied_native is True
+    assert coord._applied_schedule_sig == coord.departure_schedule_signature()
+    assert [k for k, _ in sent] == ["partenza_prog_on"]
+
+    # 2) Expiry send failure keeps _quick_applied_native for retry on next tick
+    fail_next = True
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 18, 0, tzinfo=tz))
+    assert coord.quick_departure_enabled is False
+    assert coord._quick_applied_native is True
+    assert len(sent) == 1
+
+    fail_next = False
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 18, 1, tzinfo=tz))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert [k for k, _ in sent] == ["partenza_prog_on", "partenza_prog_off"]
+    assert coord._quick_applied_native is False
+    assert coord._applied_schedule_sig is None
+    assert coord.native_departure_sync is False
+
+    # 3) Expiry with dirty unapplied weekly draft (occ is not None) clears _quick_applied_native without leaking draft
+    sent.clear()
+    coord.departure_weekly[1] = (True, 7 * 60)
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 17, 40, tzinfo=tz))
+    await coord.async_apply_departure_schedule()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    coord.native_departure_sync = False
+    await coord.async_set_quick_departure(18 * 60, True, apply_native=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coord._quick_applied_native is True
+    coord.departure_weekly[5] = (True, 8 * 60)  # unapplied weekly draft edited after quick apply
+
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 18, 0, tzinfo=tz))
+    assert coord._quick_applied_native is False
+    assert [k for k, _ in sent] == ["partenza_prog_on", "partenza_prog_on"]
+    assert coord.has_pending_departure_changes() is True
+
+    # 4) apply_native=None with native_departure_sync=True updates _applied_schedule_sig only when weekly is clean
+    sent.clear()
+    for d in range(1, 8):
+        coord.departure_weekly[d] = (False, 420)
+    coord.departure_weekly[1] = (True, 7 * 60)
+    await coord.async_apply_departure_schedule()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coord.native_departure_sync is True
+
+    await coord.async_set_quick_departure(18 * 60, True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coord._applied_schedule_sig == coord.departure_schedule_signature()
+    assert coord.has_pending_departure_changes() is False
+
+    coord.departure_weekly[5] = (True, 8 * 60)
+    prev_sig = coord._applied_schedule_sig
+    await coord.async_set_quick_departure(18 * 60 + 30, True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coord._applied_schedule_sig == prev_sig
+    assert coord.has_pending_departure_changes() is True
+
+
+async def test_departure_lock_prevents_tick_race_during_disable(hass, monkeypatch):
+    tz = timezone.utc
+    coord = _make_coord(hass, entry_id="lock_race")
+    coord.quick_departure_enabled = True
+    coord.quick_departure_minutes = 18 * 60
+    coord._quick_target_at = datetime(2026, 11, 16, 18, 0, tzinfo=tz)
+    coord.native_departure_sync = True
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    sent: list[str] = []
+
+    async def slow_send(key: str, params: dict | None = None) -> str:
+        sent.append(key)
+        entered.set()
+        await release.wait()
+        return "ok"
+
+    async def fast_settle() -> None:
+        return None
+
+    async def fake_query() -> dict:
+        return {"mainSwitcher": 0}
+
+    monkeypatch.setattr(coord, "async_send_command", slow_send)
+    monkeypatch.setattr(coord, "_settle_after_command", fast_settle)
+    monkeypatch.setattr(coord, "async_query_travel_appoint", fake_query)
+
+    disable_task = asyncio.create_task(coord.async_disable_departure_schedule())
+    await entered.wait()
+
+    # Concurrent tick while _departure_lock is held must return immediately without sending or mutating
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 18, 1, tzinfo=tz))
+    assert sent == ["partenza_prog_off"]
+    assert coord.quick_departure_enabled is True
+
+    release.set()
+    await disable_task
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent == ["partenza_prog_off"]
+    assert coord.quick_departure_enabled is False
+    assert coord.native_departure_sync is False
+
+
+async def test_departure_plan_sensor_exposes_and_restores_applied_sig(hass, cloud, monkeypatch):
+    tz = timezone.utc
+    hass.config.time_zone = "UTC"
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 6, 0, tzinfo=tz))
+
+    applied_sig = (
+        '{"q":[false,null],"w":[[1,true,420],[2,false,null],[3,false,null],'
+        '[4,false,null],[5,false,null],[6,false,null],[7,false,null]]}'
+    )
+    mock_restore_cache(
+        hass,
+        [
+            State("switch.lepas_departure_mon_enabled", "on"),
+            State("time.lepas_departure_mon_time", "07:00:00"),
+            State(
+                "sensor.lepas_scheduled_departure",
+                "07:00",
+                {"applied_schedule_sig": applied_sig},
+            ),
+        ],
+    )
+    sent: list[tuple[str, dict | None]] = []
+    _patch_entry_io(monkeypatch, sent)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=f"Lepas ({FX.VIN})",
+        unique_id=FX.VIN,
+        data={
+            CONF_VIN: FX.VIN,
+            CONF_TUSERID: FX.TUSERID,
+            "email": FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            DATA_CAPS_PROBED_V5: True,
+            DATA_VEHICLE_FEATURES: {"scheduled_departure_control": True},
+        },
+        entry_id="restore_sig_entry",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        # Before any realtime payload arrives, attributes expose restored sig & clean dirty flag
+        assert coord._applied_schedule_sig == applied_sig
+        assert coord.departure_schedule_signature() == applied_sig
+        dp = hass.states.get("sensor.lepas_scheduled_departure")
+        assert dp.attributes["applied_schedule_sig"] == applied_sig
+        assert dp.attributes["has_pending_changes"] is False
+
+        # Modifying local time sets has_pending_changes=True immediately even without realtime
+        await hass.services.async_call(
+            "time",
+            "set_value",
+            {"entity_id": "time.lepas_departure_mon_time", "time": "07:30:00"},
+            blocking=True,
+        )
+        dp_after = hass.states.get("sensor.lepas_scheduled_departure")
+        assert dp_after.attributes["has_pending_changes"] is True
+        assert dp_after.attributes["applied_schedule_sig"] == applied_sig
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_disable_departure_schedule_service_registered_and_unregistered(hass, cloud, monkeypatch):
+    tz = timezone.utc
+    hass.config.time_zone = "UTC"
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 6, 0, tzinfo=tz))
+
+    sent: list[tuple[str, dict | None]] = []
+    _patch_entry_io(monkeypatch, sent, travel_resp={"mainSwitcher": 0})
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=f"Lepas ({FX.VIN})",
+        unique_id=FX.VIN,
+        data={
+            CONF_VIN: FX.VIN,
+            CONF_TUSERID: FX.TUSERID,
+            "email": FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            DATA_CAPS_PROBED_V5: True,
+            DATA_VEHICLE_FEATURES: {"scheduled_departure_control": True},
+        },
+        entry_id="disable_svc_entry",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        assert hass.services.has_service(DOMAIN, "disable_departure_schedule")
+        coord.departure_weekly[1] = (True, 7 * 60)
+        coord.native_departure_sync = True
+        coord._applied_schedule_sig = coord.departure_schedule_signature()
+        coord.async_update_listeners()
+        await hass.async_block_till_done()
+
+        await hass.services.async_call(
+            DOMAIN,
+            "disable_departure_schedule",
+            {"entry_id": entry.entry_id},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert [k for k, _ in sent] == ["partenza_prog_off"]
+        assert hass.states.get("switch.lepas_departure_mon_enabled").state == "off"
+        assert hass.states.get("switch.lepas_native_departure_sync").state == "off"
+        assert coord._applied_schedule_sig is None
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert not hass.services.has_service(DOMAIN, "disable_departure_schedule")

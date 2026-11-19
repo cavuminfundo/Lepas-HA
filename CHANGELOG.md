@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.24.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Full-Plan Departure Dirty Tracking, Auto-Advance & `lepas.disable_departure_schedule` (`coordinator.py`, `sensor.py`, `switch.py`, `time.py`, `__init__.py`, `services.yaml`)**: Serialized departure mutations under `self._departure_lock` (`asyncio.Lock`), added canonical full-plan signature tracking (`departure_schedule_signature()` / `_applied_schedule_sig`) exposed and restored across restarts on `sensor.lepas_scheduled_departure` (`has_pending_changes`, `applied_schedule_sig`), kept weekly/quick UI edits local (`sync_native=False`) until applied, automatically enabled `native_departure_sync` on explicit **Apply to car** for cross-day auto-advance without leaking unapplied weekly drafts, and added the fail-closed `lepas.disable_departure_schedule` service to turn off the vehicle schedule, HA weekly/quick switches, and `native_departure_sync`.
+- **Lovelace Card 3-State Departure Button & Accessibility (`lepas-card.js`)**: Replaced the ambiguous scheduled-departure label with `departureStatus` (`"Status"` / `"Stato"`), registered `disable_departure_schedule` in `CONFIRM_ACTIONS` and card actions, implemented the null-safe ES5 3-state button machine (**Apply to car** / **Disable schedule** / hidden via both `.hidden` and `hidden`) driven by `has_pending_changes` and `synced_with_ha`, and bumped cache-busting assets to `?v=1.24.0`.
+
+### 🇮🇹 Italiano
+
+- **Tracciamento Modifiche sull'Intero Piano Partenza, Avanzamento Automatico & `lepas.disable_departure_schedule` (`coordinator.py`, `sensor.py`, `switch.py`, `time.py`, `__init__.py`, `services.yaml`)**: Serializzate le mutazioni partenza sotto `self._departure_lock` (`asyncio.Lock`), introdotta la firma canonica dell'intero piano (`departure_schedule_signature()` / `_applied_schedule_sig`) esposta e ripristinata al riavvio su `sensor.lepas_scheduled_departure` (`has_pending_changes`, `applied_schedule_sig`), mantenute locali le modifiche UI su giorni/orari/rapida (`sync_native=False`) finché non vengono applicate, attivato automaticamente `native_departure_sync` alla pressione di **Applica su auto** per il passaggio automatico tra giorni senza inviare bozze settimanali non applicate, e aggiunto il servizio fail-closed `lepas.disable_departure_schedule` per spegnere auto, giorni/rapida HA e auto-sync.
+- **Pulsante Partenza a 3 Stati & Accessibilità nella Card Lovelace (`lepas-card.js`)**: Sostituita la dicitura nella prima riga di *Partenze programmate* con `departureStatus` (`"Stato"` / `"Status"`), registrata l'azione confermata `disable_departure_schedule` in `CONFIRM_ACTIONS`, implementata la macchina a 3 stati ES5 null-safe (**Applica su auto** / **Disattiva piano** / nascosto con `.hidden` e attributo `hidden`) guidata da `has_pending_changes` e `synced_with_ha`, con bump degli asset a `?v=1.24.0`.
+
 ## v1.23.0 — 2026-11-19
 
 ### 🇬🇧 English
