@@ -203,6 +203,23 @@ class LepasComfortSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Restor
         live = self._live_on()
         return live if live is not None else self._restored
 
+    def _handle_coordinator_update(self) -> None:
+        rejected = self._opt_value is not None and self._rifiuto_arrivato()
+        anchor = self._opt_anchor
+        super()._handle_coordinator_update()
+        if (
+            rejected
+            and self._exclusive is not None
+            and self._exclusive._opt_value is not None
+            and self._exclusive._opt_anchor == anchor
+        ):
+            self._exclusive._clear_optimistic()
+            if (
+                getattr(self._exclusive, "hass", None) is not None
+                and getattr(self._exclusive, "entity_id", None) is not None
+            ):
+                self._exclusive.async_write_ha_state()
+
     async def async_turn_on(self, **kwargs) -> None:
         # mutua esclusione: accendere questo spegne subito il gemello (es. aria↔caldo sedile)
         if self._exclusive is not None:

@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.25.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Immediate Optimism Cancellation on ECU `reason` & Car-in-Use Detection (`coordinator.py`, `entity.py`, `switch.py`, `climate.py`, `binary_sensor.py`)**: Mapped ECU `reason` `modelId` rejections via `REASON_FIELD_MAP` and `_extract_rejected_fields()` in `LepasCoordinator` while preserving `_solo_clima` (`0:95`) tolerance, cleared stuck optimistic switches/climate states immediately via `LepasOptimisticMixin._rifiuto_arrivato()` (including mutually exclusive `LepasComfortSwitch` twins and `LepasClimate`), introduced an HV session latch (`_hv_lock`, `_evaluate_car_in_use()`, `is_car_in_use()`) that separates parked pre-climate/charging from driving/engine-on/red-light stops and exposes `car_in_use` on `binary_sensor.lepas_high_voltage_active` and `climate.lepas_climate` without adding entities, and serialized `_hv_followup_cb` / `_schedule_probe_on_loop` against `_poll_busy`.
+- **Climate Tab `car_in_use` Lockout, Command Outcome Sync & Departure UX Option 1 (`lepas-card.js`)**: Added the `carInUseBanner` (`role="status"`), non-sticky disabling with translucent `⊘` / `Car in use` overlay and disabled-click guard on Climate tab comfort controls when `car_in_use === true`, synced `[data-bind="cmdResultBadge"]` across both Overview and Climate tabs (`climateCmdBar`), implemented Departure UX Option 1 (`Next departure` + `On car` with `Synced` / `To apply (car: ...)` / `Disabled` states) while removing the `nextDepText` override, and bumped assets to `?v=1.25.0`.
+
+### 🇮🇹 Italiano
+
+- **Annullamento Immediato Ottimismo su `reason` & Rilevamento "Auto in uso" (`coordinator.py`, `entity.py`, `switch.py`, `climate.py`, `binary_sensor.py`)**: Mappati i `modelId` di rifiuto centralina tramite `REASON_FIELD_MAP` e `_extract_rejected_fields()` in `LepasCoordinator` preservando la tolleranza `_solo_clima` (`0:95`), azzerato subito lo stato ottimistico bloccato via `LepasOptimisticMixin._rifiuto_arrivato()` (inclusa la mutua esclusione su `LepasComfortSwitch` e `LepasClimate`), introdotto il latch di sessione HV (`_hv_lock`, `_evaluate_car_in_use()`, `is_car_in_use()`) che distingue pre-clima/ricarica da marcia/motore/semaforo esponendo l'attributo `car_in_use` su `binary_sensor.lepas_high_voltage_active` e `climate.lepas_climate` senza nuove entità, e protetto `_hv_followup_cb` / `_schedule_probe_on_loop` con `_poll_busy`.
+- **Blocco Controlli Tab Clima su `car_in_use`, Badge Esito Comandi & UX Partenze Opzione 1 (`lepas-card.js`)**: Aggiunto il banner `carInUseBanner` (`role="status"`), la disabilitazione non sticky con velo traslucido `⊘` / `Auto in uso` e guardia click su tutti i comandi comfort della tab Clima con `car_in_use === true`, sincronizzato `[data-bind="cmdResultBadge"]` tra Plancia e tab Clima (`climateCmdBar`), applicata l'Opzione 1 UX Partenze (`Prossima partenza` + `Su auto` con stati `Sincronizzata` / `Da applicare (auto: ...)` / `Disattivata`) rimuovendo l'override su `nextDepText`, con bump degli asset a `?v=1.25.0`.
+
 ## v1.24.0 — 2026-11-19
 
 ### 🇬🇧 English

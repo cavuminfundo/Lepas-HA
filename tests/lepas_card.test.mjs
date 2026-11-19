@@ -918,16 +918,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.24.0");
+  assert.equal(h.CARD_VERSION, "1.25.0");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.24.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.25.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.24.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.25.0`
     );
   }
 
@@ -946,7 +946,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.24.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.25.0`
     );
   }
 
@@ -1787,10 +1787,11 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
   const schedTxt = card.shadowRoot.querySelector('[data-bind="schedDepText"]');
   const applyBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
   assert.ok(nextTxt && schedTxt && applyBtn);
-  assert.equal(nextTxt.textContent, "Attiva", "Prossima partenza must show 'Attiva' when car has active plan and HA has none");
+  assert.equal(nextTxt.textContent, "Disattivata", "Prossima partenza must preserve sensor.lepas_next_departure state without overriding to 'Attiva'");
   assert.equal(applyBtn.classList.contains("hidden"), false);
-  assert.ok(schedTxt.textContent.includes("06:35"), `Expected next car departure time 06:35, got: ${schedTxt.textContent}`);
-  assert.equal(schedTxt.textContent.includes("lun, mar"), false, `Car departure readout must show next occurrence instead of full weekday list, got: ${schedTxt.textContent}`);
+  assert.equal(schedTxt.textContent, "Da applicare (auto: 06:35)", `Expected Option 1 pending car time readout, got: ${schedTxt.textContent}`);
+  assert.equal(schedTxt.classList.contains("is-amber"), true);
+  assert.equal(schedTxt.textContent.includes("lun, mar"), false, `Car departure readout must not render full weekday list, got: ${schedTxt.textContent}`);
   assert.ok(applyBtn.textContent.includes("Disattiva su auto"), `Expected 'Disattiva su auto' when HA has no active departures, got: ${applyBtn.textContent}`);
 
   // Clicking button opens confirm dialog with "Disattiva su auto", then confirming calls button.press
@@ -1808,7 +1809,7 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
     data: { entity_id: "button.lepas_apply_departure_schedule" },
   });
 
-  // When BOTH HA and car have no active departure -> button is hidden and schedDepText shows noScheduledDeparture
+  // When BOTH HA and car have no active departure -> button is hidden and schedDepText shows depDisabled
   card.hass = makeFullHass({
     "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "off"),
     "switch.lepas_departure_mon_enabled": makeState("switch.lepas_departure_mon_enabled", "off"),
@@ -1828,9 +1829,9 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
   assert.ok(bothOffBtn);
   assert.equal(bothOffBtn.classList.contains("hidden"), true, "Button must be hidden when both HA and car have no active plan");
   assert.equal(card.shadowRoot.querySelector('[data-bind="nextDepText"]').textContent, "Disattivata");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Nessuna partenza programmata");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Disattivata");
 
-  // When HA has an active departure & car plan is disabled -> shows "Nessuna partenza programmata" & "Applica su auto"
+  // When HA has an active departure & car plan is disabled (legacy without pending attrs) -> shows "Disattivata" & "Applica su auto"
   card.hass = makeFullHass({
     "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "on"),
     "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
@@ -1842,7 +1843,7 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
   }, "it");
   const schedOffTxt = card.shadowRoot.querySelector('[data-bind="schedDepText"]');
   const applyOnBtn = card.shadowRoot.querySelector('[data-action-id="apply_departure_schedule"]');
-  assert.equal(schedOffTxt.textContent, "Nessuna partenza programmata");
+  assert.equal(schedOffTxt.textContent, "Disattivata");
   assert.equal(applyOnBtn.classList.contains("hidden"), false);
   assert.ok(applyOnBtn.textContent.includes("Applica su auto"), `Expected 'Applica su auto' when HA has active departure, got: ${applyOnBtn.textContent}`);
 
@@ -1852,7 +1853,7 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
       attiva: false,
     }),
   }, "nl"));
-  assert.equal(nlCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Geen gepland vertrek");
+  assert.equal(nlCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Uitgeschakeld");
 
   // Graceful omission when entities absent
   const minimalCard = createCard({ default_tab: "charging" }, makeFullHass({}, "it"));
@@ -2049,6 +2050,14 @@ test("v1.21.0 IT/EN/NL i18n labels for native departure, battery heat, and all 1
     "disableOnCar",
     "applyDeparture",
     "carDeparturePlan",
+    "onCar",
+    "syncedDep",
+    "toApplyCarPrefix",
+    "carWord",
+    "carOff",
+    "depDisabled",
+    "carInUseBanner",
+    "inUseShort",
     "depClimateExtras",
     "batteryPreheat",
     "batteryPreheatTime",
@@ -2417,7 +2426,7 @@ test("v1.24.0 Departure status label vs Overview nextDeparture, 3-state button m
   assert.equal(h.getTexts("nl").disableDeparturePlan, "Schema uitschakelen");
   assert.equal(h.CONFIRM_ACTIONS.disable_departure_schedule, true);
 
-  // (a) dep-summary row uses departureStatus ("Stato"/"Status") while Overview mOdoCard fallback keeps nextDeparture
+  // (a) dep-summary rows use nextDeparture ("Prossima partenza"/"Next departure") + onCar ("Su auto"/"On car") while Overview mOdoCard fallback keeps nextDeparture
   const hassOverviewAndDep = makeFullHass({
     "sensor.lepas_odometer": null,
     "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
@@ -2432,7 +2441,8 @@ test("v1.24.0 Departure status label vs Overview nextDeparture, 3-state button m
   const cardIt = createCard({ layout: "compact", default_tab: "overview" }, hassOverviewAndDep);
   const depSummaryRows = cardIt.shadowRoot.querySelectorAll(".dep-summary .dep-summary-row");
   assert.equal(depSummaryRows.length, 2);
-  assert.equal(depSummaryRows[0].querySelector(".meta-inline span").textContent, "Stato");
+  assert.equal(depSummaryRows[0].querySelector(".meta-inline span").textContent, "Prossima partenza");
+  assert.equal(depSummaryRows[1].querySelector(".meta-inline span").textContent, "Su auto");
   assert.equal(cardIt.shadowRoot.querySelector('[data-bind="mOdoLbl"]').textContent, "Prossima partenza");
 
   const cardEn = createCard({ layout: "compact", default_tab: "overview" }, makeFullHass({
@@ -2446,7 +2456,9 @@ test("v1.24.0 Departure status label vs Overview nextDeparture, 3-state button m
     }),
     "button.lepas_apply_departure_schedule": makeState("button.lepas_apply_departure_schedule", "unknown"),
   }, "en"));
-  assert.equal(cardEn.shadowRoot.querySelector(".dep-summary .dep-summary-row .meta-inline span").textContent, "Status");
+  const depSummaryRowsEn = cardEn.shadowRoot.querySelectorAll(".dep-summary .dep-summary-row");
+  assert.equal(depSummaryRowsEn[0].querySelector(".meta-inline span").textContent, "Next departure");
+  assert.equal(depSummaryRowsEn[1].querySelector(".meta-inline span").textContent, "On car");
   assert.equal(cardEn.shadowRoot.querySelector('[data-bind="mOdoLbl"]').textContent, "Next departure");
 
   // (b) has_pending_changes: true (even when synced_with_ha: true) + haHasActiveDep -> "Applica su auto"
@@ -2575,5 +2587,259 @@ test("v1.24.0 Departure status label vs Overview nextDeparture, 3-state button m
   const btnUnavail = cardUnavailSched.shadowRoot.querySelector('[data-bind="applyDepBtn"]');
   assert.equal(btnUnavail.hidden, true);
   assert.equal(btnUnavail.classList.contains("hidden"), true);
+});
+
+test("v1.25.0 Climate tab car_in_use banner + disabled comfort controls + cmdResultBadge sync in Climate tab", async () => {
+  const h = LepasCard._helpers;
+  const tsIso = "2026-11-19T11:13:05Z";
+  const climateInUseHass = makeFullHass({
+    "climate.lepas_climate": makeState("climate.lepas_climate", "heat_cool", {
+      temperature: 23.0,
+      min_temp: 16,
+      max_temp: 30,
+      target_temperature_step: 0.5,
+      hvac_modes: ["off", "heat_cool"],
+      car_in_use: true,
+    }),
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "on", {
+      car_in_use: true,
+    }),
+    "sensor.lepas_command_result": Object.assign(
+      makeState("sensor.lepas_command_result", "Eseguito solo in parte ⚠️ — sedile guida riscaldato (codici 0:95, 4:95)"),
+      { last_changed: tsIso }
+    ),
+  }, "it");
+
+  const card = createCard({ layout: "compact", default_tab: "climate" }, climateInUseHass);
+  const cliPanel = card.shadowRoot.querySelector('[data-panel="climate"]');
+  assert.ok(cliPanel);
+
+  // Banner visible
+  const banner = cliPanel.querySelector('[data-bind="carInUseBanner"]');
+  assert.ok(banner);
+  assert.equal(banner.hidden, false);
+  assert.equal(banner.classList.contains("hidden"), false);
+  assert.equal(banner.getAttribute("role"), "status");
+  assert.equal(banner.textContent, h.getTexts("it").carInUseBanner);
+
+  // Both Overview and Climate cmdResultBadge synced and coral
+  const badges = card.shadowRoot.querySelectorAll('[data-bind="cmdResultBadge"]');
+  assert.equal(badges.length, 2, "cmdResultBadge must exist in both Overview and Climate panels");
+  const cliCmdBar = cliPanel.querySelector('[data-bind="climateCmdBar"]');
+  assert.ok(cliCmdBar);
+  assert.equal(cliCmdBar.hidden, false);
+  assert.equal(cliCmdBar.classList.contains("hidden"), false);
+  for (const b of badges) {
+    assert.equal(b.classList.contains("hidden"), false);
+    assert.equal(b.classList.contains("is-coral"), true);
+    assert.equal(b.classList.contains("is-emerald"), false);
+    assert.ok(b.textContent.startsWith("Errore invio comando · "));
+    assert.ok(b.textContent.endsWith("✕"));
+  }
+  assert.equal(badges[0].textContent, badges[1].textContent);
+
+  // All comfort buttons in Climate tab disabled + aria-disabled + .is-car-in-use
+  const wideControls = [
+    cliPanel.querySelector('[data-bind="climateToggleBtn"]'),
+    cliPanel.querySelector('[data-bind="coolAllBtn"]'),
+    cliPanel.querySelector('[data-bind="heatAllBtn"]'),
+    ...cliPanel.querySelectorAll("[data-defrost-btn]"),
+  ];
+  const narrowControls = [
+    cliPanel.querySelector('[data-action-id="temp_down"]'),
+    cliPanel.querySelector('[data-action-id="temp_up"]'),
+    ...cliPanel.querySelectorAll('[data-action-id="climate_duration"]'),
+    ...cliPanel.querySelectorAll("[data-seat-btn]"),
+  ];
+  assert.ok(wideControls.length >= 6);
+  assert.ok(narrowControls.length >= 10);
+
+  for (const btn of wideControls) {
+    assert.ok(btn);
+    assert.equal(btn.disabled, true);
+    assert.equal(btn.getAttribute("aria-disabled"), "true");
+    assert.equal(btn.classList.contains("is-car-in-use"), true);
+    assert.equal(btn.getAttribute("data-in-use-label"), "Auto in uso");
+  }
+  for (const btn of narrowControls) {
+    assert.ok(btn);
+    assert.equal(btn.disabled, true);
+    assert.equal(btn.getAttribute("aria-disabled"), "true");
+    assert.equal(btn.classList.contains("is-car-in-use"), true);
+    assert.equal(btn.getAttribute("data-in-use-label"), null);
+  }
+
+  // Clicks on disabled comfort buttons must emit zero service calls
+  for (const btn of [...wideControls, ...narrowControls]) {
+    btn.click();
+  }
+  await Promise.resolve();
+  assert.equal(climateInUseHass.calls.length, 0, "Disabled climate controls must ignore clicks");
+
+  // Also works when car_in_use: true comes only from binary_sensor.lepas_high_voltage_active
+  const hvOnlyCard = createCard({ layout: "compact", default_tab: "climate" }, makeFullHass({
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "on", {
+      car_in_use: true,
+    }),
+  }, "en"));
+  const hvBanner = hvOnlyCard.shadowRoot.querySelector('[data-bind="carInUseBanner"]');
+  assert.equal(hvBanner.hidden, false);
+  const hvToggle = hvOnlyCard.shadowRoot.querySelector('[data-bind="climateToggleBtn"]');
+  assert.equal(hvToggle.disabled, true);
+  assert.equal(hvToggle.getAttribute("data-in-use-label"), "Car in use");
+  assert.equal(hvOnlyCard.shadowRoot.querySelector('[data-action-id="temp_up"]').disabled, true);
+
+  // Transition car_in_use: true -> false on the SAME rendered instance restores all controls
+  const parkedHass = makeFullHass({
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", {
+      temperature: 21.0,
+      min_temp: 16,
+      max_temp: 30,
+      target_temperature_step: 0.5,
+      hvac_modes: ["off", "heat_cool"],
+      car_in_use: false,
+    }),
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "off", {
+      car_in_use: false,
+    }),
+    "sensor.lepas_command_result": makeState("sensor.lepas_command_result", "unavailable"),
+  }, "it");
+  card.hass = parkedHass;
+
+  assert.equal(banner.hidden, true);
+  assert.equal(banner.classList.contains("hidden"), true);
+  assert.equal(cliCmdBar.hidden, true);
+  assert.equal(cliCmdBar.classList.contains("hidden"), true);
+  for (const b of badges) {
+    assert.equal(b.classList.contains("hidden"), true);
+  }
+  for (const btn of [...wideControls, ...narrowControls]) {
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.getAttribute("aria-disabled"), "false");
+    assert.equal(btn.classList.contains("is-car-in-use"), false);
+    assert.equal(btn.getAttribute("data-in-use-label"), null);
+  }
+
+  // Clicks work again after car_in_use transitions to false
+  cliPanel.querySelector('[data-bind="climateToggleBtn"]').click();
+  cliPanel.querySelector('[data-seat-btn="driver_heat"]').click();
+  await Promise.resolve();
+  assert.equal(parkedHass.calls.length, 2);
+  assert.deepEqual(parkedHass.calls[0], {
+    domain: "climate",
+    service: "set_hvac_mode",
+    data: { entity_id: "climate.lepas_climate", hvac_mode: "heat_cool" },
+  });
+  assert.deepEqual(parkedHass.calls[1], {
+    domain: "switch",
+    service: "turn_on",
+    data: { entity_id: "switch.lepas_driver_seat_heating" },
+  });
+});
+
+test("v1.25.0 Departure UX Option 1: Prossima partenza + Su auto states (Sincronizzata / Da applicare / Disattivata)", async () => {
+  // 1. Synced state
+  const card = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Oggi 13:25 (clima 13:10)", {
+      departure_at: "2026-11-19T13:25:00+01:00",
+    }),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "13:25", {
+      attiva: true,
+      orario: "13:25",
+      giorni: [4],
+      has_pending_changes: false,
+      synced_with_ha: true,
+    }),
+  }, "it"));
+
+  const depRows = card.shadowRoot.querySelectorAll(".dep-summary .dep-summary-row");
+  assert.equal(depRows.length, 2);
+  assert.equal(depRows[0].querySelector(".meta-inline span").textContent, "Prossima partenza");
+  assert.equal(depRows[1].querySelector(".meta-inline span").textContent, "Su auto");
+
+  const nextEl = card.shadowRoot.querySelector('[data-bind="nextDepText"]');
+  const schedEl = card.shadowRoot.querySelector('[data-bind="schedDepText"]');
+  assert.equal(nextEl.textContent, "Oggi 13:25 (clima 13:10)");
+  assert.equal(schedEl.textContent, "Sincronizzata");
+  assert.equal(schedEl.classList.contains("is-emerald"), true);
+  assert.equal(schedEl.classList.contains("is-amber"), false);
+
+  // 2. Pending with car active -> amber "Da applicare (auto: 06:35)" and .is-emerald reset
+  card.hass = makeFullHass({
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Oggi 13:25 (clima 13:10)", {
+      departure_at: "2026-11-19T13:25:00+01:00",
+    }),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      orario: "06:35",
+      giorni: [4],
+      has_pending_changes: true,
+      synced_with_ha: false,
+    }),
+  }, "it");
+  assert.equal(schedEl.textContent, "Da applicare (auto: 06:35)");
+  assert.equal(schedEl.classList.contains("is-amber"), true);
+  assert.equal(schedEl.classList.contains("is-emerald"), false);
+
+  // 3. Pending with car off -> amber "Da applicare (auto: spenta)"
+  card.hass = makeFullHass({
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Oggi 13:25 (clima 13:10)", {
+      departure_at: "2026-11-19T13:25:00+01:00",
+    }),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+      has_pending_changes: true,
+      synced_with_ha: false,
+    }),
+  }, "it");
+  assert.equal(schedEl.textContent, "Da applicare (auto: spenta)");
+  assert.equal(schedEl.classList.contains("is-amber"), true);
+  assert.equal(schedEl.classList.contains("is-emerald"), false);
+
+  // 4. All off -> "Disattivata" on both rows, no emerald/amber class
+  card.hass = makeFullHass({
+    "switch.lepas_quick_departure": makeState("switch.lepas_quick_departure", "off"),
+    "switch.lepas_departure_mon_enabled": makeState("switch.lepas_departure_mon_enabled", "off"),
+    "switch.lepas_departure_wed_enabled": makeState("switch.lepas_departure_wed_enabled", "off"),
+    "switch.lepas_departure_fri_enabled": makeState("switch.lepas_departure_fri_enabled", "off"),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Disattivata", {
+      departure_at: null,
+    }),
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+      has_pending_changes: false,
+      synced_with_ha: true,
+    }),
+  }, "it");
+  assert.equal(nextEl.textContent, "Disattivata");
+  assert.equal(schedEl.textContent, "Disattivata");
+  assert.equal(schedEl.classList.contains("is-emerald"), false);
+  assert.equal(schedEl.classList.contains("is-amber"), false);
+
+  // 5. EN & NL localization spot checks
+  const enCard = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      orario: "06:35",
+      has_pending_changes: false,
+      synced_with_ha: true,
+    }),
+  }, "en"));
+  const enRows = enCard.shadowRoot.querySelectorAll(".dep-summary .dep-summary-row");
+  assert.equal(enRows[0].querySelector(".meta-inline span").textContent, "Next departure");
+  assert.equal(enRows[1].querySelector(".meta-inline span").textContent, "On car");
+  assert.equal(enCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Synced");
+
+  const nlCard = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "Disattivata", {
+      attiva: false,
+      has_pending_changes: true,
+      synced_with_ha: false,
+    }),
+  }, "nl"));
+  const nlRows = nlCard.shadowRoot.querySelectorAll(".dep-summary .dep-summary-row");
+  assert.equal(nlRows[0].querySelector(".meta-inline span").textContent, "Volgend vertrek");
+  assert.equal(nlRows[1].querySelector(".meta-inline span").textContent, "In auto");
+  assert.equal(nlCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Toepassen (auto: uit)");
 });
 

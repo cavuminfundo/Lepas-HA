@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.24.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.25.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.24.0";
+  var CARD_VERSION = "1.25.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.24.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.24.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.24.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.24.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.24.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.25.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.25.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.25.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.25.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.25.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.24.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.25.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -264,6 +264,14 @@
       disableDeparturePlan: "Disattiva piano",
       carDeparturePlan: "Prossima partenza pianificata",
       noScheduledDeparture: "Nessuna partenza programmata",
+      carInUseBanner: "Auto in uso: comandi comfort remoti disabilitati.",
+      inUseShort: "Auto in uso",
+      onCar: "Su auto",
+      syncedDep: "Sincronizzata",
+      toApplyCarPrefix: "Da applicare",
+      carWord: "auto",
+      carOff: "spenta",
+      depDisabled: "Disattivata",
       depClimateExtras: "Extra clima alla partenza",
       batteryPreheat: "Preriscaldamento batteria",
       batteryPreheatTime: "Orario preriscaldamento batteria",
@@ -433,6 +441,14 @@
       disableDeparturePlan: "Disable schedule",
       carDeparturePlan: "Next scheduled departure",
       noScheduledDeparture: "No scheduled departure",
+      carInUseBanner: "Car in use: remote comfort controls are disabled.",
+      inUseShort: "Car in use",
+      onCar: "On car",
+      syncedDep: "Synced",
+      toApplyCarPrefix: "To apply",
+      carWord: "car",
+      carOff: "off",
+      depDisabled: "Disabled",
       depClimateExtras: "Departure climate extras",
       batteryPreheat: "Battery preheating",
       batteryPreheatTime: "Battery preheat time",
@@ -602,6 +618,14 @@
       disableDeparturePlan: "Schema uitschakelen",
       carDeparturePlan: "Volgend gepland vertrek",
       noScheduledDeparture: "Geen gepland vertrek",
+      carInUseBanner: "Auto in gebruik: comfortbediening op afstand uitgeschakeld.",
+      inUseShort: "In gebruik",
+      onCar: "In auto",
+      syncedDep: "Gesynchroniseerd",
+      toApplyCarPrefix: "Toepassen",
+      carWord: "auto",
+      carOff: "uit",
+      depDisabled: "Uitgeschakeld",
       depClimateExtras: "Extra vertrekklimaat",
       batteryPreheat: "Batterij voorverwarming",
       batteryPreheatTime: "Tijd batterij voorverwarming",
@@ -1066,7 +1090,8 @@
       ".btn-row { display: flex; flex-wrap: wrap; gap: 8px; }",
       ".ctrl-btn { position: relative; overflow: hidden; min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 10px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.82rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }",
       ".ctrl-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
-      ".ctrl-btn:disabled, .ctrl-btn.is-pending { opacity: 0.58; cursor: wait; }",
+      ".ctrl-btn:disabled { opacity: 0.55; cursor: not-allowed; }",
+      ".ctrl-btn.is-pending { opacity: 0.58; cursor: wait; }",
       ".ctrl-btn.is-primary { background: #262B34; color: var(--lp-text); border-color: rgba(52, 211, 153, 0.55); }",
       ".ctrl-btn.is-primary:hover { background: #2A313D; border-color: var(--lp-emerald); }",
       ".ctrl-btn.is-emerald { border-color: rgba(52, 211, 153, 0.45); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.12); }",
@@ -1076,7 +1101,14 @@
       ".stepper { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 4px; }",
       ".step-val { font-size: 1.15rem; font-weight: 700; color: var(--lp-text); }",
       ".chip-row { display: flex; flex-wrap: wrap; gap: 6px; }",
-      ".chip-btn { min-height: 44px; min-width: 44px; padding: 6px 11px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); font-size: 0.8rem; font-weight: 600; color: var(--lp-text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }",
+      ".chip-btn { position: relative; overflow: hidden; min-height: 44px; min-width: 44px; padding: 6px 11px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); font-size: 0.8rem; font-weight: 600; color: var(--lp-text-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }",
+      ".chip-btn:disabled { opacity: 0.55; cursor: not-allowed; position: relative; overflow: hidden; }",
+      ".ctrl-btn.is-car-in-use, .chip-btn.is-car-in-use { position: relative; overflow: hidden; }",
+      ".ctrl-btn.is-car-in-use::after, .chip-btn.is-car-in-use::after { content: \"⊘\"; position: absolute; inset: 0; background: rgba(17, 19, 23, 0.72); color: #FCD34D; display: flex; align-items: center; justify-content: center; padding: 0 6px; font-size: 0.76rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }",
+      ".ctrl-btn.is-car-in-use[data-in-use-label]::after, .chip-btn.is-car-in-use[data-in-use-label]::after { content: \"⊘ \" attr(data-in-use-label); }",
+      ".info-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--lp-elevated); border: 1px solid var(--lp-border-strong); color: var(--lp-text); font-size: 0.8rem; font-weight: 600; line-height: 1.35; }",
+      ".info-banner.is-amber { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.4); color: #FCD34D; }",
+      ".climate-meta-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 24px; }",
       ".chip-btn:hover { background: var(--lp-elevated-hover); color: var(--lp-text); }",
       ".chip-btn.is-active { background: #2A313D; color: var(--lp-text); border-color: rgba(243, 244, 246, 0.55); }",
       ".seat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
@@ -1126,6 +1158,8 @@
       ".dep-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; min-height: 36px; cursor: pointer; font-size: 0.81rem; }",
       ".dep-summary-row + .dep-summary-row { border-top: 1px solid var(--lp-border); }",
       ".dep-summary-row:hover { background: var(--lp-elevated-hover); }",
+      ".dep-summary-row .info-val.is-emerald { color: var(--lp-emerald); }",
+      ".dep-summary-row .info-val.is-amber { color: var(--lp-amber); }",
       ".dep-subbox { border-top: 1px solid var(--lp-border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }",
       ".climate-extras-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }",
       ".climate-extra-chip { width: 100%; justify-content: flex-start; text-align: left; font-size: 0.75rem; line-height: 1.2; padding: 6px 8px; }",
@@ -1371,7 +1405,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.24.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.25.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -1720,6 +1754,9 @@
       var actionEl = target.closest("[data-action-id]");
       if (actionEl) {
         ev.stopPropagation();
+        if (actionEl.disabled || (actionEl.hasAttribute && actionEl.hasAttribute("disabled")) || target.closest("button[disabled]")) {
+          return;
+        }
         this._triggerAction(actionEl.getAttribute("data-action-id"), actionEl);
         return;
       }
@@ -1929,6 +1966,7 @@
     }
 
     _triggerAction(actionId, actionEl) {
+      if (actionEl && (actionEl.disabled || (actionEl.hasAttribute && actionEl.hasAttribute("disabled")))) return;
       var lookupKey = actionId;
       if (actionEl && actionEl.hasAttribute && actionEl.hasAttribute("data-value")) {
         lookupKey = actionId + "_" + actionEl.getAttribute("data-value");
@@ -2153,6 +2191,7 @@
       var conn = this._findDomain(items, "binary_sensor", "connection");
       var atHome = this._findDomain(items, "binary_sensor", "at_home");
       var awake = this._findDomain(items, "binary_sensor", "car_awake");
+      var hvActive = this._findDomain(items, "binary_sensor", "high_voltage_active", "rt_alta_tensione");
       var bat = this._findDomain(items, "sensor", "battery") || items.find(function (r) {
         return r.domain === "sensor" && r.s && r.s.attributes &&
           r.s.attributes.device_class === "battery" && r.s.attributes.unit_of_measurement === "%";
@@ -2576,6 +2615,7 @@
         conn: conn,
         atHome: atHome,
         awake: awake,
+        hvActive: hvActive,
         bat: bat,
         evRange: evRange,
         wltpRange: wltpRange,
@@ -2864,7 +2904,10 @@
         "</div>"
       ) : "";
 
-      var climateHtml = '<section class="panel" data-panel="climate">' + climateHubHtml + macrosHtml + defrostHtml + seatsHtml + "</section>";
+      var climateHtml = '<section class="panel" data-panel="climate">' +
+        '<div class="info-banner is-amber hidden" role="status" data-bind="carInUseBanner" hidden></div>' +
+        '<div class="climate-meta-bar hidden" data-bind="climateCmdBar"><span class="badge hidden" data-bind="cmdResultBadge"></span></div>' +
+        climateHubHtml + macrosHtml + defrostHtml + seatsHtml + "</section>";
 
       // Panel 3: Charging & Departures
       var chgStatHtml = function (bind, iconName, label) {
@@ -2961,8 +3004,8 @@
 
       var depSummaryHtml = (ctx.nextDep || ctx.schedDep) ? (
         '<div class="dep-summary">' +
-          (ctx.nextDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.departureStatus) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
-          (ctx.schedDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.schedDep.id) + '"><span class="meta-inline">' + svgIcon("calendar", "meta-ico") + "<span>" + self._h(t.carDeparturePlan) + '</span></span><span class="info-val num" data-bind="schedDepText"></span></div>' : "") +
+          (ctx.nextDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.nextDep.id) + '"><span class="meta-inline">' + svgIcon("clock", "meta-ico") + "<span>" + self._h(t.nextDeparture) + '</span></span><span class="info-val num" data-bind="nextDepText"></span></div>' : "") +
+          (ctx.schedDep ? '<div class="dep-summary-row" role="button" tabindex="0" data-e="' + self._h(ctx.schedDep.id) + '"><span class="meta-inline">' + svgIcon("calendar", "meta-ico") + "<span>" + self._h(t.onCar) + '</span></span><span class="info-val num" data-bind="schedDepText"></span></div>' : "") +
         "</div>"
       ) : "";
 
@@ -3473,20 +3516,28 @@
           ? t.updated + ": " + formatTimestamp(vm.carUpdated.s.state, vm.lang)
           : t.updated + ": —";
       }
-      var cmdBadge = root.querySelector('[data-bind="cmdResultBadge"]');
-      if (cmdBadge) {
-        var cmdStateAlive = (vm.cmdResult && !this._dead(vm.cmdResult.s)) ? vm.cmdResult.s : null;
-        var outcome = formatCommandOutcome(cmdStateAlive, this._lastCmdFeedback, vm.lang);
+      var cmdStateAlive = (vm.cmdResult && !this._dead(vm.cmdResult.s)) ? vm.cmdResult.s : null;
+      var outcome = formatCommandOutcome(cmdStateAlive, this._lastCmdFeedback, vm.lang);
+      var cmdBadges = root.querySelectorAll('[data-bind="cmdResultBadge"]');
+      for (var cbi = 0; cbi < cmdBadges.length; cbi += 1) {
+        var cmdBadge = cmdBadges[cbi];
         if (outcome) {
           cmdBadge.classList.remove("hidden");
+          cmdBadge.hidden = false;
           cmdBadge.classList.toggle("is-emerald", Boolean(outcome.ok));
           cmdBadge.classList.toggle("is-coral", !outcome.ok);
           cmdBadge.textContent = outcome.text;
         } else {
           cmdBadge.classList.add("hidden");
+          cmdBadge.hidden = true;
           cmdBadge.classList.remove("is-emerald", "is-coral");
           cmdBadge.textContent = "";
         }
+      }
+      var cliCmdBar = root.querySelector('[data-bind="climateCmdBar"]');
+      if (cliCmdBar) {
+        cliCmdBar.classList.toggle("hidden", !outcome);
+        cliCmdBar.hidden = !outcome;
       }
       var extraValEls = root.querySelectorAll("[data-extra-entity]");
       for (var ex = 0; ex < extraValEls.length; ex += 1) {
@@ -3503,10 +3554,39 @@
       }
 
       // Climate details
+      var carInUse = Boolean(
+        (vm.climate && vm.climate.s && vm.climate.s.attributes && vm.climate.s.attributes.car_in_use === true) ||
+        (vm.hvActive && vm.hvActive.s && vm.hvActive.s.attributes && vm.hvActive.s.attributes.car_in_use === true)
+      );
+      var carInUseBanner = root.querySelector('[data-bind="carInUseBanner"]');
+      if (carInUseBanner) {
+        carInUseBanner.textContent = t.carInUseBanner;
+        carInUseBanner.classList.toggle("hidden", !carInUse);
+        carInUseBanner.hidden = !carInUse;
+      }
+      var cliPanel = root.querySelector('[data-panel="climate"]');
+      var applyCarInUseState = function (btn, isWide, isPending) {
+        if (!btn) return;
+        btn.disabled = Boolean(isPending) || carInUse;
+        btn.classList.toggle("is-car-in-use", carInUse);
+        btn.setAttribute("aria-disabled", btn.disabled ? "true" : "false");
+        if (isWide) {
+          if (carInUse) {
+            btn.setAttribute("data-in-use-label", t.inUseShort);
+          } else {
+            btn.removeAttribute("data-in-use-label");
+          }
+        }
+      };
       if (vm.climate) {
         var tt = vm.climate.s.attributes && vm.climate.s.attributes.temperature;
         var ttEl = root.querySelector('[data-bind="targetTempText"]');
         if (ttEl) ttEl.textContent = (typeof tt === "number") ? tt.toFixed(1) + " °C" : "—";
+      }
+      applyCarInUseState(root.querySelector('[data-bind="climateToggleBtn"]'), true, this._pendingKeys.has("climate_toggle"));
+      if (cliPanel) {
+        applyCarInUseState(cliPanel.querySelector('[data-action-id="temp_down"]'), false, false);
+        applyCarInUseState(cliPanel.querySelector('[data-action-id="temp_up"]'), false, false);
       }
       var stl = root.querySelector('[data-bind="setTempLText"]');
       if (stl && vm.setTempL) stl.textContent = t.leftZone + ": " + (this._dead(vm.setTempL.s) ? "—" : this._disp(vm.setTempL.s));
@@ -3523,26 +3603,42 @@
         for (var ci = 0; ci < allChips.length; ci += 1) {
           var vNum = parseFloat(allChips[ci].getAttribute("data-value"));
           allChips[ci].classList.toggle("is-active", curDur !== null && Math.round(curDur) === Math.round(vNum));
+          applyCarInUseState(allChips[ci], false, false);
         }
       }
 
       var coolBtn = root.querySelector('[data-bind="coolAllBtn"]');
-      if (coolBtn) coolBtn.classList.toggle("is-glacier", this._isOn(vm.coolSwitch));
+      if (coolBtn) {
+        coolBtn.classList.toggle("is-glacier", this._isOn(vm.coolSwitch));
+        applyCarInUseState(coolBtn, true, false);
+      }
       var heatBtn = root.querySelector('[data-bind="heatAllBtn"]');
-      if (heatBtn) heatBtn.classList.toggle("is-amber", this._isOn(vm.heatSwitch));
+      if (heatBtn) {
+        heatBtn.classList.toggle("is-amber", this._isOn(vm.heatSwitch));
+        applyCarInUseState(heatBtn, true, false);
+      }
 
       for (var di = 0; di < vm.defrostEntities.length; di += 1) {
         var df = vm.defrostEntities[di];
         var dBtn = root.querySelector('[data-defrost-btn="' + df.key + '"]');
-        if (dBtn) dBtn.classList.toggle("is-amber", this._isOn(df.ent));
+        if (dBtn) {
+          dBtn.classList.toggle("is-amber", this._isOn(df.ent));
+          applyCarInUseState(dBtn, true, false);
+        }
       }
 
       for (var si = 0; si < vm.seatDefs.length; si += 1) {
         var sd = vm.seatDefs[si];
         var hBtn = root.querySelector('[data-seat-btn="' + sd.slug + '_heat"]');
-        if (hBtn) hBtn.classList.toggle("is-amber", this._isOn(sd.heat));
+        if (hBtn) {
+          hBtn.classList.toggle("is-amber", this._isOn(sd.heat));
+          applyCarInUseState(hBtn, false, false);
+        }
         var vBtn = root.querySelector('[data-seat-btn="' + sd.slug + '_vent"]');
-        if (vBtn) vBtn.classList.toggle("is-glacier", this._isOn(sd.vent));
+        if (vBtn) {
+          vBtn.classList.toggle("is-glacier", this._isOn(sd.vent));
+          applyCarInUseState(vBtn, false, false);
+        }
       }
 
       var rcTxt = root.querySelector('[data-bind="rearCenterText"]');
@@ -3733,16 +3829,15 @@
       // Departures
       var carActive = Boolean(vm.carActive);
       var haHasActiveDep = Boolean(vm.haHasActiveDep);
+      var sdRawAttrs = (vm.schedDep && vm.schedDep.s && !this._dead(vm.schedDep.s) && vm.schedDep.s.attributes)
+        ? vm.schedDep.s.attributes
+        : {};
+      var hasPending = typeof sdRawAttrs.has_pending_changes === "boolean" ? sdRawAttrs.has_pending_changes : null;
+      var isSynced = typeof sdRawAttrs.synced_with_ha === "boolean" ? sdRawAttrs.synced_with_ha : null;
 
       var nextDepEl = root.querySelector('[data-bind="nextDepText"]');
       if (nextDepEl && vm.nextDep) {
-        if (this._dead(vm.nextDep.s)) {
-          nextDepEl.textContent = "—";
-        } else if (!haHasActiveDep && carActive) {
-          nextDepEl.textContent = t.departureActive;
-        } else {
-          nextDepEl.textContent = vm.nextDep.s.state;
-        }
+        nextDepEl.textContent = this._dead(vm.nextDep.s) ? "—" : vm.nextDep.s.state;
       }
       var depHintEl = root.querySelector('[data-bind="depChargeHint"]');
       if (depHintEl) {
@@ -3790,14 +3885,24 @@
       }
 
       // Car scheduled departure readout & adaptive Apply/Disable on car button
-      var sdRawAttrs = (vm.schedDep && vm.schedDep.s && !this._dead(vm.schedDep.s) && vm.schedDep.s.attributes)
-        ? vm.schedDep.s.attributes
-        : {};
       var schedDepTxt = root.querySelector('[data-bind="schedDepText"]');
       if (schedDepTxt && vm.schedDep) {
+        schedDepTxt.classList.remove("is-emerald", "is-amber");
         if (this._dead(vm.schedDep.s)) {
           schedDepTxt.textContent = "—";
-        } else if (carActive) {
+        } else if (carActive && hasPending === false && isSynced === true) {
+          schedDepTxt.classList.add("is-emerald");
+          schedDepTxt.textContent = t.syncedDep;
+        } else if (hasPending === true || isSynced === false) {
+          var rawCarTime = sdRawAttrs.orario
+            ? String(sdRawAttrs.orario).trim()
+            : (typeof vm.schedDep.s.state === "string" && /^\d{1,2}:\d{2}$/.test(vm.schedDep.s.state.trim())
+              ? vm.schedDep.s.state.trim()
+              : "");
+          var carStatusVal = carActive ? (rawCarTime || t.departureActive) : t.carOff;
+          schedDepTxt.classList.add("is-amber");
+          schedDepTxt.textContent = t.toApplyCarPrefix + " (" + t.carWord + ": " + carStatusVal + ")";
+        } else if (hasPending === null && carActive) {
           var rawOrario = sdRawAttrs.orario
             ? String(sdRawAttrs.orario)
             : (typeof vm.schedDep.s.state === "string" && /^\d{1,2}:\d{2}$/.test(vm.schedDep.s.state.trim())
@@ -3807,13 +3912,11 @@
             ? formatCarNextDeparture(rawOrario, sdRawAttrs.giorni, new Date(), t)
             : (sdRawAttrs.riepilogo ? String(sdRawAttrs.riepilogo) : String(vm.schedDep.s.state));
         } else {
-          schedDepTxt.textContent = t.noScheduledDeparture;
+          schedDepTxt.textContent = t.depDisabled;
         }
       }
       var applyDepBtnEl = root.querySelector('[data-bind="applyDepBtn"]');
       if (applyDepBtnEl && vm.applyDepBtn) {
-        var hasPending = typeof sdRawAttrs.has_pending_changes === "boolean" ? sdRawAttrs.has_pending_changes : null;
-        var isSynced = typeof sdRawAttrs.synced_with_ha === "boolean" ? sdRawAttrs.synced_with_ha : null;
         var showDepBtn = function (label, actionId, variant, iconName) {
           applyDepBtnEl.classList.remove("hidden");
           applyDepBtnEl.hidden = false;

@@ -141,6 +141,13 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
             on = self._live_on()
         return HVACMode.HEAT_COOL if on else HVACMode.OFF
 
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        fn = getattr(self.coordinator, "is_car_in_use", None)
+        if not callable(fn):
+            return None
+        return {"car_in_use": bool(fn())}
+
     def _handle_coordinator_update(self) -> None:
         # L'ottimismo si annulla quando arriva la verità sul CAMPO del clima, non a un
         # messaggio qualsiasi: le conferme di `airControl` osservate non portano alcun campo
@@ -149,11 +156,17 @@ class LepasClimate(LepasEntity, ClimateEntity, RestoreEntity):
         # mixin degli altri attuatori (`entity.LepasOptimisticMixin`), riscritta qui perché
         # questa entità non lo eredita; il tetto temporale evita che, se il campo non
         # arrivasse mai, la card resti per sempre su un valore mai confermato.
-        if self._opt_on is not None and (
-                (self.coordinator.data.get("last_seen") != self._opt_anchor
-                 and CAMPO_CLIMA in (self.coordinator.data.get("msg_fields") or {}))
-                or (self._opt_at is not None
-                    and (time.monotonic() - self._opt_at) > OPT_MAX_S)):
+        data = self.coordinator.data or {}
+        new_msg = data.get("last_seen") != self._opt_anchor
+        msg = data.get("msg_fields") or {}
+        rejected = data.get("cmd_rejected_fields") or ()
+        climate_truth = new_msg and (
+            CAMPO_CLIMA in msg
+            or CAMPO_CLIMA in rejected
+            or bool(data.get("cmd_rejected_other"))
+        )
+        expired = self._opt_at is not None and (time.monotonic() - self._opt_at) > OPT_MAX_S
+        if self._opt_on is not None and (climate_truth or expired):
             self._opt_on = None
             self._opt_anchor = None
             self._opt_at = None

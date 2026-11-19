@@ -151,6 +151,15 @@ class LepasRealtimeBinary(_LepasRestoreBinary):
         rt = self.coordinator.data.get("realtime") or {}
         return field_on(rt[self._field]) if self._field in rt else None
 
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        if self._field != "hVoltageState":
+            return None
+        fn = getattr(self.coordinator, "is_car_in_use", None)
+        if not callable(fn):
+            return None
+        return {"car_in_use": bool(fn())}
+
 
 class LepasACasa(LepasEntity, BinarySensorEntity):
     """Se l'auto si trova dentro la zona `home` di Home Assistant, dalla sua posizione GPS

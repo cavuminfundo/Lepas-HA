@@ -234,6 +234,18 @@ class LepasOptimisticMixin:
                 self._clear_optimistic()
                 self.async_write_ha_state()
 
+    def _rifiuto_arrivato(self) -> bool:
+        """Vero se il messaggio appena arrivato ha rifiutato il comando per questa entità."""
+        if not self._opt_keys:
+            return False
+        data = self.coordinator.data or {}
+        if data.get("last_seen") == self._opt_anchor:
+            return False
+        if data.get("cmd_rejected_other"):
+            return True
+        rejected = data.get("cmd_rejected_fields") or ()
+        return any(k in rejected for k in self._opt_keys)
+
     def _verita_arrivata(self) -> bool:
         """Vero se il messaggio appena arrivato porta un valore per il MIO campo.
 
@@ -241,10 +253,11 @@ class LepasOptimisticMixin:
         lì il campo c'è sempre, anche se l'ultima volta che l'auto l'ha detto era ieri."""
         if not self._opt_keys:
             return False
-        if self.coordinator.data.get("last_seen") == self._opt_anchor:
+        data = self.coordinator.data or {}
+        if data.get("last_seen") == self._opt_anchor:
             return False                    # nessun messaggio nuovo da quando ho comandato
-        msg = self.coordinator.data.get("msg_fields") or {}
-        return any(k in msg for k in self._opt_keys)
+        msg = data.get("msg_fields") or {}
+        return any(k in msg for k in self._opt_keys) or self._rifiuto_arrivato()
 
     def _ottimismo_scaduto(self) -> bool:
         """Vero se l'ottimismo dura da troppo: la verità non è mai arrivata."""

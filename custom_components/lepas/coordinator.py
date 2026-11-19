@@ -202,6 +202,20 @@ REASON_MODULI = {
     "13": "sedile ventilato",
 }
 
+# Mappa modelId di `reason` -> campi di telemetria la cui attesa ottimistica va annullata.
+REASON_FIELD_MAP: dict[str, tuple[str, ...]] = {
+    "4": ("dSeatHeatingState",),
+    "5": ("pSeatHeatingState", "lSeatHeatingState2", "rSeatHeatingState2"),
+    "6": ("pSeatHeatingState", "lSeatHeatingState2", "rSeatHeatingState2"),
+    "8": ("pSeatHeatingState", "lSeatHeatingState2", "rSeatHeatingState2"),
+    "9": ("dSeatVentilateState",),
+    "10": ("pSeatVentilateState", "lSeatVentilateState2", "rSeatVentilateState2"),
+    "11": ("pSeatVentilateState", "lSeatVentilateState2", "rSeatVentilateState2"),
+    "13": ("pSeatVentilateState", "lSeatVentilateState2", "rSeatVentilateState2"),
+}
+
+_DOOR_KEYS = ("frontLeftDoor", "frontRightDoor", "backLeftDoor", "backRightDoor")
+
 # [MED] Campi "geo" ammessi in self.position (push 1301 / sonda realtime). Si tiene
 # SOLO la geolocalizzazione: batteria/velocità/online vivono in self.data["realtime"].
 GEO_KEYS = ("lat", "lon", "latitude", "longitude", "speed", "vehicleSpeed",
@@ -295,6 +309,28 @@ def _is_unit_flag(key: str) -> bool:
     rumore puro, che nascondeva gli eventuali campi VERI ancora da scoprire. Filtrarli per
     suffisso copre anche quelli che comparissero in futuro."""
     return key.endswith("Unit")
+
+
+def _safe_float(v) -> float | None:
+    """Converte in float finito o None senza sollevare."""
+    if v is None:
+        return None
+    try:
+        val = float(v)
+    except (TypeError, ValueError):
+        return None
+    return val if math.isfinite(val) else None
+
+
+def _pick_field(sources: tuple[dict | None, ...], key: str):
+    """Restituisce il primo valore valorizzato per `key` rispettando la precedenza di `sources`."""
+    for src in sources:
+        if not isinstance(src, dict) or key not in src:
+            continue
+        val = src[key]
+        if val is not None and str(val).strip() not in ("", "None"):
+            return val
+    return None
 
 
 class LepasCoordinator(DataUpdateCoordinator):
@@ -409,7 +445,14 @@ class LepasCoordinator(DataUpdateCoordinator):
                      # dice quanto è fresco il dato batteria/odometro mostrato. Vedi
                      # `_on_probe_data` per il perché non si usi il timestamp del cloud.
                      "car_data_ts": None,
-                     "realtime": None}
+                     "realtime": None,
+                     "cmd_rejected_fields": frozenset(),
+                     "cmd_rejected_other": False,
+                     "car_in_use": False}
+        # Lock dedicato solo al latch di sessione HV (mai annidato con _state_lock: AB-LEP-007).
+        self._hv_lock: threading.Lock = threading.Lock()
+        self._hv_session_in_use: bool = False
+        self._hv_session_start_odo: float | None = None
         # Impronta dell'ultima telemetria vista, per accorgersi di quando cambia davvero.
         # `None` = nessuna lettura ancora fatta in questa sessione.
         self._impronta_dati: str | None = None
@@ -1923,9 +1966,22 @@ class LepasCoordinator(DataUpdateCoordinator):
                         and k not in GEO_KEYS and not _is_unit_flag(k)):
                     self._diag.note_unknown_field(k, v, svc)
 
-        patch.update({"fields": fields_copy, "msg_fields": msg_fields, "awake": True})
+        rej_fields: frozenset[str] = frozenset()
+        rej_other = False
+        patch.update({
+            "fields": fields_copy,
+            "msg_fields": msg_fields,
+            "awake": True,
+            "cmd_rejected_fields": rej_fields,
+            "cmd_rejected_other": rej_other,
+        })
         if is_confirmation:
             patch["cmd_status"] = self._esito_con_note(self._format_cmd_result(data))
+            raw_res = data.get("result")
+            res_str = "" if raw_res is None else str(raw_res)
+            rej_fields, rej_other = self._extract_rejected_fields(data.get("reason"), res_str)
+            patch["cmd_rejected_fields"] = rej_fields
+            patch["cmd_rejected_other"] = rej_other
             # [H2] il contatore è l'ancora della pausa di coda → si tocca sotto lock, perché
             # lo legge il loop mentre qui siamo nel thread paho. Farlo avanzare SBLOCCA il
             # comando successivo: da qui in poi l'auto non è più occupata da questo.
@@ -1939,6 +1995,13 @@ class LepasCoordinator(DataUpdateCoordinator):
             if self._diag is not None:
                 self._diag.record("cmd_ack", svc=svc or "?", result=str(data.get("result", "")),
                                   reason=data.get("reason"), data=data)
+        rt_cur = self.data.get("realtime") if isinstance(self.data, dict) else None
+        patch["car_in_use"] = self._evaluate_car_in_use(
+            rt_cur if isinstance(rt_cur, dict) else None,
+            fields_copy,
+            msg_fields=msg_fields,
+            comfort_rejected=bool(rej_fields or rej_other),
+        )
         self._update(patch)
 
         # Lo stato «sveglia» ha una scadenza: senza, resterebbe acceso per sempre (vedi
@@ -1946,6 +2009,8 @@ class LepasCoordinator(DataUpdateCoordinator):
         # thread di paho.
         self.hass.loop.call_soon_threadsafe(self._arma_scadenza_sveglia)
         self.hass.loop.call_soon_threadsafe(self._mqtt_msg_event.set)
+        if is_confirmation and (rej_fields or rej_other) and not self._timers.closing:
+            self.hass.loop.call_soon_threadsafe(self._schedule_probe_on_loop)
 
         # [H3] fronte di risveglio → una sonda realtime (sola lettura). Lo schedule del
         # task DEVE avvenire sul loop: dal thread paho usa call_soon_threadsafe.
@@ -1993,6 +2058,28 @@ class LepasCoordinator(DataUpdateCoordinator):
         if not all(isinstance(v, dict) for v in reason):
             return False
         return all(str(v.get("modelId")) == "0" for v in reason)
+
+    @staticmethod
+    def _extract_rejected_fields(reason, result: str = "") -> tuple[frozenset[str], bool]:
+        """Estrae i campi telemetrici rifiutati da `reason` preservando `[0:95]` solo clima."""
+        if not reason or LepasCoordinator._solo_clima(reason):
+            return frozenset(), False
+        if not isinstance(reason, (list, tuple)) or not all(isinstance(v, dict) for v in reason):
+            return frozenset(), True
+        fields: set[str] = set()
+        other = False
+        res_str = "" if result is None else str(result).strip()
+        for voce in reason:
+            mid = str(voce.get("modelId", ""))
+            code = str(voce.get("code", ""))
+            if mid in REASON_FIELD_MAP:
+                fields.update(REASON_FIELD_MAP[mid])
+            elif mid == "0":
+                if code != "95" and res_str not in ("1", "2", "5", ""):
+                    fields.add("frontHVACState")
+            else:
+                other = True
+        return frozenset(fields), other
 
     @staticmethod
     def _descrivi_reason(reason) -> str:
@@ -2597,9 +2684,89 @@ class LepasCoordinator(DataUpdateCoordinator):
         else:
             self._hv_poll_count = 0
 
+    def is_car_in_use(self) -> bool:
+        """True se l'auto e' in una sessione di utilizzo attiva (latch di sessione HV)."""
+        with self._hv_lock:
+            return bool(self._hv_session_in_use)
+
+    def _evaluate_car_in_use(
+        self,
+        rt: dict | None,
+        fields: dict | None,
+        *,
+        msg_fields: dict | None = None,
+        comfort_rejected: bool = False,
+    ) -> bool:
+        """Aggiorna e restituisce il latch di sessione HV senza toccare `_state_lock`."""
+        from .entity import field_on
+
+        sources = (msg_fields, rt, fields) if msg_fields is not None else (rt, fields)
+        hv_on = field_on(_pick_field(sources, "hVoltageState"))
+        eng_on = field_on(_pick_field(sources, "engineState")) is True
+        speed = _safe_float(_pick_field(sources, "vehicleSpeed"))
+        speed_pos = speed is not None and speed > 0.0
+        plugged = field_on(_pick_field(sources, "chargeGunState")) is True
+        hvac_on = field_on(_pick_field(sources, "frontHVACState")) is True
+        any_door_open = any(field_on(_pick_field(sources, k)) is True for k in _DOOR_KEYS)
+        odo = _safe_float(_pick_field(sources, "odometer"))
+
+        with self._hv_lock:
+            if hv_on is False and not eng_on and not speed_pos:
+                self._hv_session_in_use = False
+                self._hv_session_start_odo = None
+                return False
+            if hv_on is True or eng_on or speed_pos:
+                odo_increased = False
+                if odo is not None and odo > 0.0:
+                    if self._hv_session_start_odo is None:
+                        self._hv_session_start_odo = odo
+                    elif odo > self._hv_session_start_odo:
+                        odo_increased = True
+                if (
+                    eng_on
+                    or speed_pos
+                    or (not plugged and not hvac_on)
+                    or any_door_open
+                    or odo_increased
+                    or comfort_rejected
+                ):
+                    self._hv_session_in_use = True
+            return bool(self._hv_session_in_use)
+
+    @callback
+    def _schedule_probe_on_loop(self) -> None:
+        """Avvia una sonda protetta dal loop HA quando un comando comfort viene rifiutato."""
+        if self._timers.closing or not self.poll_enabled or self._poll_busy:
+            return
+        self._poll_busy = True
+        try:
+            self.hass.async_create_task(self._run_guarded_probe())
+        except Exception:
+            self._poll_busy = False
+            raise
+
+    async def _run_guarded_probe(self) -> None:
+        try:
+            await self.async_probe(force=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[probe-on-reject] lettura realtime non riuscita: %s", err)
+        finally:
+            self._poll_busy = False
+
     async def _hv_followup_cb(self, _now) -> None:
         self._timers.cancel(HV_POLL)
-        await self.async_probe(force=True)
+        if self._timers.closing or not self.poll_enabled:
+            return
+        if self._poll_busy:
+            self._arm_hv_followup()
+            return
+        self._poll_busy = True
+        try:
+            await self.async_probe(force=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[hv-followup] lettura realtime non riuscita: %s", err)
+        finally:
+            self._poll_busy = False
 
     async def async_probe(self, force: bool = False) -> None:
         await self.hass.async_add_executor_job(self._probe, force)
@@ -2687,6 +2854,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         if geo is not None:
             patch["position"] = pos_copy
             patch["last_pos_fix"] = dt_util.utcnow()
+        patch["car_in_use"] = self._evaluate_car_in_use(rt_copy, fields_copy)
         self._update(patch)
 
     async def async_refresh_full_status(self) -> None:
