@@ -918,16 +918,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.26.0");
+  assert.equal(h.CARD_VERSION, "1.27.0");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.26.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.27.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.26.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.27.0`
     );
   }
 
@@ -946,7 +946,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.26.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.27.0`
     );
   }
 

@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.27.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Brand Logo & Icon Redesign (`custom_components/lepas/brand/`, `lepas-card.js`)**: Replaced all 8 Home Assistant brand PNG assets (`icon`, `icon@2x`, `dark_icon`, `dark_icon@2x`, `logo`, `logo@2x`, `dark_logo`, `dark_logo@2x`) with the Matte Dark Titanium geometric roaring leopard emblem embedded with smooth alpha transparency from the left corner, paired with the crisp warm-gold (`#FACC15` → `#F59E0B`) italic `Lepas` wordmark (with subtle `#181B20` contrast outline on light-mode variants), removed legacy cyan glow, added pixel-level alpha/gold/cyan verification in `tests/test_brand_assets.py`, and bumped Lovelace card asset cache-busting to `?v=1.27.0`.
+
+### 🇮🇹 Italiano
+
+- **Redesign Brand Logo & Icona (`custom_components/lepas/brand/`, `lepas-card.js`)**: Sostituiti tutti gli 8 asset PNG del brand Home Assistant (`icon`, `icon@2x`, `dark_icon`, `dark_icon@2x`, `logo`, `logo@2x`, `dark_logo`, `dark_logo@2x`) con il nuovo emblema del leopardo geometrico a fauci aperte in finitura Matte Dark Titanium incastonato con dissolvenza alfa morbida dall'angolo sinistro, abbinato al wordmark corsivo `Lepas` giallo-oro (`#FACC15` → `#F59E0B`) con contorno di contrasto `#181B20` sulle varianti chiare, rimosso il bagliore ciano precedente, aggiunte le verifiche sui pixel (trasparenza alfa, oro e assenza ciano) in `tests/test_brand_assets.py` e aggiornato il cache-busting degli asset della card Lovelace a `?v=1.27.0`.
+
 ## v1.26.0 — 2026-11-19
 
 ### 🇬🇧 English
