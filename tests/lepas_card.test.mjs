@@ -918,16 +918,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.25.0");
+  assert.equal(h.CARD_VERSION, "1.26.0");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.25.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.26.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.25.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.26.0`
     );
   }
 
@@ -946,7 +946,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.25.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.26.0`
     );
   }
 
@@ -2841,5 +2841,152 @@ test("v1.25.0 Departure UX Option 1: Prossima partenza + Su auto states (Sincron
   assert.equal(nlRows[0].querySelector(".meta-inline span").textContent, "Volgend vertrek");
   assert.equal(nlRows[1].querySelector(".meta-inline span").textContent, "In auto");
   assert.equal(nlCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Toepassen (auto: uit)");
+});
+
+test("resolveSocChargingState distinguishes active AC/DC charging from plugged-in waiting", () => {
+  const fn = LepasCard._helpers.resolveSocChargingState;
+  assert.equal(typeof fn, "function");
+
+  const helpers = {
+    isOn: (ent) => Boolean(ent && ent.s && ent.s.state === "on"),
+    num: (s) => {
+      if (!s || s.state === "unknown" || s.state === "unavailable") return null;
+      const n = Number(s.state);
+      return Number.isFinite(n) ? n : null;
+    },
+    dead: (s) => !s || s.state === "unknown" || s.state === "unavailable",
+  };
+
+  // Plugged in & waiting for schedule ("Non in ricarica", switch off) -> NOT charging
+  const waiting = fn({
+    chgSwitch: { s: makeState("switch.lepas_charging", "off") },
+    chgStatus: { s: makeState("sensor.lepas_charging_status", "Non in ricarica") },
+    fastPort: { s: makeState("sensor.lepas_fast_charging_port", "Collegata") },
+    chgPower: { s: makeState("sensor.lepas_charging_power", "0") },
+  }, helpers);
+  assert.deepEqual(waiting, { isCharging: false, isFast: false, mode: "none" });
+
+  // Charge completed -> NOT charging
+  const completed = fn({
+    chgSwitch: { s: makeState("switch.lepas_charging", "off") },
+    chgStatus: { s: makeState("sensor.lepas_charging_status", "Ricarica completata") },
+    fastPort: { s: makeState("sensor.lepas_fast_charging_port", "Collegata (ricarica rapida)") },
+  }, helpers);
+  assert.deepEqual(completed, { isCharging: false, isFast: false, mode: "none" });
+
+  // Italian active normal AC charging
+  const acIt = fn({
+    chgSwitch: { s: makeState("switch.lepas_charging", "off") },
+    chgStatus: { s: makeState("sensor.lepas_charging_status", "In ricarica") },
+    fastPort: { s: makeState("sensor.lepas_fast_charging_port", "Scollegata") },
+    hvVolt: { s: makeState("sensor.lepas_hv_battery_voltage", "380") },
+    hvCurr: { s: makeState("sensor.lepas_hv_battery_current", "16") },
+  }, helpers);
+  assert.deepEqual(acIt, { isCharging: true, isFast: false, mode: "normal" });
+
+  // Fast DC charging via fastPort "Collegata (ricarica rapida)"
+  const dcPort = fn({
+    chgSwitch: { s: makeState("switch.lepas_charging", "on") },
+    chgStatus: { s: makeState("sensor.lepas_charging_status", "In ricarica") },
+    fastPort: { s: makeState("sensor.lepas_fast_charging_port", "Collegata (ricarica rapida)") },
+  }, helpers);
+  assert.deepEqual(dcPort, { isCharging: true, isFast: true, mode: "fast" });
+
+  // Fast DC charging via high power >= 15 kW fallback
+  const dcPower = fn({
+    chgSwitch: { s: makeState("switch.lepas_charging", "on") },
+    chgStatus: { s: makeState("sensor.lepas_charging_status", "Charging") },
+    fastPort: { s: makeState("sensor.lepas_fast_charging_port", "Connected") },
+    chgPower: { s: makeState("sensor.lepas_charging_power", "42.5") },
+  }, helpers);
+  assert.deepEqual(dcPower, { isCharging: true, isFast: true, mode: "fast" });
+});
+
+test("SoC ring animates only during active charging, differentiates AC/DC, and resets cleanly", () => {
+  // 1. Plugged in & waiting ("Non in ricarica", switch off) -> static ring
+  const card = createCard({ layout: "compact" }, makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "Non in ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "0"),
+    "sensor.lepas_fast_charging_port": makeState("sensor.lepas_fast_charging_port", "Collegata"),
+  }, "it"));
+  const socBtn = card.shadowRoot.querySelector('[data-bind="socBtn"]');
+  const socOrbit = card.shadowRoot.querySelector('[data-bind="socOrbit"]');
+  const socModeSlide = card.shadowRoot.querySelector('[data-bind="socModeSlide"]');
+  const socModeLbl = card.shadowRoot.querySelector('[data-bind="socModeLbl"]');
+  const socChgIco = card.shadowRoot.querySelector('[data-bind="socChgIco"]');
+  const socText = card.shadowRoot.querySelector('[data-bind="socText"]');
+  const socProg = card.shadowRoot.querySelector('[data-bind="socProgress"]');
+  const heroBadge = card.shadowRoot.querySelector('[data-bind="heroStateBadge"]');
+
+  assert.ok(socBtn && socOrbit && socModeSlide && socModeLbl && socChgIco && socText && socProg && heroBadge);
+  assert.equal(socText.textContent, "78%");
+  assert.equal(socBtn.classList.contains("is-charging"), false);
+  assert.equal(socBtn.classList.contains("is-fast-charge"), false);
+  assert.equal(socOrbit.classList.contains("hidden"), true);
+  assert.equal(socModeSlide.classList.contains("hidden"), true);
+  assert.equal(socChgIco.classList.contains("hidden"), true);
+  assert.equal(heroBadge.classList.contains("hidden"), true);
+
+  // 2. Active normal AC charging ("In ricarica")
+  card.hass = makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "In ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "6.6"),
+    "sensor.lepas_fast_charging_port": makeState("sensor.lepas_fast_charging_port", "Scollegata"),
+  }, "it");
+  assert.equal(socBtn.classList.contains("is-charging"), true);
+  assert.equal(socBtn.classList.contains("is-fast-charge"), false);
+  assert.equal(socOrbit.classList.contains("hidden"), false);
+  assert.equal(socModeSlide.classList.contains("hidden"), false);
+  assert.equal(socModeLbl.textContent, "AC");
+  assert.equal(socChgIco.classList.contains("hidden"), false);
+  assert.equal(heroBadge.classList.contains("hidden"), false);
+  assert.match(heroBadge.textContent || "", /^In carica/);
+  assert.match(socBtn.getAttribute("aria-label") || "", /78%.*AC/);
+  assert.equal(socProg.getAttribute("aria-label"), socBtn.getAttribute("aria-label"));
+
+  // 3. Switch to active fast DC charging on same card instance
+  card.hass = makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "on"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "In ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "45.0"),
+    "sensor.lepas_fast_charging_port": makeState("sensor.lepas_fast_charging_port", "Collegata (ricarica rapida)"),
+  }, "it");
+  assert.equal(socBtn.classList.contains("is-charging"), true);
+  assert.equal(socBtn.classList.contains("is-fast-charge"), true);
+  assert.equal(socModeLbl.textContent, "DC");
+  assert.match(socBtn.getAttribute("aria-label") || "", /78%.*DC/);
+
+  // 4. Unplugged -> clean rollback on same rendered DOM
+  card.hass = makeFullHass({
+    "binary_sensor.lepas_charging_cable": makeState("binary_sensor.lepas_charging_cable", "off"),
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "Non in ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "0"),
+    "sensor.lepas_fast_charging_port": makeState("sensor.lepas_fast_charging_port", "Scollegata"),
+  }, "it");
+  assert.equal(socBtn.classList.contains("is-charging"), false);
+  assert.equal(socBtn.classList.contains("is-fast-charge"), false);
+  assert.equal(socOrbit.classList.contains("hidden"), true);
+  assert.equal(socModeSlide.classList.contains("hidden"), true);
+  assert.equal(socChgIco.classList.contains("hidden"), true);
+  assert.equal(socBtn.getAttribute("aria-label"), "78%");
+  assert.equal(socProg.getAttribute("aria-label"), "78%");
+
+  // 5. EN & NL localized aria-label checks
+  const enCard = createCard({ layout: "compact" }, makeFullHass({}, "en"));
+  assert.equal(enCard.shadowRoot.querySelector('[data-bind="socBtn"]').getAttribute("aria-label"), "78% · Charging (AC)");
+  const nlCard = createCard({ layout: "compact" }, makeFullHass({
+    "sensor.lepas_fast_charging_port": makeState("sensor.lepas_fast_charging_port", "Collegata (ricarica rapida)"),
+  }, "nl"));
+  assert.equal(nlCard.shadowRoot.querySelector('[data-bind="socBtn"]').getAttribute("aria-label"), "78% · Snelladen (DC)");
+
+  // 6. CSS contract: GPU keyframes & reduced-motion static fallback
+  const styleEl = card.shadowRoot.querySelector("style");
+  const cssText = styleEl ? styleEl.textContent : "";
+  assert.match(cssText, /@keyframes lp-soc-slide/);
+  assert.match(cssText, /prefers-reduced-motion:\s*no-preference[\s\S]*?\.soc-btn\.is-charging\s+\.soc-track/);
+  assert.match(cssText, /prefers-reduced-motion:\s*reduce[\s\S]*?\.soc-mode-slide[\s\S]*?\.soc-chg-ico:not\(\.hidden\)/);
 });
 

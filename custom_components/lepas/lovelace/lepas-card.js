@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.25.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.26.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.25.0";
+  var CARD_VERSION = "1.26.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.25.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.25.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.25.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.25.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.25.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.26.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.26.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.26.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.26.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.26.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.25.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.26.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -156,6 +156,8 @@
       climateOn: "Clima ON",
       climateOff: "Clima OFF",
       charging: "In carica",
+      chargingNormal: "In carica (AC)",
+      chargingFast: "In carica rapida (DC)",
       idle: "In attesa",
       plugged: "Cavo collegato",
       unplugged: "Scollegato",
@@ -333,6 +335,8 @@
       climateOn: "Climate ON",
       climateOff: "Climate OFF",
       charging: "Charging",
+      chargingNormal: "Charging (AC)",
+      chargingFast: "Fast charging (DC)",
       idle: "Idle",
       plugged: "Plugged in",
       unplugged: "Unplugged",
@@ -510,6 +514,8 @@
       climateOn: "Klimaat AAN",
       climateOff: "Klimaat UIT",
       charging: "Opladen",
+      chargingNormal: "Opladen (AC)",
+      chargingFast: "Snelladen (DC)",
       idle: "Inactief",
       plugged: "Aangesloten",
       unplugged: "Losgekoppeld",
@@ -818,6 +824,7 @@
     security: '<path d="M12 21s7-3.6 7-9.5V5.5L12 3 5 5.5v6C5 17.4 12 21 12 21z"/><path d="M9.5 12l1.8 1.8L15 10"/>',
     battery: '<rect x="2" y="7" width="17" height="10" rx="2"/><line x1="22" y1="10" x2="22" y2="14"/><polygon points="11 9.5 8 12.5 10.5 12.5 9.5 15 13 11.5 10.5 11.5 11 9.5"/>',
     bolt: '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"/>',
+    fast_charge: '<polygon points="10.5 2 3.5 13 9 13 8 22 15.5 10.5 10.2 10.5 10.5 2"/><polygon points="18.5 4 14 11.5 17.5 11.5 16.5 18 21.5 9.5 18 9.5 18.5 4"/>',
     route: '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H14a3 3 0 0 0 0-6H10a3 3 0 0 1 0-6h5.5"/>',
     gauge: '<path d="M4.5 17.5A9 9 0 1 1 19.5 17.5"/><line x1="12" y1="13" x2="16" y2="9"/><circle cx="12" cy="13" r="1.5"/>',
     plug: '<path d="M9 3v4"/><path d="M15 3v4"/><path d="M7 7h10v4a5 5 0 0 1-10 0V7z"/><path d="M12 16v5"/>',
@@ -1003,6 +1010,53 @@
     return next;
   }
 
+  // Distinguish active AC/DC charging from plugged-in idle or completed states.
+  function resolveSocChargingState(vm, helpers) {
+    var h = helpers || {};
+    var isOnFn = h.isOn || function () { return false; };
+    var numFn = h.num || function () { return null; };
+    var deadFn = h.dead || function (s) { return !s || s.state === "unknown" || s.state === "unavailable"; };
+    var statusStr = (vm && vm.chgStatus && vm.chgStatus.s && !deadFn(vm.chgStatus.s))
+      ? String(vm.chgStatus.s.state || "").trim().toLowerCase()
+      : "";
+    var statusSaysOff = Boolean(
+      statusStr &&
+      /^(?:non\s+in\s+ricaric|not\s+charg|niet(?:\s+aan\s+het)?\s+opladen|ricarica\s+completat|charge\s+complet|opladen\s+voltooid|complet|idle|off|0\b)/i.test(statusStr)
+    );
+    var statusSaysOn = Boolean(
+      statusStr && !statusSaysOff &&
+      (/^(?:in\s+ricarica|charging|opladen|1)$/i.test(statusStr) || /\bcharg(?:ing|e)\b/i.test(statusStr))
+    );
+    var powerKw = (vm && vm.chgPower && vm.chgPower.s && !deadFn(vm.chgPower.s))
+      ? numFn(vm.chgPower.s)
+      : null;
+    var isCharging = Boolean(
+      isOnFn(vm && vm.chgSwitch) ||
+      statusSaysOn ||
+      (!statusStr && !statusSaysOff && powerKw !== null && powerKw > 0.1)
+    );
+    if (!isCharging) {
+      return { isCharging: false, isFast: false, mode: "none" };
+    }
+    var fastPortStr = (vm && vm.fastPort && vm.fastPort.s && !deadFn(vm.fastPort.s))
+      ? String(vm.fastPort.s.state || "").trim().toLowerCase()
+      : "";
+    var fastByPort = Boolean(
+      fastPortStr &&
+      !/scolleg|disconnect|unplug|\b0\b/i.test(fastPortStr) &&
+      /rapid|fast|quick|\b2\b|\bdc\b/i.test(fastPortStr)
+    );
+    var hvV = (vm && vm.hvVolt && vm.hvVolt.s && !deadFn(vm.hvVolt.s)) ? numFn(vm.hvVolt.s) : null;
+    var hvA = (vm && vm.hvCurr && vm.hvCurr.s && !deadFn(vm.hvCurr.s)) ? numFn(vm.hvCurr.s) : null;
+    var hvKw = (hvV !== null && hvA !== null) ? (Math.abs(hvV * hvA) / 1000) : null;
+    var isFast = Boolean(
+      fastByPort ||
+      (powerKw !== null && powerKw >= 15) ||
+      (hvKw !== null && hvKw >= 15)
+    );
+    return { isCharging: true, isFast: isFast, mode: isFast ? "fast" : "normal" };
+  }
+
   function buildStyles() {
     return [
       ":host {",
@@ -1046,14 +1100,27 @@
       ".status-dot.is-online { background: var(--lp-emerald); }",
       ".status-dot.is-offline { background: var(--lp-coral); }",
       ".soc-btn { position: relative; width: 54px; height: 54px; padding: 0; border-radius: 999px; border: 1px solid var(--lp-border); background: rgba(17, 19, 23, 0.84); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }",
-      ".soc-btn.is-charging { border-color: rgba(52, 211, 153, 0.48); }",
+      ".soc-btn.is-charging { border-color: rgba(52, 211, 153, 0.55); }",
+      ".soc-btn.is-charging.is-fast-charge { border-color: rgba(245, 158, 11, 0.65); }",
       ".soc-btn svg.soc-svg { position: absolute; inset: 2px; width: 48px; height: 48px; transform: rotate(-90deg); }",
+      ".soc-btn svg.soc-svg-orbit { position: absolute; inset: 2px; width: 48px; height: 48px; pointer-events: none; }",
       ".soc-ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 3.2; }",
       ".soc-ring-fg { fill: none; stroke: var(--lp-emerald); stroke-width: 3.2; stroke-linecap: round; }",
       ".soc-ring-fg.is-warn { stroke: var(--lp-amber); }",
       ".soc-ring-fg.is-low { stroke: var(--lp-coral); }",
+      ".soc-ring-orbit { fill: none; stroke: var(--lp-emerald); stroke-width: 2.6; stroke-linecap: round; opacity: 0.92; }",
+      ".soc-btn.is-fast-charge .soc-ring-orbit { stroke: var(--lp-amber); }",
+      ".soc-viewport { position: relative; width: 38px; height: 22px; overflow: hidden; }",
+      ".soc-track { display: flex; flex-direction: column; will-change: transform; }",
+      ".soc-slide { height: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }",
       ".soc-val { position: relative; font-size: 0.78rem; font-weight: 700; color: var(--lp-text); line-height: 1; }",
-      ".soc-chg-ico { position: absolute; bottom: 4px; display: inline-flex; color: var(--lp-emerald); pointer-events: none; }",
+      ".soc-mode-slide { gap: 2px; color: var(--lp-emerald); }",
+      ".soc-btn.is-fast-charge .soc-mode-slide { color: var(--lp-amber); }",
+      "[data-bind=\"socModeIco\"] { display: inline-flex; align-items: center; justify-content: center; }",
+      ".soc-mode-ico { width: 12px; height: 12px; }",
+      ".soc-mode-lbl { font-size: 0.56rem; font-weight: 700; letter-spacing: 0.02em; line-height: 1; }",
+      ".soc-chg-ico { position: absolute; bottom: 4px; display: none; color: var(--lp-emerald); pointer-events: none; }",
+      ".soc-btn.is-fast-charge .soc-chg-ico { color: var(--lp-amber); }",
       ".soc-chg-ico .lp-ico { width: 10px; height: 10px; }",
       ".hero-meta { padding: 12px 14px; border-top: 1px solid var(--lp-border); background: var(--lp-surface); display: flex; flex-direction: column; gap: 3px; }",
       ".hero-meta[data-device] { cursor: pointer; }",
@@ -1250,17 +1317,22 @@
       "  .bp-part { transition: opacity 0.2s ease, transform 0.25s ease-out, stroke 0.2s ease, fill 0.2s ease; }",
       "  .panel.is-active { animation: lp-fade 0.18s ease-out; }",
       "  .bp-part.is-moving { animation: lp-pulse-soft 1.2s ease-in-out infinite alternate; }",
-      "  .soc-btn.is-charging .soc-ring-fg { animation: lp-pulse-soft 1.8s ease-in-out infinite alternate; }",
+      "  .soc-btn.is-charging .soc-svg-orbit { animation: lp-spin 2.4s linear infinite; }",
+      "  .soc-btn.is-charging.is-fast-charge .soc-svg-orbit { animation-duration: 1.35s; }",
+      "  .soc-btn.is-charging .soc-track { animation: lp-soc-slide 5.2s ease-in-out infinite; }",
       "  .ctrl-btn.is-spinning .lp-ico { animation: lp-spin 2.4s linear infinite; }",
       "  .flow-bar { animation: lp-flow 1.4s linear infinite; }",
       "}",
       "@media (prefers-reduced-motion: reduce) {",
       "  *, *::before, *::after { animation: none !important; transition: none !important; }",
+      "  .soc-mode-slide { display: none !important; }",
+      "  .soc-btn.is-charging .soc-chg-ico:not(.hidden) { display: inline-flex; }",
       "}",
       "button:focus-visible, input:focus-visible, select:focus-visible, [role=\"button\"]:focus-visible { outline: 2px solid rgba(243, 244, 246, 0.72); outline-offset: -2px; }",
       "@keyframes lp-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }",
       "@keyframes lp-pulse-soft { from { opacity: 0.45; } to { opacity: 0.95; } }",
       "@keyframes lp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
+      "@keyframes lp-soc-slide { 0%, 40% { transform: translateY(0); } 48%, 88% { transform: translateY(-22px); } 96%, 100% { transform: translateY(0); } }",
       "@keyframes lp-flow { from { transform: translateX(-100%); } to { transform: translateX(250%); } }",
     ].join("\n");
   }
@@ -1405,7 +1477,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.25.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.26.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -2711,7 +2783,18 @@
             '<circle class="soc-ring-bg" cx="26" cy="26" r="21"/>' +
             '<circle class="soc-ring-fg" data-soc-ring cx="26" cy="26" r="21" stroke-dasharray="131.95" stroke-dashoffset="131.95"/>' +
           "</svg>" +
-          '<span class="soc-val num" data-bind="socText">—</span>' +
+          '<svg class="soc-svg-orbit hidden" data-bind="socOrbit" viewBox="0 0 52 52" aria-hidden="true">' +
+            '<circle class="soc-ring-orbit" cx="26" cy="26" r="21" stroke-dasharray="28 103.95"/>' +
+          "</svg>" +
+          '<div class="soc-viewport">' +
+            '<div class="soc-track">' +
+              '<div class="soc-slide"><span class="soc-val num" data-bind="socText">—</span></div>' +
+              '<div class="soc-slide soc-mode-slide hidden" data-bind="socModeSlide">' +
+                '<span data-bind="socModeIco">' + svgIcon("bolt", "soc-mode-ico") + "</span>" +
+                '<span class="soc-mode-lbl" data-bind="socModeLbl">AC</span>' +
+              "</div>" +
+            "</div>" +
+          "</div>" +
           '<span class="soc-chg-ico hidden" data-bind="socChgIco">' + svgIcon("bolt", "soc-bolt") + "</span>" +
           '<progress class="sr-only" data-bind="socProgress" max="100" value="0"></progress>' +
         "</div>"
@@ -3248,8 +3331,13 @@
       var heroTitle = root.querySelector('[data-bind="heroTitle"]');
       if (heroTitle) heroTitle.textContent = vm.title;
 
-      var isCharging = this._isOn(vm.chgSwitch) ||
-        (vm.chgStatus && vm.chgStatus.s && /charg/i.test(vm.chgStatus.s.state) && !/not/i.test(vm.chgStatus.s.state));
+      var chgInfo = resolveSocChargingState(vm, {
+        isOn: this._isOn.bind(this),
+        num: this._num.bind(this),
+        dead: this._dead.bind(this),
+      });
+      var isCharging = chgInfo.isCharging;
+      var isFastCharge = chgInfo.isFast;
       var cliActive = Boolean(vm.climate && !this._dead(vm.climate.s) && vm.climate.s.state !== "off");
       var heroBadge = root.querySelector('[data-bind="heroStateBadge"]');
       if (heroBadge) {
@@ -3288,18 +3376,41 @@
 
       // SoC ring & accessible <progress>
       var socBtn = root.querySelector('[data-bind="socBtn"]');
-      if (socBtn) socBtn.classList.toggle("is-charging", Boolean(isCharging));
+      if (socBtn) {
+        socBtn.classList.toggle("is-charging", Boolean(isCharging));
+        socBtn.classList.toggle("is-fast-charge", Boolean(isFastCharge));
+      }
+      var socOrbit = root.querySelector('[data-bind="socOrbit"]');
+      if (socOrbit) socOrbit.classList.toggle("hidden", !isCharging);
+      var socModeSlide = root.querySelector('[data-bind="socModeSlide"]');
+      if (socModeSlide) socModeSlide.classList.toggle("hidden", !isCharging);
       var socChgIco = root.querySelector('[data-bind="socChgIco"]');
       if (socChgIco) socChgIco.classList.toggle("hidden", !isCharging);
+      var modeKey = isFastCharge ? "fast" : "normal";
+      var icoName = isFastCharge ? "fast_charge" : "bolt";
+      var socModeIco = root.querySelector('[data-bind="socModeIco"]');
+      if (socModeIco && socModeIco.getAttribute("data-mode") !== modeKey) {
+        socModeIco.setAttribute("data-mode", modeKey);
+        socModeIco.innerHTML = svgIcon(icoName, "soc-mode-ico");
+      }
+      if (socChgIco && socChgIco.getAttribute("data-mode") !== modeKey) {
+        socChgIco.setAttribute("data-mode", modeKey);
+        socChgIco.innerHTML = svgIcon(icoName, "soc-bolt");
+      }
+      var socModeLbl = root.querySelector('[data-bind="socModeLbl"]');
+      if (socModeLbl) socModeLbl.textContent = isFastCharge ? "DC" : "AC";
       if (vm.bat) {
         var batNum = this._num(vm.bat.s);
         var pct = batNum === null ? 0 : Math.max(0, Math.min(100, batNum));
+        var pctText = batNum === null ? "—" : Math.round(pct) + "%";
         var socText = root.querySelector('[data-bind="socText"]');
-        if (socText) socText.textContent = batNum === null ? "—" : Math.round(pct) + "%";
+        if (socText) socText.textContent = pctText;
+        var socAria = pctText + (isCharging ? " · " + (isFastCharge ? t.chargingFast : t.chargingNormal) : "");
+        if (socBtn) socBtn.setAttribute("aria-label", socAria);
         var socProg = root.querySelector('[data-bind="socProgress"]');
         if (socProg) {
           socProg.setAttribute("value", String(Math.round(pct)));
-          socProg.setAttribute("aria-label", Math.round(pct) + "%");
+          socProg.setAttribute("aria-label", socAria);
         }
         var socRing = root.querySelector("[data-soc-ring]");
         if (socRing) {
@@ -4100,6 +4211,7 @@
     filterAllowedClimateExtras: filterAllowedClimateExtras,
     computeToggleClimateExtras: computeToggleClimateExtras,
     formatCarNextDeparture: formatCarNextDeparture,
+    resolveSocChargingState: resolveSocChargingState,
     svgIcon: svgIcon,
   };
 

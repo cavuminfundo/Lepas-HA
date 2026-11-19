@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.26.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **SoC Ring Orbital Charging Animation & AC/DC Mode Slide (`lepas-card.js`)**: Extracted `resolveSocChargingState(vm, helpers)` to distinguish active charging (`"In ricarica"`, `"Charging"`, `"Opladen"`, `"1"`, or live switch/power) from plugged-in waiting or completed states (`"Non in ricarica"`, `"Ricarica completata"`) and classify normal AC vs fast DC charging (`fast_charging_port`, `>= 15 kW` power, or `hvVolt × |hvCurr|`), added a sibling `<svg class="soc-svg-orbit">` rotation ring (`--lp-emerald` at `2.4s` for AC, `--lp-amber` at `1.35s` for DC) and GPU-composited vertical `@keyframes lp-soc-slide` (`% ↔ AC/DC`) with `data-mode`-guarded `bolt`/`fast_charge` SVG updates, added `@media (prefers-reduced-motion: reduce)` static fallback showing percentage and AC/DC icon without motion, updated localized `aria-label` attributes (`it`, `en`, `nl`) and `heroStateBadge` Italian active-charging parity, and bumped cache-busting assets to `?v=1.26.0`.
+
+### 🇮🇹 Italiano
+
+- **Animazione Orbitale Anello SoC & Slide AC/DC (`lepas-card.js`)**: Estratta `resolveSocChargingState(vm, helpers)` per distinguere la ricarica attiva (`"In ricarica"`, `"Charging"`, `"Opladen"`, `"1"`, oppure interruttore/potenza attivi) dallo stato collegato in attesa o completato (`"Non in ricarica"`, `"Ricarica completata"`) e classificare ricarica normale AC vs rapida DC (`fast_charging_port`, potenza `>= 15 kW` o `hvVolt × |hvCurr|`), aggiunto l'arco orbitale `<svg class="soc-svg-orbit">` (`--lp-emerald` a `2.4s` per AC, `--lp-amber` a `1.35s` per DC) e lo slide verticale GPU `@keyframes lp-soc-slide` (`% ↔ AC/DC`) con aggiornamento icone `bolt`/`fast_charge` protetto da `data-mode`, introdotto il fallback statico `@media (prefers-reduced-motion: reduce)` con percentuale e icona AC/DC senza animazioni, aggiornati gli `aria-label` localizzati (`it`, `en`, `nl`) e la parità italiana di `heroStateBadge`, con bump degli asset a `?v=1.26.0`.
+
 ## v1.25.0 — 2026-11-19
 
 ### 🇬🇧 English
