@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.27.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.28.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.27.0";
+  var CARD_VERSION = "1.28.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.27.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.27.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.27.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.27.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.27.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.28.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.28.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.28.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.28.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.28.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.27.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.28.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -220,6 +220,7 @@
       syncCharge: "Allinea ricarica",
       depClimateMode: "Clima partenza",
       blueprintTitle: "Stato chiusure e TPMS",
+      bpAriaLabel: "Vista dall'alto dello stato chiusure e pneumatici Lepas L8",
       securityControls: "Sicurezza e aperture",
       batteryLow: "Batteria bassa",
       fuelLow: "Carburante basso",
@@ -399,6 +400,7 @@
       syncCharge: "Sync charging",
       depClimateMode: "Departure climate",
       blueprintTitle: "Closures and TPMS",
+      bpAriaLabel: "Top-down view of Lepas L8 closures and tire status",
       securityControls: "Security and closures",
       batteryLow: "Battery low",
       fuelLow: "Fuel low",
@@ -578,6 +580,7 @@
       syncCharge: "Laden synchroniseren",
       depClimateMode: "Vertrekklimaat",
       blueprintTitle: "Sluitingen en TPMS",
+      bpAriaLabel: "Bovenaanzicht van sluitingen en bandenstatus Lepas L8",
       securityControls: "Beveiliging en sluitingen",
       batteryLow: "Accu laag",
       fuelLow: "Brandstof laag",
@@ -863,6 +866,66 @@
     var body = SVG_PATHS[String(name || "")] || '<circle cx="12" cy="12" r="4"/>';
     var clsAttr = "lp-ico" + (cls ? " " + escapeHtml(cls) : "");
     return '<svg class="' + clsAttr + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + "</svg>";
+  }
+
+  function renderCarTopViewSvg(t) {
+    var ariaLabel = escapeHtml((t && t.bpAriaLabel) ? t.bpAriaLabel : "Vehicle blueprint");
+    return (
+      '<svg class="bp-svg" viewBox="0 0 200 340" role="img" aria-label="' + ariaLabel + '">' +
+        "<defs>" +
+          '<linearGradient id="lp-bp-paint-grad" x1="0" y1="0" x2="1" y2="1">' +
+            '<stop offset="0%" stop-color="var(--lp-car-paint-hi, #6B7280)"/>' +
+            '<stop offset="52%" stop-color="var(--lp-car-paint, #4B5563)"/>' +
+            '<stop offset="100%" stop-color="var(--lp-car-paint-lo, #333A45)"/>' +
+          "</linearGradient>" +
+          '<linearGradient id="lp-bp-beam-grad" x1="0" y1="1" x2="0" y2="0">' +
+            '<stop offset="0%" stop-color="#F59E0B" stop-opacity="0.55"/>' +
+            '<stop offset="100%" stop-color="#F59E0B" stop-opacity="0"/>' +
+          "</linearGradient>" +
+        "</defs>" +
+        '<ellipse class="bp-shadow" cx="100" cy="172" rx="62" ry="152"/>' +
+        '<rect class="bp-wheel" data-bp-wheel="front_left" x="41" y="60" width="12" height="38" rx="4"/>' +
+        '<rect class="bp-wheel" data-bp-wheel="front_right" x="147" y="60" width="12" height="38" rx="4"/>' +
+        '<rect class="bp-wheel" data-bp-wheel="rear_left" x="41" y="232" width="12" height="38" rx="4"/>' +
+        '<rect class="bp-wheel" data-bp-wheel="rear_right" x="147" y="232" width="12" height="38" rx="4"/>' +
+        '<path class="bp-body" d="M 100 22 C 126 22 144 29 149 42 C 152 50 153 60 153 74 C 156 80 156 92 153 98 L 152 228 C 156 235 156 250 152 258 C 151 278 148 296 142 306 C 135 316 119 320 100 320 C 81 320 65 316 58 306 C 52 296 49 278 48 258 C 44 250 44 235 48 228 L 47 98 C 44 92 44 80 47 74 C 47 60 48 50 51 42 C 56 29 74 22 100 22 Z"/>' +
+        '<path class="bp-trim" d="M 74 26 Q 100 23 126 26 L 122 30 Q 100 28 78 30 Z"/>' +
+        '<g class="bp-headlights" data-bp-part="headlights">' +
+          '<path class="bp-light-beam" d="M 54 29 L 34 2 L 78 2 L 73 27 Z M 146 29 L 166 2 L 122 2 L 127 27 Z"/>' +
+          '<path class="bp-light-lens" d="M 52 38 Q 60 28 76 28 L 72 34 Q 61 35 55 43 Z M 148 38 Q 140 28 124 28 L 128 34 Q 139 35 145 43 Z"/>' +
+        "</g>" +
+        '<g class="bp-part" data-bp-part="hood">' +
+          '<path d="M 56 42 Q 100 32 144 42 L 138 96 Q 100 90 62 96 Z"/>' +
+          '<path class="bp-crease" d="M 72 46 Q 74 68 70 90 M 128 46 Q 126 68 130 90"/>' +
+        "</g>" +
+        '<path class="bp-mirror" d="M 48 106 L 33 109 Q 29 111 31 117 Q 33 121 48 117 Z M 152 106 L 167 109 Q 171 111 169 117 Q 167 121 152 117 Z"/>' +
+        '<path class="bp-glass" d="M 62 99 Q 100 92 138 99 L 133 134 Q 100 128 67 134 Z"/>' +
+        '<path class="bp-glass-glint" d="M 72 103 L 88 100 L 80 128 L 68 130 Z"/>' +
+        '<path class="bp-rail" d="M 60 132 L 62 252 M 140 132 L 138 252"/>' +
+        '<rect class="bp-glass" x="65" y="136" width="70" height="114" rx="10"/>' +
+        '<g class="bp-part bp-sunroof" data-bp-part="sunroof">' +
+          '<rect class="bp-sunroof-pane" x="68" y="140" width="64" height="58" rx="7"/>' +
+          '<path class="bp-sunroof-vent" d="M 72 197 L 128 197 L 124 204 L 76 204 Z"/>' +
+        "</g>" +
+        '<rect class="bp-part" data-bp-part="sunroof_blind" x="70" y="236" width="60" height="4" rx="2"/>' +
+        '<path class="bp-part" data-bp-part="windows" d="M 52 122 L 58 124 L 58 242 L 52 246 Z M 148 122 L 142 124 L 142 242 L 148 246 Z"/>' +
+        '<g class="bp-part bp-door-fl" data-bp-part="front_left_door"><path d="M 47 124 L 53 124 L 53 184 L 47 184 Z"/><line class="bp-handle" x1="49" y1="166" x2="49" y2="176"/></g>' +
+        '<g class="bp-part bp-door-fr" data-bp-part="front_right_door"><path d="M 147 124 L 153 124 L 153 184 L 147 184 Z"/><line class="bp-handle" x1="151" y1="166" x2="151" y2="176"/></g>' +
+        '<g class="bp-part bp-door-rl" data-bp-part="rear_left_door"><path d="M 47 188 L 53 188 L 53 246 L 48 246 Z"/><line class="bp-handle" x1="49" y1="226" x2="49" y2="236"/></g>' +
+        '<g class="bp-part bp-door-rr" data-bp-part="rear_right_door"><path d="M 147 188 L 153 188 L 152 246 L 147 246 Z"/><line class="bp-handle" x1="151" y1="226" x2="151" y2="236"/></g>' +
+        '<path class="bp-glass" d="M 66 254 Q 100 260 134 254 L 139 286 Q 100 293 61 286 Z"/>' +
+        '<g class="bp-part" data-bp-part="trunk">' +
+          '<path d="M 61 290 Q 100 296 139 290 L 143 310 Q 100 320 57 310 Z"/>' +
+          '<path class="bp-taillight-bar" d="M 62 306 Q 100 313 138 306"/>' +
+        "</g>" +
+        '<rect class="bp-part" data-bp-part="tailgate_moving" x="76" y="317" width="48" height="5" rx="2.5"/>' +
+        '<g class="bp-lock-badge" data-bp-lock transform="translate(100, 170)">' +
+          '<circle class="bp-lock-ring" cx="0" cy="0" r="11"/>' +
+          '<path class="bp-lock-shackle" d="M -3.5 -1 V -3.5 A 3.5 3.5 0 0 1 3.5 -3.5 V -1"/>' +
+          '<rect class="bp-lock-body" x="-5" y="-1" width="10" height="7" rx="1.8"/>' +
+        "</g>" +
+      "</svg>"
+    );
   }
 
   function formatMetric(s, lang) {
@@ -1232,8 +1295,12 @@
       ".climate-extra-chip { width: 100%; justify-content: flex-start; text-align: left; font-size: 0.75rem; line-height: 1.2; padding: 6px 8px; }",
       ".chip-btn.is-pending { opacity: 0.58; cursor: wait; }",
       ".climate-extra-chip.is-active { background: #2A313D; color: var(--lp-emerald); border-color: rgba(52, 211, 153, 0.55); }",
-      ".bp-stage { display: grid; grid-template-columns: minmax(88px, 1fr) minmax(108px, 124px) minmax(88px, 1fr); gap: 8px; align-items: center; }",
-      ".tpms-col { display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }",
+      ".bp-stage { display: grid; grid-template-columns: minmax(64px, 1fr) minmax(96px, 148px) minmax(64px, 1fr); gap: 6px; align-items: center; --lp-car-paint-hi: #6B7280; --lp-car-paint: #4B5563; --lp-car-paint-lo: #333A45; --lp-car-stroke: rgba(255, 255, 255, 0.30); }",
+      ".bp-stage[data-car-color=\"teal\"] { --lp-car-paint-hi: #267B7B; --lp-car-paint: #195C5C; --lp-car-paint-lo: #103D3D; --lp-car-stroke: rgba(167, 243, 208, 0.30); }",
+      ".bp-stage[data-car-color=\"violet\"] { --lp-car-paint-hi: #7A5899; --lp-car-paint: #593E73; --lp-car-paint-lo: #3B284E; --lp-car-stroke: rgba(221, 214, 254, 0.30); }",
+      ".bp-stage[data-car-color=\"black\"] { --lp-car-paint-hi: #2D3340; --lp-car-paint: #1B1F27; --lp-car-paint-lo: #111419; --lp-car-stroke: rgba(255, 255, 255, 0.38); }",
+      ".bp-stage[data-car-color=\"white\"] { --lp-car-paint-hi: #E5E7EB; --lp-car-paint: #C7CCD4; --lp-car-paint-lo: #9CA3AF; --lp-car-stroke: rgba(255, 255, 255, 0.65); }",
+      ".tpms-col { min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }",
       ".tpms-box { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 9px; padding: 7px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 54px; }",
       ".tpms-box.is-ok { border-color: rgba(52, 211, 153, 0.35); }",
       ".tpms-box.is-alert { border-color: rgba(239, 68, 68, 0.72); background: rgba(239, 68, 68, 0.14); color: #FECACA; }",
@@ -1241,21 +1308,53 @@
       ".tpms-box.is-alert .tpms-hdr { color: #FECACA; }",
       ".tpms-press { font-size: 0.82rem; font-weight: 700; color: var(--lp-text); }",
       ".tpms-temp { font-size: 0.72rem; color: var(--lp-text-secondary); }",
-      ".bp-svg { width: 100%; max-width: 130px; height: auto; display: block; margin: 0 auto; }",
-      ".bp-body { fill: var(--lp-elevated); stroke: rgba(255, 255, 255, 0.24); stroke-width: 1.5; }",
-      ".bp-glass { fill: rgba(17, 19, 23, 0.75); stroke: rgba(255, 255, 255, 0.2); stroke-width: 1; }",
-      ".bp-part { fill: rgba(255, 255, 255, 0.08); stroke: rgba(255, 255, 255, 0.34); stroke-width: 1.4; }",
-      ".bp-part.is-open { fill: rgba(245, 158, 11, 0.35); stroke: var(--lp-amber); }",
-      ".bp-part.is-window-open { fill: rgba(96, 165, 250, 0.35); stroke: var(--lp-glacier); }",
+      ".bp-svg { width: 100%; max-width: 152px; height: auto; display: block; margin: 0 auto; overflow: visible; }",
+      ".bp-shadow { fill: rgba(0, 0, 0, 0.42); }",
+      ".bp-body { fill: url(#lp-bp-paint-grad); stroke: var(--lp-car-stroke); stroke-width: 1.5; }",
+      ".bp-trim { fill: rgba(17, 19, 23, 0.55); stroke: rgba(255, 255, 255, 0.16); stroke-width: 0.9; }",
+      ".bp-mirror { fill: var(--lp-car-paint); stroke: var(--lp-car-stroke); stroke-width: 1.1; }",
+      ".bp-crease { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; stroke-linecap: round; }",
+      ".bp-rail { fill: none; stroke: rgba(17, 19, 23, 0.78); stroke-width: 2.2; stroke-linecap: round; }",
+      ".bp-wheel { fill: #16181D; stroke: rgba(255, 255, 255, 0.24); stroke-width: 1.2; }",
+      ".bp-wheel.is-alert { fill: rgba(239, 68, 68, 0.38); stroke: var(--lp-coral); stroke-width: 1.6; }",
+      ".bp-glass { fill: rgba(12, 14, 18, 0.84); stroke: rgba(255, 255, 255, 0.20); stroke-width: 1; }",
+      ".bp-glass-glint { fill: rgba(255, 255, 255, 0.06); stroke: none; }",
+      ".bp-part { fill: rgba(255, 255, 255, 0.06); stroke: rgba(255, 255, 255, 0.26); stroke-width: 1.25; }",
+      ".bp-handle { stroke: rgba(255, 255, 255, 0.38); stroke-width: 1.2; stroke-linecap: round; }",
+      ".bp-taillight-bar { fill: none; stroke: rgba(239, 68, 68, 0.52); stroke-width: 1.8; stroke-linecap: round; }",
+      ".bp-part.is-open { fill: rgba(245, 158, 11, 0.34); stroke: var(--lp-amber); }",
+      ".bp-part.is-window-open { fill: rgba(96, 165, 250, 0.32); stroke: var(--lp-glacier); }",
       ".bp-part.is-moving { fill: rgba(96, 165, 250, 0.45); stroke: var(--lp-glacier); }",
-      ".bp-headlights { fill: rgba(243, 244, 246, 0.14); stroke: rgba(243, 244, 246, 0.35); stroke-width: 1; }",
-      ".bp-headlights.is-on { fill: rgba(245, 158, 11, 0.65); stroke: var(--lp-amber); }",
-      ".bp-lock-badge { fill: rgba(17, 19, 23, 0.9); stroke: var(--lp-emerald); stroke-width: 1.3; }",
-      ".bp-lock-badge.is-unlocked { stroke: var(--lp-amber); }",
-      ".bp-door-fl.is-open { transform: translate(-6px, 0) rotate(-18deg); transform-origin: 48px 98px; }",
-      ".bp-door-fr.is-open { transform: translate(6px, 0) rotate(18deg); transform-origin: 112px 98px; }",
-      ".bp-door-rl.is-open { transform: translate(-6px, 0) rotate(-18deg); transform-origin: 48px 148px; }",
-      ".bp-door-rr.is-open { transform: translate(6px, 0) rotate(18deg); transform-origin: 112px 148px; }",
+      ".bp-sunroof-pane { fill: rgba(17, 24, 39, 0.65); stroke: rgba(255, 255, 255, 0.28); stroke-width: 1.1; }",
+      ".bp-sunroof.is-open .bp-sunroof-pane { fill: rgba(96, 165, 250, 0.34); stroke: var(--lp-glacier); }",
+      ".bp-sunroof.is-open:not(.is-tilted) .bp-sunroof-pane { transform: translateY(22px); }",
+      ".bp-sunroof-vent { opacity: 0; fill: rgba(96, 165, 250, 0.72); stroke: var(--lp-glacier); stroke-width: 1; }",
+      ".bp-sunroof.is-tilted .bp-sunroof-vent { opacity: 1; }",
+      ".bp-sunroof.is-tilted .bp-sunroof-pane { stroke: var(--lp-glacier); fill: rgba(96, 165, 250, 0.22); }",
+      ".bp-light-beam { opacity: 0; fill: url(#lp-bp-beam-grad); stroke: none; }",
+      ".bp-light-lens { fill: rgba(243, 244, 246, 0.20); stroke: rgba(243, 244, 246, 0.42); stroke-width: 1; }",
+      ".bp-headlights.is-on .bp-light-beam { opacity: 1; }",
+      ".bp-headlights.is-on .bp-light-lens { fill: rgba(245, 158, 11, 0.78); stroke: var(--lp-amber); }",
+      ".bp-stage[data-car-color=\"black\"] .bp-part { stroke: rgba(255, 255, 255, 0.36); }",
+      ".bp-stage[data-car-color=\"white\"] .bp-part { fill: rgba(17, 24, 39, 0.08); stroke: rgba(17, 24, 39, 0.44); }",
+      ".bp-stage[data-car-color=\"white\"] .bp-crease { stroke: rgba(17, 24, 39, 0.30); }",
+      ".bp-stage[data-car-color=\"white\"] .bp-handle { stroke: rgba(17, 24, 39, 0.58); }",
+      ".bp-stage[data-car-color=\"white\"] .bp-light-lens { fill: rgba(17, 24, 39, 0.22); stroke: rgba(17, 24, 39, 0.56); }",
+      ".bp-stage[data-car-color=\"white\"] .bp-part.is-open { fill: rgba(180, 83, 9, 0.65); stroke: #92400E; }",
+      ".bp-stage[data-car-color=\"white\"] .bp-part.is-window-open { fill: rgba(29, 78, 216, 0.55); stroke: #1D4ED8; }",
+      ".bp-stage[data-car-color=\"white\"] .bp-headlights.is-on .bp-light-lens { fill: #D97706; stroke: #92400E; }",
+      ".bp-lock-ring { fill: rgba(17, 19, 23, 0.92); stroke: var(--lp-emerald); stroke-width: 1.4; }",
+      ".bp-lock-shackle { fill: none; stroke: var(--lp-emerald); stroke-width: 1.4; stroke-linecap: round; }",
+      ".bp-lock-body { fill: var(--lp-emerald); }",
+      ".bp-lock-badge.is-unlocked .bp-lock-ring { stroke: var(--lp-amber); }",
+      ".bp-lock-badge.is-unlocked .bp-lock-shackle { stroke: var(--lp-amber); transform: translateY(-1.8px); }",
+      ".bp-lock-badge.is-unlocked .bp-lock-body { fill: var(--lp-amber); }",
+      ".bp-door-fl { transform-box: view-box; transform-origin: 48px 124px; }",
+      ".bp-door-fr { transform-box: view-box; transform-origin: 152px 124px; }",
+      ".bp-door-rl { transform-box: view-box; transform-origin: 48px 188px; }",
+      ".bp-door-rr { transform-box: view-box; transform-origin: 152px 188px; }",
+      ".bp-door-fl.is-open, .bp-door-rl.is-open { transform: rotate(22deg); }",
+      ".bp-door-fr.is-open, .bp-door-rr.is-open { transform: rotate(-22deg); }",
       ".footer-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.76rem; color: var(--lp-text-secondary); }",
       ".meta-inline { display: inline-flex; align-items: center; gap: 6px; }",
       ".badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); }",
@@ -1296,6 +1395,7 @@
       "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"charging\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"charging\"] { grid-column: 2; grid-row: 2; }",
       "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"climate\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"climate\"] { grid-column: 3; grid-row: 1 / span 2; }",
       "}",
+      "@container (max-width: 340px) { .bp-stage { grid-template-columns: minmax(60px, 1fr) minmax(92px, 120px) minmax(60px, 1fr); gap: 5px; } }",
       "@supports not (container-type: inline-size) {",
       "  @media (min-width: 680px) {",
       "    ha-card[data-layout=\"auto\"] .tabs-bar { display: none; }",
@@ -1314,7 +1414,7 @@
       "}",
       "@media (prefers-reduced-motion: no-preference) {",
       "  .soc-ring-fg { transition: stroke-dashoffset 0.35s ease-out, stroke 0.2s ease; }",
-      "  .bp-part { transition: opacity 0.2s ease, transform 0.25s ease-out, stroke 0.2s ease, fill 0.2s ease; }",
+      "  .bp-part, .bp-sunroof-pane, .bp-sunroof-vent, .bp-light-beam, .bp-wheel, .bp-lock-shackle { transition: opacity 0.2s ease, transform 0.25s ease-out, stroke 0.2s ease, fill 0.2s ease; }",
       "  .panel.is-active { animation: lp-fade 0.18s ease-out; }",
       "  .bp-part.is-moving { animation: lp-pulse-soft 1.2s ease-in-out infinite alternate; }",
       "  .soc-btn.is-charging .soc-svg-orbit { animation: lp-spin 2.4s linear infinite; }",
@@ -1477,7 +1577,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.27.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.28.0">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -3183,29 +3283,12 @@
         "</div>";
       };
 
-      var blueprintSvg =
-        '<svg class="bp-svg" viewBox="0 0 160 250" aria-label="Vehicle blueprint">' +
-          '<path class="bp-headlights" data-bp-part="headlights" d="M 46 21 Q 54 14 63 18 L 60 24 L 47 26 Z M 114 21 Q 106 14 97 18 L 100 24 L 113 26 Z"/>' +
-          '<rect class="bp-body" x="42" y="16" width="76" height="218" rx="22"/>' +
-          '<path class="bp-part" data-bp-part="hood" d="M 48 26 Q 80 18 112 26 L 108 68 L 52 68 Z"/>' +
-          '<path class="bp-glass" d="M 52 72 L 108 72 L 104 94 L 56 94 Z"/>' +
-          '<rect class="bp-part" data-bp-part="sunroof" x="56" y="102" width="48" height="44" rx="4"/>' +
-          '<line class="bp-part" data-bp-part="sunroof_blind" x1="58" y1="124" x2="102" y2="124"/>' +
-          '<path class="bp-part" data-bp-part="windows" d="M 46 84 L 50 84 L 50 182 L 46 182 Z M 110 84 L 114 84 L 114 182 L 110 182 Z"/>' +
-          '<rect class="bp-part bp-door-fl" data-bp-part="front_left_door" x="41" y="96" width="8" height="42" rx="2"/>' +
-          '<rect class="bp-part bp-door-fr" data-bp-part="front_right_door" x="111" y="96" width="8" height="42" rx="2"/>' +
-          '<rect class="bp-part bp-door-rl" data-bp-part="rear_left_door" x="41" y="144" width="8" height="40" rx="2"/>' +
-          '<rect class="bp-part bp-door-rr" data-bp-part="rear_right_door" x="111" y="144" width="8" height="40" rx="2"/>' +
-          '<path class="bp-glass" d="M 56 184 L 104 184 L 108 202 L 52 202 Z"/>' +
-          '<path class="bp-part" data-bp-part="trunk" d="M 52 206 L 108 206 L 112 226 Q 80 234 48 226 Z"/>' +
-          '<rect class="bp-part" data-bp-part="tailgate_moving" x="62" y="226" width="36" height="5" rx="2"/>' +
-          '<circle class="bp-lock-badge" data-bp-lock cx="80" cy="124" r="6"/>' +
-        "</svg>";
-
+      var blueprintSvg = renderCarTopViewSvg(t);
+      var carColor = resolveColor(self.config && self.config.color);
       var blueprintHtml =
         '<div class="surface">' +
           '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("tire", "sec-ico") + "<span>" + self._h(t.blueprintTitle) + "</span></span></div>" +
-          '<div class="bp-stage">' +
+          '<div class="bp-stage" data-car-color="' + self._h(carColor) + '">' +
             '<div class="tpms-col">' + tpmsCard(ctx.tpmsCorners[0]) + tpmsCard(ctx.tpmsCorners[2]) + "</div>" +
             blueprintSvg +
             '<div class="tpms-col">' + tpmsCard(ctx.tpmsCorners[1]) + tpmsCard(ctx.tpmsCorners[3]) + "</div>" +
@@ -4131,6 +4214,8 @@
       }
 
       // Blueprint SVG & TPMS
+      var bpStage = root.querySelector(".bp-stage");
+      if (bpStage) bpStage.setAttribute("data-car-color", resolveColor(this.config && this.config.color));
       var setBp = function (part, cls, active) {
         var el = root.querySelector('[data-bp-part="' + part + '"]');
         if (el) el.classList.toggle(cls, Boolean(active));
@@ -4155,21 +4240,26 @@
       setBp("windows", "is-open", winOpen);
       setBp("windows", "is-window-open", winOpen);
 
-      var sunOpen = (vm.sunroofCov && vm.sunroofCov.s && vm.sunroofCov.s.state === "open") ||
-        (vm.sunroofMove && vm.sunroofMove.s && /open|mov|tilt/i.test(vm.sunroofMove.s.state));
+      var sunMoveState = (vm.sunroofMove && vm.sunroofMove.s && vm.sunroofMove.s.state) ? String(vm.sunroofMove.s.state) : "";
+      var sunCovOpen = Boolean(vm.sunroofCov && vm.sunroofCov.s && vm.sunroofCov.s.state === "open");
+      var sunTilted = !sunCovOpen && /tilt/i.test(sunMoveState);
+      var sunOpen = sunCovOpen || /open|mov|tilt/i.test(sunMoveState);
       setBp("sunroof", "is-open", sunOpen);
       setBp("sunroof", "is-window-open", sunOpen);
+      setBp("sunroof", "is-tilted", sunTilted);
 
       for (var ti = 0; ti < vm.tpmsCorners.length; ti += 1) {
         var tp = vm.tpmsCorners[ti];
         var box = root.querySelector('[data-tpms="' + tp.pos + '"]');
         var pEl = root.querySelector('[data-tpms-press="' + tp.pos + '"]');
         var tEl = root.querySelector('[data-tpms-temp="' + tp.pos + '"]');
+        var wheelEl = root.querySelector('[data-bp-wheel="' + tp.pos + '"]');
         var isAlert = this._isOn(tp.w);
         if (box) {
           box.classList.toggle("is-alert", isAlert);
           box.classList.toggle("is-ok", !isAlert && Boolean(tp.p && !this._dead(tp.p.s)));
         }
+        if (wheelEl) wheelEl.classList.toggle("is-alert", isAlert);
         if (pEl) pEl.textContent = (tp.p && !this._dead(tp.p.s)) ? this._disp(tp.p.s) : "—";
         if (tEl) tEl.textContent = (tp.temp && !this._dead(tp.temp.s)) ? this._disp(tp.temp.s) : "";
       }

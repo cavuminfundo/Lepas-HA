@@ -918,16 +918,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.27.0");
+  assert.equal(h.CARD_VERSION, "1.28.0");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.27.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.28.0");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.27.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.28.0`
     );
   }
 
@@ -946,7 +946,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.27.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.28.0`
     );
   }
 
@@ -1383,6 +1383,77 @@ test("Entity mapping: SVG blueprint, TPMS, SoC ring + progress, 4+1 seats, charg
   const nlChips = sparseCard.shadowRoot.querySelectorAll('[data-day-chip]');
   assert.equal(nlChips[2].textContent.trim().slice(0, 1), "W");
   assert.equal(nlChips[6].textContent.trim().slice(0, 1), "Z");
+});
+
+test("OEM top-down SVG: proportions, dynamic car color, TPMS wheels, and sunroof open vs tilt", () => {
+  const openHass = makeFullHass({
+    "cover.lepas_sunroof": makeState("cover.lepas_sunroof", "open"),
+    "sensor.lepas_sunroof_movement_state": makeState("sensor.lepas_sunroof_movement_state", "open"),
+    "binary_sensor.lepas_tire_warning_rear_right": makeState("binary_sensor.lepas_tire_warning_rear_right", "on"),
+  }, "it");
+  const openCard = createCard({ color: "teal" }, openHass);
+
+  const stage = openCard.shadowRoot.querySelector(".bp-stage");
+  assert.ok(stage);
+  assert.equal(stage.getAttribute("data-car-color"), "teal");
+
+  const svg = openCard.shadowRoot.querySelector(".bp-svg");
+  assert.ok(svg);
+  assert.equal(svg.getAttribute("viewBox"), "0 0 200 340");
+  assert.equal(svg.getAttribute("role"), "img");
+  assert.ok((svg.getAttribute("aria-label") || "").length > 5);
+
+  // Headlights render after .bp-body so lenses are never occluded by opaque body paint
+  const paintOrderEls = Array.from(svg.querySelectorAll('.bp-body, [data-bp-part="headlights"]'));
+  assert.equal(paintOrderEls.length, 2);
+  assert.ok(paintOrderEls[0].classList.contains("bp-body"));
+  assert.equal(paintOrderEls[1].getAttribute("data-bp-part"), "headlights");
+
+  // 4 corner wheels mirror TPMS alert state
+  const wheels = openCard.shadowRoot.querySelectorAll("[data-bp-wheel]");
+  assert.equal(wheels.length, 4);
+  assert.ok(openCard.shadowRoot.querySelector('[data-bp-wheel="rear_right"].is-alert'));
+  assert.equal(openCard.shadowRoot.querySelector('[data-bp-wheel="front_left"].is-alert'), null);
+
+  // Sunroof full open has .is-open without .is-tilted
+  const openSunroof = openCard.shadowRoot.querySelector('[data-bp-part="sunroof"]');
+  assert.ok(openSunroof.classList.contains("is-open"));
+  assert.equal(openSunroof.classList.contains("is-tilted"), false);
+
+  // Sunroof tilt (ventilation) activates .is-tilted + .is-open + unlocked lock badge
+  const tiltHass = makeFullHass({
+    "cover.lepas_sunroof": makeState("cover.lepas_sunroof", "closed"),
+    "sensor.lepas_sunroof_movement_state": makeState("sensor.lepas_sunroof_movement_state", "tilt"),
+    "lock.lepas_lock": makeState("lock.lepas_lock", "unlocked"),
+  }, "en");
+  const tiltCard = createCard({ color: "invalid-color" }, tiltHass);
+  assert.equal(tiltCard.shadowRoot.querySelector(".bp-stage").getAttribute("data-car-color"), "grey");
+  assert.ok(tiltCard.shadowRoot.querySelector("[data-bp-lock].is-unlocked"));
+  const tiltSunroof = tiltCard.shadowRoot.querySelector('[data-bp-part="sunroof"]');
+  assert.ok(tiltSunroof.classList.contains("is-open"));
+  assert.ok(tiltSunroof.classList.contains("is-window-open"));
+  assert.ok(tiltSunroof.classList.contains("is-tilted"));
+
+  // Closed sunroof baseline + live hass re-binding on the same card instances
+  const closedHass = makeFullHass({
+    "cover.lepas_sunroof": makeState("cover.lepas_sunroof", "closed"),
+    "sensor.lepas_sunroof_movement_state": makeState("sensor.lepas_sunroof_movement_state", "closed"),
+    "binary_sensor.lepas_tire_warning_rear_right": makeState("binary_sensor.lepas_tire_warning_rear_right", "off"),
+  }, "it");
+  tiltCard.hass = closedHass;
+  const reboundSunroof = tiltCard.shadowRoot.querySelector('[data-bp-part="sunroof"]');
+  assert.equal(reboundSunroof.classList.contains("is-open"), false);
+  assert.equal(reboundSunroof.classList.contains("is-window-open"), false);
+  assert.equal(reboundSunroof.classList.contains("is-tilted"), false);
+
+  openCard.hass = closedHass;
+  assert.equal(openCard.shadowRoot.querySelector('[data-bp-wheel="rear_right"].is-alert'), null);
+
+  // All 5 VALID_COLORS propagate to .bp-stage[data-car-color]
+  for (const col of ["grey", "teal", "violet", "black", "white"]) {
+    const colCard = createCard({ color: col }, closedHass);
+    assert.equal(colCard.shadowRoot.querySelector(".bp-stage").getAttribute("data-car-color"), col);
+  }
 });
 
 test("Security & Privacy: XSS escaping and ZERO VIN or raw GPS coordinates in DOM", () => {

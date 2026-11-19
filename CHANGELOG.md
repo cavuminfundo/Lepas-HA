@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.28.0 — 2026-11-19
+
+### 🇬🇧 English
+
+- **OEM Top-Down Vehicle SVG Redesign (`lepas-card.js`)**: Replaced the legacy rectangular schematic in the Security/TPMS panel with `renderCarTopViewSvg(t)` (`viewBox="0 0 200 340"`), featuring Lepas L8 SUV proportions (sculpted hood creases, side mirrors, roof rails, full-width rear LED bar, flush-handle doors hinged at front pillars with outward `±22deg` rotation, and centered lock badge), synchronized 5-color paint gradients via `.bp-stage[data-car-color]` (`grey`, `teal`, `violet`, `black`, `white`) with >= 3:1 WCAG contrast overrides on light/dark finishes, 4 corner wheel elements (`[data-bp-wheel]`) tied to TPMS alert states, distinct slide-open (`.is-open`) vs tilt-ventilation (`.is-tilted`) panoramic sunroof states, balanced `.bp-stage` responsiveness for both mobile and 3-column cockpit layouts, and bumped card assets to `?v=1.28.0`.
+
+### 🇮🇹 Italiano
+
+- **Redesign Vista Auto dall'Alto OEM (`lepas-card.js`)**: Sostituito lo schema rettangolare precedente nel pannello Sicurezza/TPMS con `renderCarTopViewSvg(t)` (`viewBox="0 0 200 340"`), dotato di proporzioni reali da SUV Lepas L8 (nervature sul cofano, specchietti laterali, mancorrenti sul tetto, barra LED posteriore continua, portiere sagomate incernierate sul montante anteriore con rotazione esterna `±22deg` e badge lucchetto centrale), verniciatura dinamica sincronizzata sulle 5 tinte via `.bp-stage[data-car-color]` (`grey`, `teal`, `violet`, `black`, `white`) con regole di contrasto WCAG >= 3:1 dedicate su bianco e nero, 4 pneumatici ai passaruota (`[data-bp-wheel]`) collegati agli alert TPMS, distinzione visiva tra tetto panoramico aperto a scorrimento (`.is-open`) e ventilazione/basculamento (`.is-tilted`), griglia `.bp-stage` bilanciata per mobile e cockpit a 3 colonne, con aggiornamento cache-busting della card a `?v=1.28.0`.
+
 ## v1.27.0 — 2026-11-19
 
 ### 🇬🇧 English
