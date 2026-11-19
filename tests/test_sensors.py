@@ -86,11 +86,24 @@ async def test_gli_altri_sensori_non_spariscono_a_fine_carica(hass, integrazione
 
 async def test_un_solo_sensore_e_volatile(hass, integrazione_avviata):
     """Guard-rail: rendere volatile un sensore che non lo è lo farebbe sparire a ogni
-    lettura parziale. Oggi solo il tempo di ricarica lo è."""
+    lettura parziale. Solo potenza e tempo residuo di ricarica lo sono."""
     from custom_components.lepas.sensor import _RT_SENSORS
 
     vol = [s.field for s in _RT_SENSORS if s.volatile]
-    assert vol == ["remainChargeTime"], f"sensori volatili inattesi: {vol}"
+    assert vol == ["remainChargeTime", "chargingPower"], f"sensori volatili inattesi: {vol}"
+
+
+async def test_potenza_ricarica_disponibile_anche_su_phev(hass, integrazione_avviata):
+    """La PHEV (Lepas L8) invia `chargingPower` sotto carica: il sensore kW esiste per tutti."""
+    coord = _coord(hass, integrazione_avviata)
+    ent = "sensor.lepas_charging_power"
+    assert hass.states.get(ent) is not None
+
+    await _push_realtime(hass, coord, {**_IN_CARICA, "chargingPower": "2.22"})
+    assert hass.states.get(ent).state == "2.22"
+
+    await _push_realtime(hass, coord, _A_RIPOSO)
+    assert hass.states.get(ent).state in ("unknown", "unavailable")
 
 
 # ───────── freschezza dei dati auto: si misura sul CONTENUTO, non sull'orologio ─────────

@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.29.1 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Clear `car_in_use` Latch When Plugged-In Charging (`coordinator.py`)**: Updated `_evaluate_car_in_use()` to reset `_hv_session_in_use` and align `_hv_session_start_odo` when the vehicle is plugged in (`chargeGunState != 0`) with engine off, zero speed, closed doors, and no ECU comfort rejection, preventing climate controls from staying locked after driving straight into a charging session while `hVoltageState` remains `1`.
+- **Enable Live Charging Power (`kW`) on All Models & Clean Live Charging Grid (`sensor.py`, `lepas-card.js`)**: Promoted `sensor.lepas_charging_power` (`chargingPower`, `kW`, `volatile=True`) from BEV-only `_RT_SENSORI_BEV` to `_RT_SENSORS` after confirming live `chargingPower` telemetry on Lepas L8 PHEV while charging, renamed the live-charging power tile label to localized `Power` / `Potenza` / `Vermogen`, removed the cumulative `Home` and `Away` energy tiles from the `Live charging` panel (keeping both HA entities active for the Energy Dashboard and future Statistics card), and bumped card assets to `?v=1.29.1`.
+
+### 🇮🇹 Italiano
+
+- **Sblocco `car_in_use` Durante la Ricarica da Collegata (`coordinator.py`)**: Aggiornato `_evaluate_car_in_use()` per azzerare `_hv_session_in_use` e riallineare `_hv_session_start_odo` quando l'auto è collegata al cavo (`chargeGunState != 0`) con motore spento, velocità zero, porte chiuse e nessun rifiuto ECU nel frame, evitando che i comandi clima restino disabilitati dopo un viaggio seguito da ricarica con `hVoltageState` ancora a `1`.
+- **Potenza di Ricarica Istantanea (`kW`) per Tutti i Modelli e Pulizia Ricarica Live (`sensor.py`, `lepas-card.js`)**: Spostato `sensor.lepas_charging_power` (`chargingPower`, `kW`, `volatile=True`) da `_RT_SENSORI_BEV` a `_RT_SENSORS` dopo aver confermato la telemetria live su Lepas L8 PHEV sotto carica, rinominata in `Potenza` (`Power` / `Vermogen`) l'etichetta del riquadro in *Ricarica live*, rimossi i contatori cumulativi `Casa` e `Fuori` dal pannello *Ricarica live* (mantenendo entrambe le entità HA attive per la Dashboard Energia e la futura card Statistiche), con bump degli asset a `?v=1.29.1`.
+
 ## v1.29.0 — 2026-11-19
 
 ### 🇬🇧 English

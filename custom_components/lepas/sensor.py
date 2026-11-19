@@ -360,6 +360,8 @@ _RT_SENSORS: list[_RtSpec] = [
     # fastChargingGunStatus = codici (tutti 0 = a riposo dal vivo) → grezzi da decodificare.
     _RtSpec("tempo_ricarica", "Tempo di ricarica residuo", "remainChargeTime",
             DUR, MIN, None, "mdi:timer-sand", volatile=True),
+    _RtSpec("potenza_ricarica", "Potenza di ricarica", "chargingPower",
+            POWER, KW, MEAS, "mdi:ev-station", volatile=True),
     _RtSpec("stato_ricarica", "Stato ricarica", "chargeState",
             None, None, None, "mdi:ev-station", diag=True, numeric=False,
             vmap=CHARGE_STATE_MAP),
@@ -393,13 +395,8 @@ _SENSORI_SOLO_TERMICO = frozenset({
     "km_ibrido",
 })
 
-# Campi che ESISTONO solo sulle BEV: la cattura live dei 91 campi del 2026-06-25 ha
-# dimostrato che questa vettura NON li manda, quindi si creano soltanto a BEV confermata
-# (altrimenti sarebbero tre entità `unknown` a vita).
+# Campi specifici BEV (assenti sulla PHEV): si creano soltanto a BEV confermata.
 _RT_SENSORI_BEV: list[_RtSpec] = [
-    # potenza di ricarica istantanea: la mandano le BEV, la PHEV no
-    _RtSpec("potenza_ricarica", "Potenza di ricarica", "chargingPower",
-            POWER, KW, MEAS, "mdi:ev-station", volatile=True),
     # autonomia omologata WLTP (valore fisso di targa, non una lettura) → diagnostica
     _RtSpec("range_wltp", "Autonomia WLTP", "wltcPureElectricRange",
             DIST, KM, MEAS, "mdi:map-marker-distance", diag=True),

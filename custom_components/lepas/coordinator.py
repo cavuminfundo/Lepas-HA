@@ -2809,9 +2809,17 @@ class LepasCoordinator(DataUpdateCoordinator):
         odo = _safe_float(_pick_field(sources, "odometer"))
 
         with self._hv_lock:
-            if hv_on is False and not eng_on and not speed_pos:
+            if (hv_on is False and not eng_on and not speed_pos) or (
+                plugged
+                and not eng_on
+                and not speed_pos
+                and not any_door_open
+                and not comfort_rejected
+            ):
                 self._hv_session_in_use = False
-                self._hv_session_start_odo = None
+                self._hv_session_start_odo = (
+                    odo if (plugged and odo is not None and odo > 0.0) else None
+                )
                 return False
             if hv_on is True or eng_on or speed_pos:
                 odo_increased = False

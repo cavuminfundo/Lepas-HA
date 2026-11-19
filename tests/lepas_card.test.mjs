@@ -926,16 +926,16 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.29.0");
+  assert.equal(h.CARD_VERSION, "1.29.1");
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.29.0");
+  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.29.1");
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.29.0`
+      `/lepas_card/lepas-hero-${c}.png?v=1.29.1`
     );
   }
 
@@ -954,7 +954,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.29.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=1.29.1`
     );
   }
 
@@ -1575,6 +1575,7 @@ test("v1.20.0 formatMetric strips .00 on odometer km even with hass.formatEntity
     "sensor.lepas_odometer": makeState("sensor.lepas_odometer", "551.0", { unit_of_measurement: "km" }),
     "sensor.lepas_tire_pressure_front_left": makeState("sensor.lepas_tire_pressure_front_left", "2.55", { unit_of_measurement: "bar" }),
     "sensor.lepas_home_charging_energy": makeState("sensor.lepas_home_charging_energy", "34.94", { unit_of_measurement: "kWh" }),
+    "sensor.lepas_away_charging_energy": makeState("sensor.lepas_away_charging_energy", "0.53", { unit_of_measurement: "kWh" }),
   }, "it");
   hass.formatEntityState = (stateObj) => {
     if (stateObj && stateObj.entity_id === "sensor.lepas_odometer") return "551,00 km";
@@ -1586,7 +1587,8 @@ test("v1.20.0 formatMetric strips .00 on odometer km even with hass.formatEntity
   assert.equal(odoVal.textContent, "551 km");
   assert.ok(card.shadowRoot.querySelector('[data-bind="heroSub"]').textContent.includes("551 km"));
   assert.ok(card.shadowRoot.querySelector('[data-tpms="front_left"]').textContent.includes("2.55 bar"));
-  assert.ok(card.shadowRoot.querySelector('[data-bind="homeEnergyBadge"]').textContent.includes("34.94 kWh"));
+  assert.equal(card.shadowRoot.querySelector('[data-bind="homeEnergyBadge"]'), null);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="awayEnergyBadge"]'), null);
 });
 
 test("v1.20.0 Scheduled Charging L-D chips, single-day guard, presets, onFailure fallback/error, and manual vs departure mode", async () => {
@@ -3323,6 +3325,25 @@ test("Fuel consumption cells render single metric without electric sub-line even
   const card = createCard({ layout: "compact", default_tab: "overview" }, hass);
   assert.equal(card.shadowRoot.querySelector(".cons-cell-sub"), null);
   assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb100Val"]').textContent, "6.15 L/100 km");
+});
+
+test("Live charging power tile uses Power label (IT/EN/NL) and displays kW", () => {
+  const h = LepasCard._helpers;
+  assert.equal(h.getTexts("it").powerLbl, "Potenza");
+  assert.equal(h.getTexts("en").powerLbl, "Power");
+  assert.equal(h.getTexts("nl").powerLbl, "Vermogen");
+
+  const hass = makeFullHass({
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "2.22", {
+      unit_of_measurement: "kW",
+    }),
+  }, "it");
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hass);
+  const badge = card.shadowRoot.querySelector('[data-bind="chgPowerBadge"]');
+  assert.ok(badge, "chgPowerBadge must render when sensor.lepas_charging_power exists");
+  assert.equal(badge.classList.contains("hidden"), false);
+  assert.equal(badge.querySelector(".chg-stat-lbl span").textContent, "Potenza");
+  assert.equal(card.shadowRoot.querySelector('[data-stat-val="chgPowerBadge"]').textContent, "2.2 kW");
 });
 
 

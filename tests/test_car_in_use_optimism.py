@@ -363,6 +363,56 @@ async def test_on_car_message_5a02_engine_1_not_masked_by_stale_realtime_and_odo
         coord._timers.close()
 
 
+def test_car_in_use_clears_when_plugged_in_after_drive(hass) -> None:
+    coord = _make_coord(hass)
+
+    # 1. Driving latches car_in_use=True with start odometer 616
+    coord._on_probe_data({
+        "hVoltageState": "1",
+        "engineState": "0",
+        "vehicleSpeed": "57",
+        "chargeGunState": "0",
+        "frontHVACState": "1",
+        "odometer": "616",
+    })
+    assert coord.is_car_in_use() is True
+
+    # 2. Parked, door opened at 636 km -> still in use
+    coord._on_probe_data({
+        "hVoltageState": "1",
+        "engineState": "0",
+        "vehicleSpeed": "0",
+        "chargeGunState": "0",
+        "frontLeftDoor": "1",
+        "odometer": "636",
+    })
+    assert coord.is_car_in_use() is True
+
+    # 3. Doors closed and cable plugged in while hVoltageState stays 1 -> NOT in use
+    coord._on_probe_data({
+        "hVoltageState": "1",
+        "engineState": "0",
+        "vehicleSpeed": "0",
+        "chargeGunState": "1",
+        "frontLeftDoor": "0",
+        "frontHVACState": "0",
+        "odometer": "636",
+    })
+    assert coord.is_car_in_use() is False
+
+    # 4. Subsequent remote pre-climate after unplugging at same 636 km stays NOT in use
+    coord._on_probe_data({
+        "hVoltageState": "1",
+        "engineState": "0",
+        "vehicleSpeed": "0",
+        "chargeGunState": "0",
+        "frontHVACState": "1",
+        "odometer": "636",
+    })
+    assert coord.is_car_in_use() is False
+
+
+
 async def test_climate_optimism_clears_on_rejected_climate_and_preserves_0_95(hass) -> None:
     coord = _make_coord(hass)
     coord.async_probe = AsyncMock()

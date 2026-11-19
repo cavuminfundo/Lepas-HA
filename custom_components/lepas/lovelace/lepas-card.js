@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.29.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.29.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.29.0";
+  var CARD_VERSION = "1.29.1";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -82,13 +82,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.29.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.29.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.29.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.29.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.29.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.29.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.29.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.29.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.29.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.29.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.29.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.29.1";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -165,6 +165,7 @@
       totalRange: "Autonomia tot.",
       fuelRange: "Autonomia benz.",
       chargingLbl: "Ricarica",
+      powerLbl: "Potenza",
       odometer: "Odometro",
       cable: "Cavo",
       avgConsumption: "Consumi medi",
@@ -354,6 +355,7 @@
       totalRange: "Total Range",
       fuelRange: "Fuel Range",
       chargingLbl: "Charging",
+      powerLbl: "Power",
       odometer: "Odometer",
       cable: "Cable",
       avgConsumption: "Average consumption",
@@ -543,6 +545,7 @@
       totalRange: "Totaal bereik",
       fuelRange: "Benzinebereik",
       chargingLbl: "Laden",
+      powerLbl: "Vermogen",
       odometer: "Kilometerstand",
       cable: "Kabel",
       avgConsumption: "Gemiddeld verbruik",
@@ -1653,7 +1656,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.29.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.29.1">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -2521,8 +2524,6 @@
       // Charging & departure entities
       var hvVolt = this._findDomain(items, "sensor", "hv_battery_voltage");
       var hvCurr = this._findDomain(items, "sensor", "hv_battery_current");
-      var homeEnergy = this._findDomain(items, "sensor", "home_charging_energy");
-      var awayEnergy = this._findDomain(items, "sensor", "away_charging_energy");
       var fastPort = this._findDomain(items, "sensor", "fast_charging_port");
       var schedSwitch = this._findDomain(items, "switch", "scheduled_charging");
       var schedWindow = this._findDomain(items, "sensor", "scheduled_charging_window");
@@ -2849,8 +2850,6 @@
           remTime: remTime,
           hvVolt: hvVolt,
           hvCurr: hvCurr,
-          homeEnergy: homeEnergy,
-          awayEnergy: awayEnergy,
           fastPort: fastPort,
           schedSwitch: schedSwitch,
           schedWindow: schedWindow,
@@ -2948,8 +2947,6 @@
         rearCenterVent: rearCenterVent,
         hvVolt: hvVolt,
         hvCurr: hvCurr,
-        homeEnergy: homeEnergy,
-        awayEnergy: awayEnergy,
         fastPort: fastPort,
         schedSwitch: schedSwitch,
         schedWindow: schedWindow,
@@ -3284,12 +3281,10 @@
           (ctx.chgSwitch ? '<button type="button" class="ctrl-btn" data-action-id="charging_toggle" data-confirm-key="charging_toggle" data-bind="chgToggleBtn"></button>' : "") +
           '<div class="flow-track hidden" data-bind="chgFlowTrack"><div class="flow-bar"></div></div>' +
           '<div class="chg-stats-grid" data-bind="chgStatsRow">' +
-            (ctx.chgPower ? chgStatHtml("chgPowerBadge", "bolt", t.chargingLbl) : "") +
+            (ctx.chgPower ? chgStatHtml("chgPowerBadge", "bolt", t.powerLbl) : "") +
             (ctx.remTime ? chgStatHtml("remTimeBadge", "clock", t.remaining) : "") +
             (ctx.hvVolt ? chgStatHtml("hvVoltBadge", "volt", t.voltage) : "") +
             (ctx.hvCurr ? chgStatHtml("hvCurrBadge", "current", t.current) : "") +
-            (ctx.homeEnergy ? chgStatHtml("homeEnergyBadge", "home", t.homeEnergy) : "") +
-            (ctx.awayEnergy ? chgStatHtml("awayEnergyBadge", "pin", t.awayEnergy) : "") +
             (ctx.fastPort ? chgStatHtml("fastPortBadge", "plug", t.fastPort) : "") +
           "</div>" +
         "</div>"
@@ -4124,8 +4119,6 @@
       setStat("remTimeBadge", vm.remTime);
       setStat("hvVoltBadge", vm.hvVolt);
       setStat("hvCurrBadge", vm.hvCurr);
-      setStat("homeEnergyBadge", vm.homeEnergy);
-      setStat("awayEnergyBadge", vm.awayEnergy);
       setStat("fastPortBadge", vm.fastPort);
 
       var schedToggleBtn = root.querySelector('[data-bind="schedToggleBtn"]');
