@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.32.2 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Equal-Height Charging & Departure Tabs + Mobile 2-Tab Switcher (`lepas-card.js`)**: Enabled the 2-tab `.schedule-switcher` (`Scheduled charging | Departure scheduler`) on mobile (`auto < 680px` and `compact`) as well as desktop while keeping all 4 primary tabs on mobile, wrapped both schedule surfaces in a single-cell CSS Grid `.schedule-panels-stack` (`grid-area: 1 / 1`) using `visibility: hidden; pointer-events: none;`, `inert`, and `aria-hidden` instead of `display: none` so both sections always match height without layout jumps across tab or mode switches, replaced the `44px` `.field-row` spacer around the `Days` label with `.field-subhdr`, compacted `schedChgSurface` spacing to match `depSurface`, and anchored `Apply schedule` with `margin-top: auto`. Bumped card assets to `?v=1.32.2`.
+
+### 🇮🇹 Italiano
+
+- **Altezza Uniforme tra Ricarica Programmata e Partenze + Selettore a 2 Schede su Mobile (`lepas-card.js`)**: Attivato il selettore a 2 schede `.schedule-switcher` (`Ricarica programmata | Partenze programmate`) anche su mobile (`auto < 680px` e `compact`) mantenendo i 4 tab principali, racchiusi entrambi i pannelli in un contenitore CSS Grid a singola cella `.schedule-panels-stack` (`grid-area: 1 / 1`) con `visibility: hidden; pointer-events: none;`, `inert` e `aria-hidden` al posto di `display: none` così le due sezioni mantengono sempre esattamente la stessa altezza senza salti al cambio scheda o modalità (`Orario manuale` / `Segui partenza`), sostituita la riga vuota da `44px` dell'etichetta `Giorni` con `.field-subhdr`, compattati gli spazi di `schedChgSurface` sullo stile di `depSurface` e ancorato in basso `Applica piano` con `margin-top: auto`. Aggiornati gli asset della card a `?v=1.32.2`.
+
 ## v1.32.1 — 2026-11-20
 
 ### 🇬🇧 English

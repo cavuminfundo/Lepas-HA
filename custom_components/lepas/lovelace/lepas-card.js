@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.32.1).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.32.2).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.32.1";
+  var CARD_VERSION = "1.32.2";
   var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -96,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.32.1",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.32.1",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.32.1",
-    black: "/lepas_card/lepas-hero-black.png?v=1.32.1",
-    white: "/lepas_card/lepas-hero-white.png?v=1.32.1",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.32.2",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.32.2",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.32.2",
+    black: "/lepas_card/lepas-hero-black.png?v=1.32.2",
+    white: "/lepas_card/lepas-hero-white.png?v=1.32.2",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.32.1";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.32.2";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -2066,7 +2066,7 @@
         p + s + ".hero-region, " + s + ".tabs-bar, " + s + ".panel, " + s + ".overview-extras { order: initial; }",
         p + s + '.panel[data-panel="overview"] { display: flex; flex: 1; }',
         p + s + ".cockpit-right > .panel.is-active, " + s + ".cockpit-right > .panel.is-desktop-fallback { flex: 1; }",
-        p + s + '.panel[data-panel="overview"] > .surface:last-of-type, ' + s + ".cockpit-right > .panel > .surface:last-of-type, " + s + '.panel[data-panel="charging"] > .surface[data-schedule-panel]:not(.is-schedule-hidden) { flex: 1; }',
+        p + s + '.panel[data-panel="overview"] > .surface:last-of-type, ' + s + ".cockpit-right > .panel > .surface:last-of-type, " + s + '.panel[data-panel="charging"] > .schedule-panels-stack { flex: 1; }',
         p + s + ".cockpit-stats-surface { display: flex; flex-direction: column; gap: 8px; flex: 1; }",
         p + s + ".cockpit-stats-row { flex: 1; align-items: stretch; max-height: 152px; }",
         p + s + ".cockpit-stats-slot > .cons-cell { justify-content: center; gap: 4px; }",
@@ -2078,8 +2078,6 @@
         p + s + ".overview-extras { display: flex; flex-direction: column; gap: 12px; }",
         p + s + ".quick-actions-surface { display: none; }",
         p + s + ".cockpit-wake-btn { display: inline-flex; }",
-        p + s + ".schedule-switcher { display: grid; }",
-        p + s + ".is-schedule-hidden { display: none; }",
         p + s + ".hero-stage { aspect-ratio: 16 / 9; }",
         p + s + '.panel[data-panel="security"] .bp-stage { grid-template-columns: minmax(80px, 1fr) minmax(136px, 162px) minmax(80px, 1fr); padding: 20px 6px; gap: 12px; }',
         p + s + '.panel[data-panel="security"] .tpms-col { gap: 26px; }',
@@ -2090,6 +2088,11 @@
         p + s + '.panel[data-panel="climate"] > .surface { padding: 14px 13px; gap: 12px; }',
         p + s + '.panel[data-panel="climate"] .ctrl-btn { min-height: 48px; }',
         p + s + '.panel[data-panel="climate"] .seat-btns .ctrl-btn { min-height: 46px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="schedChgSurface"] { gap: 7px; padding: 10px 12px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .manual-charge-box { gap: 7px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .ctrl-btn, ' + s + '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .ctrl-input { min-height: 36px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .field-row { min-height: 36px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .charge-day-chip { min-height: 38px; }',
         p + s + '.panel[data-panel="charging"] [data-bind="depSurface"] { gap: 7px; padding: 10px 12px; }',
         p + s + '.panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-btn { min-height: 36px; }',
         p + s + '.panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-input, ' + s + '.panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-select { min-height: 36px; }',
@@ -2241,6 +2244,7 @@
       ".timeline-seg { position: absolute; top: 0; bottom: 0; background: var(--lp-emerald); opacity: 0.85; border-radius: 4px; }",
       ".timeline-axis { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--lp-text-muted); margin-top: 3px; }",
       ".field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }",
+      ".field-subhdr { display: flex; align-items: center; justify-content: space-between; min-height: 0; padding-top: 2px; }",
       ".field-lbl { font-size: 0.82rem; color: var(--lp-text-secondary); }",
       ".ctrl-input, .ctrl-select { min-height: 44px; padding: 6px 10px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text); font-size: 0.84rem; }",
       '.ctrl-input[type="time"] { caret-color: transparent; user-select: none; cursor: pointer; }',
@@ -2345,7 +2349,16 @@
       ".overview-extras { display: none; order: 4; }",
       ".overview-extras.is-active { display: flex; flex-direction: column; gap: 12px; }",
       ".cockpit-wake-btn { display: none; }",
-      ".schedule-switcher { display: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }",
+      ".schedule-switcher { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }",
+      ".schedule-panels-stack { display: grid; grid-template-columns: minmax(0, 1fr); }",
+      ".schedule-panels-stack > [data-schedule-panel] { grid-area: 1 / 1; min-width: 0; }",
+      ".is-schedule-hidden { visibility: hidden; pointer-events: none; }",
+      '.panel[data-panel="charging"] [data-bind="schedChgSurface"] { gap: 8px; padding: 10px 12px; }',
+      '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .manual-charge-box { gap: 8px; }',
+      '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .field-row { min-height: 38px; }',
+      '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .ctrl-btn, .panel[data-panel="charging"] [data-bind="schedChgSurface"] .ctrl-input { min-height: 38px; }',
+      '.panel[data-panel="charging"] [data-bind="schedChgSurface"] .charge-day-chip { min-height: 40px; }',
+      '.panel[data-panel="charging"] [data-bind="schedChgSurface"] [data-action-id="apply_charging_schedule"] { margin-top: auto; }',
       ".cockpit-stats-surface { display: none; }",
       ".cockpit-stats-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; }",
       ".cockpit-stats-open { min-height: 28px; padding: 3px 8px; border-radius: 7px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); font-size: 0.72rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }",
@@ -4300,7 +4313,7 @@
       ) : "";
 
       var chargeDaysStripHtml = (ctx.chgDays || ctx.schedWindow) ? (
-        '<div class="field-row"><span class="field-lbl">' + self._h(t.chargeDays) + "</span></div>" +
+        '<div class="field-subhdr"><span class="field-lbl">' + self._h(t.chargeDays) + "</span></div>" +
         '<div class="charge-days-strip" role="group">' + t.weekdays.map(function (letter, idx) {
           var dayNum = idx + 1;
           return '<button type="button" class="chip-btn charge-day-chip" data-charge-day="' + dayNum + '" data-uid="chgday:' + dayNum + '">' +
@@ -4446,7 +4459,10 @@
         "</div>"
       ) : "";
 
-      var chargingHtml = '<section class="panel" data-panel="charging">' + liveChgHtml + scheduleSwitcherHtml + schedChgHtml + depHtml + "</section>";
+      var scheduleStackHtml = (schedChgHtml || depHtml)
+        ? '<div class="schedule-panels-stack">' + schedChgHtml + depHtml + "</div>"
+        : "";
+      var chargingHtml = '<section class="panel" data-panel="charging">' + liveChgHtml + scheduleSwitcherHtml + scheduleStackHtml + "</section>";
 
       // Panel 4: Security & Blueprint
       var tpmsCard = function (c) {
@@ -4723,11 +4739,21 @@
       if (!hasBoth) {
         for (var ui = 0; ui < panels.length; ui += 1) {
           panels[ui].classList.remove("is-schedule-hidden");
+          panels[ui].removeAttribute("inert");
+          panels[ui].setAttribute("aria-hidden", "false");
         }
       } else {
         for (var bi = 0; bi < panels.length; bi += 1) {
           var panelName = panels[bi].getAttribute("data-schedule-panel");
-          panels[bi].classList.toggle("is-schedule-hidden", panelName !== activeSched);
+          var isHidden = panelName !== activeSched;
+          panels[bi].classList.toggle("is-schedule-hidden", isHidden);
+          if (isHidden) {
+            panels[bi].setAttribute("inert", "");
+            panels[bi].setAttribute("aria-hidden", "true");
+          } else {
+            panels[bi].removeAttribute("inert");
+            panels[bi].setAttribute("aria-hidden", "false");
+          }
         }
       }
       var btns = root.querySelectorAll("[data-schedule-tab]");

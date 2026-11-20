@@ -3563,9 +3563,7 @@ test("Horizontal 2-column Cockpit places Hero+Overview on left, 3-tab operationa
   assert.ok(block680.includes('ha-card[data-layout="auto"] .tabs-bar [data-tab="overview"] { display: none; }'));
   assert.ok(block680.includes('ha-card[data-layout="auto"] .quick-actions-surface { display: none; }'));
   assert.ok(block680.includes('ha-card[data-layout="auto"] .cockpit-wake-btn { display: inline-flex; }'));
-  assert.ok(block680.includes('ha-card[data-layout="auto"] .schedule-switcher { display: grid; }'));
-  assert.ok(block680.includes('ha-card[data-layout="auto"] .is-schedule-hidden { display: none; }'));
-  assert.ok(block680.includes('ha-card[data-layout="auto"] .panel[data-panel="charging"] > .surface[data-schedule-panel]:not(.is-schedule-hidden) { flex: 1; }'));
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .panel[data-panel="charging"] > .schedule-panels-stack { flex: 1; }'));
 
   const idxSupports = cssText.indexOf("@supports not (container-type: inline-size)");
   const idxMotion = cssText.indexOf("@media (prefers-reduced-motion: no-preference)");
@@ -3577,10 +3575,15 @@ test("Horizontal 2-column Cockpit places Hero+Overview on left, 3-tab operationa
   assert.ok(blockSupports.includes('ha-card[data-layout="auto"] .quick-actions-surface { display: none; }'));
   assert.ok(cssText.includes('ha-card[data-layout="cockpit"] .tabs-bar [data-tab="overview"] { display: none; }'));
 
-  // Ensure bare global rules (shared with compact) do NOT hide .quick-actions-surface or .is-schedule-hidden
-  const beforeContainer = cssText.split("@container")[0];
-  assert.ok(!/^\s*\.quick-actions-surface\s*\{\s*display:\s*none/m.test(beforeContainer));
-  assert.ok(!/^\s*\.is-schedule-hidden\s*\{\s*display:\s*none/m.test(beforeContainer));
+  // Shared global rules: quick-actions stay visible on mobile, schedule switcher + equal-height grid stack work across mobile & desktop
+  const beforeDesktop = cssText.slice(0, cssText.indexOf('ha-card[data-layout="cockpit"]'));
+  assert.ok(!/^\s*\.quick-actions-surface\s*\{\s*display:\s*none/m.test(beforeDesktop));
+  assert.ok(!/\.is-schedule-hidden\s*\{\s*display:\s*none/m.test(cssText));
+  assert.ok(beforeDesktop.includes(".schedule-switcher { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }"));
+  assert.ok(beforeDesktop.includes(".schedule-panels-stack { display: grid; grid-template-columns: minmax(0, 1fr); }"));
+  assert.ok(beforeDesktop.includes(".schedule-panels-stack > [data-schedule-panel] { grid-area: 1 / 1; min-width: 0; }"));
+  assert.ok(beforeDesktop.includes(".is-schedule-hidden { visibility: hidden; pointer-events: none; }"));
+  assert.ok(beforeDesktop.includes('.panel[data-panel="charging"] [data-bind="schedChgSurface"] [data-action-id="apply_charging_schedule"] { margin-top: auto; }'));
 
   // Structural DOM placement: left col holds hero + overview, right col holds tabs-bar + operational panels
   const leftCol = root.querySelector(".cockpit-left");
@@ -3623,7 +3626,13 @@ test("Horizontal 2-column Cockpit places Hero+Overview on left, 3-tab operationa
   assert.equal(chgBtn.getAttribute("aria-pressed"), "false");
   assert.equal(depBtn.getAttribute("aria-pressed"), "true");
   assert.equal(chgPanel.classList.contains("is-schedule-hidden"), true);
+  assert.equal(chgPanel.hasAttribute("inert"), true);
+  assert.equal(chgPanel.getAttribute("aria-hidden"), "true");
   assert.equal(depPanel.classList.contains("is-schedule-hidden"), false);
+  assert.equal(depPanel.hasAttribute("inert"), false);
+  assert.equal(depPanel.getAttribute("aria-hidden"), "false");
+  assert.ok(chgPanel.closest(".schedule-panels-stack") === depPanel.closest(".schedule-panels-stack"));
+  assert.ok(chgPanel.querySelector(".field-subhdr"), "Charge days label must use compact .field-subhdr instead of 44px .field-row");
 
   // Wake button inside sync surface is gated strictly by wakeBtn and stays exempt from car_in_use gating
   const cockpitWake = root.querySelector('[data-panel="overview"] .btn-row .cockpit-wake-btn');
@@ -3662,10 +3671,24 @@ test("Horizontal 2-column Cockpit places Hero+Overview on left, 3-tab operationa
   assert.ok(chargeOnlyPanel);
   assert.equal(chargeOnlyPanel.classList.contains("is-schedule-hidden"), false);
 
-  // Compact layout preserves quick actions & overview-extras tab isolation
+  // Compact layout preserves quick actions, overview-extras tab isolation, and 2-tab equal-height schedule switcher on mobile
   const compactCard = createCard({ layout: "compact", show_all: true, default_tab: "climate" }, makeFullHass({}, "it"));
   const cRoot = compactCard.shadowRoot;
   assert.ok(cRoot.querySelector('[data-bind="quickActionsSurface"]'));
+  const cSchedSwitcher = cRoot.querySelector(".schedule-switcher");
+  const cSchedStack = cRoot.querySelector(".schedule-panels-stack");
+  assert.ok(cSchedSwitcher && cSchedStack, "Mobile/compact layout must render 2-tab schedule switcher and equal-height stack");
+  const cChgPanel = cSchedStack.querySelector('[data-schedule-panel="charge"]');
+  const cDepPanel = cSchedStack.querySelector('[data-schedule-panel="departure"]');
+  assert.ok(cChgPanel && cDepPanel);
+  assert.equal(cChgPanel.classList.contains("is-schedule-hidden"), false);
+  assert.equal(cDepPanel.classList.contains("is-schedule-hidden"), true);
+  assert.equal(cDepPanel.hasAttribute("inert"), true);
+  cRoot.querySelector('[data-schedule-tab="departure"]').click();
+  assert.equal(cChgPanel.classList.contains("is-schedule-hidden"), true);
+  assert.equal(cChgPanel.hasAttribute("inert"), true);
+  assert.equal(cDepPanel.classList.contains("is-schedule-hidden"), false);
+  assert.equal(cDepPanel.hasAttribute("inert"), false);
   const extras = cRoot.querySelector('[data-bind="overviewExtras"]');
   assert.ok(extras);
   assert.equal(extras.closest('[data-panel="overview"]'), null);
