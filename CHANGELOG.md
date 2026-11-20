@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.30.2 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Context-Aware ECU `0:95` Rejection & Optimistic Rollback (`coordinator.py`)**: Tracked the active command key and timestamp (`_last_cmd_key`, `_last_cmd_at` under `_state_lock`) so MQTT `110x` confirmations carrying `[0:95]` are treated as benign only for `Clima` commands with non-failure results (`result != "0"`). For access/closure commands (`blocca`, `sblocca`, `finestrini_*`, `tetto_*`, `baule_*`) or explicit `result == "0"` failures, `cmd_rejected_other` is set to `True` (immediately rolling back optimistic `LepasCover` / `LepasLock` states instead of leaving e.g. `cover.lepas_windows` stuck on `open` for 900s), `car_in_use` latches when HV is active, and `sensor.lepas_command_result` reports a clear rejection warning. Preserved `"result": "3"` as non-failure on `airControl` / `cmd_confirm` acknowledgements.
+- **`HomeAssistantError` Propagation on Command Buttons (`button.py`)**: Updated `LepasCommandButton.async_press` to re-raise `HomeAssistantError` and wrap unexpected errors into `HomeAssistantError` instead of silently swallowing command send failures.
+- **Unified `car_in_use` Gating on Security & Overview Quick Actions (`lepas-card.js`)**: Hoisted `carInUse` / `applyCarInUseState` above Overview & Security bindings, added `secCarInUseBanner` to the *Security* tab, disabled *Security* controls (`Lock`, `Trunk`, `Windows`, `Vent windows`, `Sunroof`, `Vent sunroof`, `Alarm`, `Remote start`, `Locate GPS`, `Flash lights`) and *Overview* quick-action mirrors (`Quick lock`, `Quick climate`, `Quick trunk`, `Flash lights`) while `car_in_use` is `true` (keeping `Wake`, `Refresh location`, `Refresh full status`, `Statistics`, and charging controls active), cleared `_lastCmdFeedback` when an MQTT error arrives in flight during `_callService`, and bumped card assets to `?v=1.30.2`.
+
+### 🇮🇹 Italiano
+
+- **Gestione Contestuale Rifiuti ECU `0:95` e Rollback Ottimistico (`coordinator.py`)**: Tracciati chiave e timestamp dell'ultimo comando (`_last_cmd_key`, `_last_cmd_at` sotto `_state_lock`) in modo che le conferme MQTT `110x` con `[0:95]` siano considerate innocue solo per comandi del gruppo `Clima` con esito non di fallimento (`result != "0"`). Sui comandi di accesso/chiusure (`blocca`, `sblocca`, `finestrini_*`, `tetto_*`, `baule_*`) o su esito esplicito `result == "0"`, `cmd_rejected_other` viene impostato a `True` (annullando subito lo stato ottimistico di `LepasCover` / `LepasLock` invece di lasciare `cover.lepas_windows` bloccata su `open` per 900s), il latch `car_in_use` si aggancia con HV attiva e `sensor.lepas_command_result` mostra un avviso chiaro di rifiuto. Preservato `"result": "3"` come non-errore per le conferme `airControl` / `cmd_confirm`.
+- **Propagazione `HomeAssistantError` sui Pulsanti Comando (`button.py`)**: Aggiornato `LepasCommandButton.async_press` per rilanciare `HomeAssistantError` e incapsulare eventuali altre eccezioni invece di ingoiare silenziosamente gli errori di invio.
+- **Blocco `car_in_use` Uniforme su Sicurezza e Azioni Rapide Plancia (`lepas-card.js`)**: Eseguito hoisting di `carInUse` / `applyCarInUseState` sopra i binding di Plancia e Sicurezza, aggiunto `secCarInUseBanner` nel pannello *Sicurezza*, disabilitati i comandi *Sicurezza* (`Blocca/Sblocca`, `Baule`, `Finestrini`, `Ventila finestrini`, `Tetto`, `Ventila tetto`, `Allarme`, `Avvio remoto`, `Localizza GPS`, `Lampeggia`) e i rispettivi specchi rapidi in *Plancia* quando `car_in_use` è attivo (mantenendo sempre attivi `Sveglia`, `Aggiorna posizione`, `Aggiorna stato`, `Statistiche` e ricarica), azzerato `_lastCmdFeedback` se un errore MQTT arriva mentre `_callService` è in volo, e aggiornati gli asset della card a `?v=1.30.2`.
+
 ## v1.30.1 — 2026-11-19
 
 ### 🇬🇧 English

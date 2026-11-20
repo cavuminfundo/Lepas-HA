@@ -13,11 +13,18 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.climate import HVACMode
+from homeassistant.components.cover import CoverDeviceClass
+from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.lepas import coordinator as coord_mod
 from custom_components.lepas.binary_sensor import LepasRealtimeBinary
+from custom_components.lepas.button import LepasCommandButton
 from custom_components.lepas.climate import LepasClimate
 from custom_components.lepas.const import CONF_VIN, DOMAIN
 from custom_components.lepas.coordinator import LepasCoordinator
+from custom_components.lepas.core import commands as CMD
+from custom_components.lepas.cover import LepasCover
+from custom_components.lepas.lock import LepasLock
 from custom_components.lepas.switch import LepasComfortSwitch
 from custom_components.lepas.timers import HV_POLL
 
@@ -38,8 +45,10 @@ def make_entry(entry_id: str = "car_in_use_entry") -> MockConfigEntry:
     )
 
 
-def _make_coord(hass, *, poll_enabled: bool = False) -> LepasCoordinator:
-    entry = make_entry()
+def _make_coord(
+    hass, *, poll_enabled: bool = False, entry_id: str = "car_in_use_entry"
+) -> LepasCoordinator:
+    entry = make_entry(entry_id=entry_id)
     entry.add_to_hass(hass)
     coord = LepasCoordinator(hass, entry)
     coord.poll_enabled = poll_enabled
@@ -78,6 +87,15 @@ def test_extract_rejected_fields_preserves_solo_clima_and_maps_seat_reason() -> 
     assert LepasCoordinator._extract_rejected_fields(
         [{"modelId": "0", "code": "95"}], result="1"
     ) == (frozenset(), False)
+    assert LepasCoordinator._extract_rejected_fields(
+        [{"modelId": "0", "code": "95"}], result="1", is_climate_cmd=False
+    ) == (frozenset(), True)
+    assert LepasCoordinator._extract_rejected_fields(
+        [{"modelId": "0", "code": "95"}], result="0", is_climate_cmd=True
+    ) == (frozenset(), True)
+    assert LepasCoordinator._extract_rejected_fields(
+        None, result="0", is_climate_cmd=False
+    ) == (frozenset(), True)
     fields, other = LepasCoordinator._extract_rejected_fields(
         [{"modelId": "0", "code": "95"}, {"modelId": "4", "code": "95"}], result="1"
     )
@@ -487,5 +505,263 @@ async def test_schedule_probe_on_loop_guards_and_rollback(hass, monkeypatch) -> 
         await hass.async_block_till_done()
         coord.async_probe.assert_awaited_once_with(force=True)
         assert coord._poll_busy is False
+    finally:
+        coord._timers.close()
+
+
+def test_cmd_map_non_climate_keys_are_not_in_clima_group() -> None:
+    non_climate_prefixes = ("finestrini_", "tetto_", "baule_", "antifurto_")
+    non_climate_exact = {"blocca", "sblocca", "avvio_remoto", "localizza", "trova_auto", "clacson"}
+    checked = [
+        key
+        for key in CMD.CMD_MAP
+        if key in non_climate_exact or key.startswith(non_climate_prefixes)
+    ]
+    assert "finestrini_apri" in checked
+    assert "sblocca" in checked
+    assert "blocca" in checked
+    for key in checked:
+        assert CMD.CMD_MAP[key].get("group") != "Clima", f"{key} must not have group == 'Clima'"
+
+
+async def test_non_climate_0_95_rejects_and_clears_cover_and_lock_independently(
+    hass, monkeypatch
+) -> None:
+    monkeypatch.setattr(CMD, "send", lambda *a, **kw: "ok")
+    monkeypatch.setattr(coord_mod, "COMMAND_SETTLE_S", 0.01)
+
+    payload = json.dumps({
+        "content": {
+            "serviceType": "110F",
+            "data": {"result": "1", "seq": "51", "reason": [{"modelId": "0", "code": "95"}]},
+        }
+    }).encode("utf-8")
+
+    # Part A: Cover (`finestrini_apri`) tested independently
+    coord_cov = _make_coord(hass, entry_id="car_in_use_cover_0_95")
+    coord_cov.async_probe = AsyncMock()
+    coord_cov._fields = {
+        "hVoltageState": "1",
+        "frontHVACState": "1",
+        "vehicleSpeed": "0",
+        "chargeGunState": "0",
+        "frontLeftWindowState": "0",
+        "frontRightWindowState": "0",
+        "backLeftWindowState": "0",
+        "backRightWindowState": "0",
+    }
+    coord_cov.data = {
+        **coord_cov.data,
+        "realtime": {
+            "hVoltageState": "1",
+            "frontHVACState": "1",
+            "vehicleSpeed": "0",
+            "chargeGunState": "0",
+        },
+        "fields": dict(coord_cov._fields),
+        "last_seen": "t0",
+    }
+    cov = LepasCover(
+        coord_cov,
+        "Lepas Finestrini",
+        "finestrini",
+        [
+            "frontLeftWindowState",
+            "frontRightWindowState",
+            "backLeftWindowState",
+            "backRightWindowState",
+        ],
+        "finestrini_apri",
+        "finestrini_chiudi",
+        CoverDeviceClass.WINDOW,
+        "mdi:car-door",
+    )
+    cov.hass = hass
+    cov.async_write_ha_state = lambda: None
+
+    try:
+        assert coord_cov.is_car_in_use() is False
+        assert cov.is_closed is True
+        await cov.async_open_cover()
+        assert cov.is_closed is False
+        assert cov._opt_value is False
+
+        coord_cov._on_car_message(None, None, SimpleNamespace(payload=payload))
+        await hass.async_block_till_done()
+        cov._handle_coordinator_update()
+
+        assert coord_cov.data["cmd_rejected_other"] is True
+        assert cov._opt_value is None
+        assert cov.is_closed is True
+        cmd_status = coord_cov.data["cmd_status"] or ""
+        assert "rifiutato" in cmd_status
+        assert "⚠️" in cmd_status
+        assert coord_cov.is_car_in_use() is True
+    finally:
+        coord_cov._timers.close()
+
+    # Part B: Lock (`sblocca`) tested independently on a separate coordinator
+    coord_lock = _make_coord(hass, entry_id="car_in_use_lock_0_95")
+    coord_lock.async_probe = AsyncMock()
+    coord_lock._fields = {
+        "hVoltageState": "1",
+        "frontHVACState": "1",
+        "vehicleSpeed": "0",
+        "chargeGunState": "0",
+        "doorLock": "0",
+    }
+    coord_lock.data = {
+        **coord_lock.data,
+        "realtime": {
+            "hVoltageState": "1",
+            "frontHVACState": "1",
+            "vehicleSpeed": "0",
+            "chargeGunState": "0",
+        },
+        "fields": dict(coord_lock._fields),
+        "last_seen": "t0",
+    }
+    lock = LepasLock(coord_lock)
+    lock.hass = hass
+    lock.async_write_ha_state = lambda: None
+
+    try:
+        assert coord_lock.is_car_in_use() is False
+        assert lock.is_locked is True
+        await lock.async_unlock()
+        assert lock.is_locked is False
+        assert lock._opt_value is False
+
+        coord_lock._on_car_message(None, None, SimpleNamespace(payload=payload))
+        await hass.async_block_till_done()
+        lock._handle_coordinator_update()
+
+        assert coord_lock.data["cmd_rejected_other"] is True
+        assert lock._opt_value is None
+        assert lock.is_locked is True
+        cmd_status = coord_lock.data["cmd_status"] or ""
+        assert "rifiutato" in cmd_status
+        assert "⚠️" in cmd_status
+        assert coord_lock.is_car_in_use() is True
+    finally:
+        coord_lock._timers.close()
+
+
+async def test_climate_cmd_0_95_within_window_preserves_optimism(hass, monkeypatch) -> None:
+    monkeypatch.setattr(CMD, "send", lambda *a, **kw: "ok")
+    monkeypatch.setattr(coord_mod, "COMMAND_SETTLE_S", 0.01)
+
+    coord = _make_coord(hass, entry_id="car_in_use_climate_0_95")
+    coord.async_probe = AsyncMock()
+    coord._fields = {"frontHVACState": "0"}
+    coord.data = {**coord.data, "fields": {"frontHVACState": "0"}, "last_seen": "t0"}
+
+    cli = LepasClimate(coord)
+    cli.hass = hass
+    cli.async_write_ha_state = lambda: None
+
+    try:
+        await cli.async_turn_on()
+        assert cli.hvac_mode == HVACMode.HEAT_COOL
+        assert cli._opt_on is True
+
+        ack_0_95 = json.dumps({
+            "content": {
+                "serviceType": "110F",
+                "data": {"result": "1", "reason": [{"modelId": "0", "code": "95"}]},
+            }
+        }).encode("utf-8")
+        coord._on_car_message(None, None, SimpleNamespace(payload=ack_0_95))
+        await hass.async_block_till_done()
+        cli._handle_coordinator_update()
+
+        assert coord.data["cmd_rejected_other"] is False
+        assert coord.data["cmd_rejected_fields"] == frozenset()
+        assert cli._opt_on is True
+        assert cli.hvac_mode == HVACMode.HEAT_COOL
+        assert "rifiutato" not in (coord.data["cmd_status"] or "")
+    finally:
+        coord._timers.close()
+
+
+async def test_result_failure_without_reason_clears_optimism(hass, monkeypatch) -> None:
+    monkeypatch.setattr(CMD, "send", lambda *a, **kw: "ok")
+    monkeypatch.setattr(coord_mod, "COMMAND_SETTLE_S", 0.01)
+
+    coord = _make_coord(hass, entry_id="car_in_use_result_0")
+    coord.async_probe = AsyncMock()
+    coord._fields = {
+        "frontLeftWindowState": "0",
+        "frontRightWindowState": "0",
+        "backLeftWindowState": "0",
+        "backRightWindowState": "0",
+    }
+    coord.data = {**coord.data, "fields": dict(coord._fields), "last_seen": "t0"}
+
+    cov = LepasCover(
+        coord,
+        "Lepas Finestrini",
+        "finestrini",
+        [
+            "frontLeftWindowState",
+            "frontRightWindowState",
+            "backLeftWindowState",
+            "backRightWindowState",
+        ],
+        "finestrini_apri",
+        "finestrini_chiudi",
+        CoverDeviceClass.WINDOW,
+        "mdi:car-door",
+    )
+    cov.hass = hass
+    cov.async_write_ha_state = lambda: None
+
+    try:
+        await cov.async_open_cover()
+        assert cov.is_closed is False
+        assert cov._opt_value is False
+
+        ack_fail = json.dumps({
+            "content": {"serviceType": "110F", "data": {"result": "0", "seq": "52"}}
+        }).encode("utf-8")
+        coord._on_car_message(None, None, SimpleNamespace(payload=ack_fail))
+        await hass.async_block_till_done()
+        cov._handle_coordinator_update()
+
+        assert coord.data["cmd_rejected_other"] is True
+        assert cov._opt_value is None
+        assert cov.is_closed is True
+        cmd_status = coord.data["cmd_status"] or ""
+        assert "rifiutato" in cmd_status
+        assert "⚠️" in cmd_status
+    finally:
+        coord._timers.close()
+
+
+async def test_command_button_async_press_raises_home_assistant_error(hass, monkeypatch) -> None:
+    coord = _make_coord(hass, entry_id="car_in_use_button_err")
+    btn = LepasCommandButton(coord, "trova_auto", CMD.CMD_MAP["trova_auto"])
+
+    try:
+        # Subcase A: HomeAssistantError propagates without double-wrapping
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                coord,
+                "async_send_command",
+                AsyncMock(side_effect=HomeAssistantError("Auto occupata")),
+            )
+            with pytest.raises(HomeAssistantError) as exc_ha:
+                await btn.async_press()
+            assert str(exc_ha.value) == "Auto occupata"
+            assert exc_ha.value.__cause__ is None
+
+        # Subcase B: non-HA RuntimeError from real send path wraps into HomeAssistantError
+        def _boom(*_a, **_kw):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(CMD, "send", _boom)
+        with pytest.raises(HomeAssistantError, match="Comando «trova_auto» non riuscito: boom") as exc_rt:
+            await btn.async_press()
+        assert isinstance(exc_rt.value.__cause__, RuntimeError)
     finally:
         coord._timers.close()

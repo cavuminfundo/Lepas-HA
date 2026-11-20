@@ -438,6 +438,8 @@ class LepasCoordinator(DataUpdateCoordinator):
         # metà. Per due valori scritti insieme e letti insieme non serve un lock.
         self._note_cmd: list[str] = []
         self._note_cmd_at: float | None = None
+        self._last_cmd_key: str | None = None
+        self._last_cmd_at: float | None = None
         self.position: dict | None = None
         self.data = {"fields": {}, "msg_fields": {}, "position": None,
                      "awake": False, "car_connected": False,
@@ -2206,10 +2208,15 @@ class LepasCoordinator(DataUpdateCoordinator):
             "cmd_rejected_other": rej_other,
         })
         if is_confirmation:
-            patch["cmd_status"] = self._esito_con_note(self._format_cmd_result(data))
+            is_climate_cmd = self._is_climate_cmd_active()
+            patch["cmd_status"] = self._esito_con_note(
+                self._format_cmd_result(data, is_climate_cmd=is_climate_cmd)
+            )
             raw_res = data.get("result")
             res_str = "" if raw_res is None else str(raw_res)
-            rej_fields, rej_other = self._extract_rejected_fields(data.get("reason"), res_str)
+            rej_fields, rej_other = self._extract_rejected_fields(
+                data.get("reason"), res_str, is_climate_cmd=is_climate_cmd
+            )
             patch["cmd_rejected_fields"] = rej_fields
             patch["cmd_rejected_other"] = rej_other
             # [H2] il contatore è l'ancora della pausa di coda → si tocca sotto lock, perché
@@ -2271,6 +2278,17 @@ class LepasCoordinator(DataUpdateCoordinator):
                 lambda: self.hass.async_create_task(self.async_probe(force=True))
             )
 
+    def _is_climate_cmd_active(self) -> bool:
+        """True if the last tracked command within NOTE_COMANDO_S belongs to Clima."""
+        with self._state_lock:
+            key = self._last_cmd_key
+            at = self._last_cmd_at
+        if key is None or at is None or (time.monotonic() - at) > NOTE_COMANDO_S:
+            return True
+        from .core.commands import CMD_MAP
+
+        return CMD_MAP.get(key, {}).get("group") == "Clima"
+
     @staticmethod
     def _solo_clima(reason) -> bool:
         """True se l'auto ha segnalato SOLTANTO il clima (`modelId` 0), nient'altro.
@@ -2290,15 +2308,23 @@ class LepasCoordinator(DataUpdateCoordinator):
         return all(str(v.get("modelId")) == "0" for v in reason)
 
     @staticmethod
-    def _extract_rejected_fields(reason, result: str = "") -> tuple[frozenset[str], bool]:
+    def _extract_rejected_fields(
+        reason, result: str = "", *, is_climate_cmd: bool = True
+    ) -> tuple[frozenset[str], bool]:
         """Estrae i campi telemetrici rifiutati da `reason` preservando `[0:95]` solo clima."""
-        if not reason or LepasCoordinator._solo_clima(reason):
-            return frozenset(), False
+        res_str = "" if result is None else str(result).strip()
+        # `result == "3"` appears on valid `airControl`/`cmd_confirm` ACKs; only `"0"` is an explicit failure.
+        result_failed = res_str == "0"
+        if not reason:
+            return frozenset(), result_failed
+        if LepasCoordinator._solo_clima(reason):
+            if is_climate_cmd and not result_failed:
+                return frozenset(), False
+            return frozenset(), True
         if not isinstance(reason, (list, tuple)) or not all(isinstance(v, dict) for v in reason):
             return frozenset(), True
         fields: set[str] = set()
         other = False
-        res_str = "" if result is None else str(result).strip()
         for voce in reason:
             mid = str(voce.get("modelId", ""))
             code = str(voce.get("code", ""))
@@ -2309,6 +2335,7 @@ class LepasCoordinator(DataUpdateCoordinator):
                     fields.add("frontHVACState")
             else:
                 other = True
+            other = other or result_failed
         return frozenset(fields), other
 
     @staticmethod
@@ -2357,7 +2384,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         return unisci_esito_e_note(esito, self._note_cmd)
 
     @staticmethod
-    def _format_cmd_result(data: dict) -> str:
+    def _format_cmd_result(data: dict, *, is_climate_cmd: bool = True) -> str:
         """Traduce l'esito REALE di un push di conferma comando in una frase per l'utente.
 
         Distinto dall'"accettato" del backend (A00079, mostrato all'invio): qui è ciò che
@@ -2378,15 +2405,22 @@ class LepasCoordinator(DataUpdateCoordinator):
         Seconda correzione (2026-08-01): se l'UNICO modulo segnalato è il clima non si parla
         più di problema. Vedi `_solo_clima` — quel caso arriva su comandi perfettamente
         riusciti, e l'avviso era un falso allarme sistematico."""
-        result = str(data.get("result", "")).strip()
+        raw_res = data.get("result")
+        result = "" if raw_res is None else str(raw_res).strip()
+        result_failed = result == "0"
         reason = data.get("reason")
         if reason and LepasCoordinator._solo_clima(reason):
-            return ("Comando ricevuto dall'auto — unica segnalazione: "
-                    f"{LepasCoordinator._descrivi_reason(reason)}. "
-                    "Da sola non indica un guasto.")[:255]
+            if is_climate_cmd and not result_failed:
+                return ("Comando ricevuto dall'auto — unica segnalazione: "
+                        f"{LepasCoordinator._descrivi_reason(reason)}. "
+                        "Da sola non indica un guasto.")[:255]
+            codici = ", ".join(f"{v.get('modelId', '?')}:{v.get('code', '?')}" for v in reason)
+            return f"Comando rifiutato dall'auto ⚠️ — blocco centralina (codici {codici})"[:255]
         if reason:  # l'auto segnala uno o più moduli che non hanno eseguito
             return ("Eseguito solo in parte ⚠️ — l'auto segnala un problema su: "
                     f"{LepasCoordinator._descrivi_reason(reason)}")[:255]
+        if result_failed:
+            return f"Comando rifiutato dall'auto ⚠️ (codice esito {result or '?'})"[:255]
         if result == "5":
             return "Comando in esecuzione sull'auto… ⏳"
         if result in ("1", "2"):
@@ -2704,6 +2738,9 @@ class LepasCoordinator(DataUpdateCoordinator):
         # Azzerarli dopo lascerebbe scoperta la finestra in cui il comando è in volo, e una
         # conferma in arrivo si porterebbe dietro gli avvisi del comando precedente.
         self._note_cmd, self._note_cmd_at = [], time.monotonic()
+        with self._state_lock:
+            self._last_cmd_key = key
+            self._last_cmd_at = time.monotonic()
         try:
             CMD.send(self.ctx, key, emit=emit, params=params, avvisa=avvisa)
         finally:

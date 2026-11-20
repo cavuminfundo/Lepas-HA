@@ -7,6 +7,7 @@ from homeassistant.components.button import ENTITY_ID_FORMAT, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import COMMANDS_AS_RICH_ENTITY, DOMAIN, entity_allowed
@@ -99,12 +100,14 @@ class LepasCommandButton(LepasEntity, ButtonEntity):
             self._attr_icon = spec["icon"]
 
     async def async_press(self) -> None:
-        # [LOW] l'esito (anche di errore) è già pubblicato nei sensori diagnostici
-        # (cmd_status) dal coordinator: qui logghiamo senza propagare un'eccezione grezza.
         try:
             await self.coordinator.async_send_command(self._key)
-        except Exception:  # noqa: BLE001
+        except HomeAssistantError:
             _LOGGER.exception("Lepas: comando «%s» non riuscito", self._key)
+            raise
+        except Exception as err:
+            _LOGGER.exception("Lepas: comando «%s» non riuscito", self._key)
+            raise HomeAssistantError(f"Comando «{self._key}» non riuscito: {err}") from err
 
 
 class LepasActionButton(LepasEntity, ButtonEntity):

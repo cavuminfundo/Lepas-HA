@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.1).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.2).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.30.1";
+  var CARD_VERSION = "1.30.2";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -84,13 +84,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.1",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.1",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.1",
-    black: "/lepas_card/lepas-hero-black.png?v=1.30.1",
-    white: "/lepas_card/lepas-hero-white.png?v=1.30.1",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.2",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.2",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.2",
+    black: "/lepas_card/lepas-hero-black.png?v=1.30.2",
+    white: "/lepas_card/lepas-hero-white.png?v=1.30.2",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.1";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.2";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -3032,6 +3032,11 @@
       var self = this;
       var lang = getLang(this._hass);
       var t = getTexts(lang);
+      var startCmdEnt = this._findDomain(this._collect(this._hass), "sensor", "command_result");
+      var cmdEntityId = startCmdEnt ? startCmdEnt.id : "sensor.lepas_command_result";
+      var startCur = (this._hass.states && this._hass.states[cmdEntityId]) || (startCmdEnt && startCmdEnt.s) || null;
+      var startChanged = startCur ? (startCur.last_changed || startCur.last_updated || null) : null;
+      var startStateVal = startCur ? startCur.state : null;
       this._errorMsg = null;
       this._pendingKeys.add(pendingKey);
       this._render(this._hass);
@@ -3040,7 +3045,20 @@
         Promise.resolve(this._hass.callService(domain, service, data)).then(
           function () {
             self._pendingKeys.delete(pendingKey);
-            self._lastCmdFeedback = { ok: true, ts: Date.now() };
+            var endLang = self._hass ? getLang(self._hass) : lang;
+            var endCmdEnt = self._hass ? self._findDomain(self._collect(self._hass), "sensor", "command_result") : null;
+            var resolvedId = endCmdEnt ? endCmdEnt.id : cmdEntityId;
+            var curState = (self._hass && self._hass.states && self._hass.states[resolvedId]) || (endCmdEnt && endCmdEnt.s) || null;
+            var curChanged = curState ? (curState.last_changed || curState.last_updated || null) : null;
+            var curOutcome = (curState && (curChanged !== startChanged || curState.state !== startStateVal))
+              ? formatCommandOutcome(curState, null, endLang, Date.now())
+              : null;
+            if (curOutcome && curOutcome.ok === false) {
+              // Avoid overwriting a newer MQTT failure that arrived while callService was in flight.
+              self._lastCmdFeedback = null;
+            } else {
+              self._lastCmdFeedback = { ok: true, ts: Date.now() };
+            }
             if (self._hass) self._render(self._hass);
           },
           function (err) {
@@ -4241,6 +4259,7 @@
       var secCtrlHtml = (closureBtns.length || secActionBtns.length || ctx.tracker) ? (
         '<div class="surface">' +
           '<div class="sec-hdr"><span>' + self._h(t.securityControls) + "</span></div>" +
+          '<div class="info-banner is-amber hidden" role="status" data-bind="secCarInUseBanner" hidden></div>' +
           (closureBtns.length
             ? '<div class="sec-group" data-security-group="closures">' +
                 '<div class="sec-subhdr">' + svgIcon("lock", "sec-ico") + "<span>" + self._h(t.closuresGroup) + "</span></div>" +
@@ -4653,6 +4672,24 @@
         if (odoVal) odoVal.textContent = this._isOn(vm.plug) ? t.plugged : t.unplugged;
       }
 
+      var carInUse = Boolean(
+        (vm.climate && vm.climate.s && vm.climate.s.attributes && vm.climate.s.attributes.car_in_use === true) ||
+        (vm.hvActive && vm.hvActive.s && vm.hvActive.s.attributes && vm.hvActive.s.attributes.car_in_use === true)
+      );
+      var applyCarInUseState = function (btn, isWide, isPending) {
+        if (!btn) return;
+        btn.disabled = Boolean(isPending) || carInUse;
+        btn.classList.toggle("is-car-in-use", carInUse);
+        btn.setAttribute("aria-disabled", btn.disabled ? "true" : "false");
+        if (isWide) {
+          if (carInUse) {
+            btn.setAttribute("data-in-use-label", t.inUseShort);
+          } else {
+            btn.removeAttribute("data-in-use-label");
+          }
+        }
+      };
+
       // Overview Quick Dock + Security Action Buttons (synchronized confirmation keys!)
       if (vm.lock) {
         var isLocked = vm.lock.s && vm.lock.s.state === "locked";
@@ -4760,6 +4797,42 @@
         );
       }
 
+      var secCarInUseBanner = root.querySelector('[data-bind="secCarInUseBanner"]');
+      if (secCarInUseBanner) {
+        secCarInUseBanner.textContent = t.carInUseBanner;
+        secCarInUseBanner.classList.toggle("hidden", !carInUse);
+        secCarInUseBanner.hidden = !carInUse;
+      }
+      var gateBtn = function (selector, isWide, primaryKey, altMap) {
+        var el = root.querySelector(selector);
+        if (!el) return;
+        var key = primaryKey || el.getAttribute("data-confirm-key") || "";
+        var altKey = altMap && key ? altMap[key] : null;
+        var pending = Boolean((key && self._pendingKeys.has(key)) || (altKey && self._pendingKeys.has(altKey)));
+        applyCarInUseState(el, isWide, pending);
+      };
+      var lockPendingKey = vm.lock ? ((vm.lock.s && vm.lock.s.state === "locked") ? "unlock" : "lock_now") : null;
+      var trunkPendingKey = vm.trunk ? ((vm.trunk.s && vm.trunk.s.state === "closed") ? "trunk_open" : "trunk_close") : null;
+      var winPendingKey = vm.windowsCov ? ((vm.windowsCov.s && vm.windowsCov.s.state === "closed") ? "windows_open" : "windows_close") : null;
+      var sunPendingKey = vm.sunroofCov ? ((vm.sunroofCov.s && vm.sunroofCov.s.state === "closed") ? "sunroof_open" : "sunroof_close") : null;
+
+      // Gate rendered buttons via root selectors even when vm.* entities are temporarily absent.
+      gateBtn('[data-bind="quickLockBtn"]', true, lockPendingKey, { unlock: "quick_unlock", lock_now: "quick_lock_now" });
+      gateBtn('[data-bind="quickClimateBtn"]', true, "climate_toggle");
+      gateBtn('[data-bind="quickTrunkBtn"]', false, trunkPendingKey, { trunk_open: "quick_trunk_open", trunk_close: "quick_trunk_close" });
+      gateBtn('[data-panel="overview"] [data-action-id="flash_lights"]', false, "flash_lights");
+
+      gateBtn('[data-bind="secLockBtn"]', true, lockPendingKey);
+      gateBtn('[data-bind="secTrunkBtn"]', true, trunkPendingKey);
+      gateBtn('[data-bind="secWindowsBtn"]', true, winPendingKey);
+      gateBtn('[data-bind="ventWinBtn"]', true, "vent_windows");
+      gateBtn('[data-bind="secSunroofBtn"]', true, sunPendingKey);
+      gateBtn('[data-bind="ventSunBtn"]', true, "vent_sunroof");
+      gateBtn('[data-bind="alarmBtn"]', true, "alarm_toggle");
+      gateBtn('[data-bind="remoteStartBtn"]', true, "remote_start");
+      gateBtn('[data-panel="security"] [data-action-id="locate_gps"]', true, "locate_gps");
+      gateBtn('[data-panel="security"] [data-action-id="sec_flash_lights"]', true, "flash_lights");
+
       // Overview Footer & Extra rows
       var freshEl = root.querySelector('[data-bind="freshnessText"]');
       if (freshEl) {
@@ -4819,10 +4892,6 @@
       }
 
       // Climate details
-      var carInUse = Boolean(
-        (vm.climate && vm.climate.s && vm.climate.s.attributes && vm.climate.s.attributes.car_in_use === true) ||
-        (vm.hvActive && vm.hvActive.s && vm.hvActive.s.attributes && vm.hvActive.s.attributes.car_in_use === true)
-      );
       var carInUseBanner = root.querySelector('[data-bind="carInUseBanner"]');
       if (carInUseBanner) {
         carInUseBanner.textContent = t.carInUseBanner;
@@ -4830,19 +4899,6 @@
         carInUseBanner.hidden = !carInUse;
       }
       var cliPanel = root.querySelector('[data-panel="climate"]');
-      var applyCarInUseState = function (btn, isWide, isPending) {
-        if (!btn) return;
-        btn.disabled = Boolean(isPending) || carInUse;
-        btn.classList.toggle("is-car-in-use", carInUse);
-        btn.setAttribute("aria-disabled", btn.disabled ? "true" : "false");
-        if (isWide) {
-          if (carInUse) {
-            btn.setAttribute("data-in-use-label", t.inUseShort);
-          } else {
-            btn.removeAttribute("data-in-use-label");
-          }
-        }
-      };
       if (vm.climate) {
         var tt = vm.climate.s.attributes && vm.climate.s.attributes.temperature;
         var ttEl = root.querySelector('[data-bind="targetTempText"]');

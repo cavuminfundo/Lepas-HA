@@ -4005,6 +4005,298 @@ test("resolveClimateDurationOptions and dynamic climate duration chips align wit
   assert.deepEqual(fallbackVals, [5, 10, 15, 20, 25, 30]);
 });
 
+test("Security & Overview car_in_use gating, secCarInUseBanner, exempt refresh/stats, and true->false recovery", async () => {
+  const h = LepasCard._helpers;
+  const inUseHass = makeFullHass({
+    "climate.lepas_climate": makeState("climate.lepas_climate", "heat_cool", {
+      temperature: 22.5,
+      min_temp: 16,
+      max_temp: 30,
+      target_temperature_step: 0.5,
+      hvac_modes: ["off", "heat_cool"],
+      car_in_use: true,
+    }),
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "on", {
+      car_in_use: true,
+    }),
+    "button.lepas_remote_start": makeState("button.lepas_remote_start", "unknown"),
+    "button.lepas_refresh_full_status": makeState("button.lepas_refresh_full_status", "unknown"),
+  }, "it");
+
+  const card = createCard({ layout: "compact", default_tab: "security" }, inUseHass);
+  const secPanel = card.shadowRoot.querySelector('[data-panel="security"]');
+  const ovPanel = card.shadowRoot.querySelector('[data-panel="overview"]');
+  const cliPanel = card.shadowRoot.querySelector('[data-panel="climate"]');
+  assert.ok(secPanel && ovPanel && cliPanel);
+
+  // Security & Climate banners visible
+  const secBanner = secPanel.querySelector('[data-bind="secCarInUseBanner"]');
+  assert.ok(secBanner, "secCarInUseBanner must render inside Security panel");
+  assert.equal(secBanner.hidden, false);
+  assert.equal(secBanner.classList.contains("hidden"), false);
+  assert.equal(secBanner.getAttribute("role"), "status");
+  assert.equal(secBanner.textContent, h.getTexts("it").carInUseBanner);
+
+  const cliBanner = cliPanel.querySelector('[data-bind="carInUseBanner"]');
+  assert.ok(cliBanner);
+  assert.equal(cliBanner.hidden, false);
+  assert.equal(cliBanner.textContent, h.getTexts("it").carInUseBanner);
+
+  const wideControls = [
+    ovPanel.querySelector('[data-bind="quickLockBtn"]'),
+    ovPanel.querySelector('[data-bind="quickClimateBtn"]'),
+    secPanel.querySelector('[data-bind="secLockBtn"]'),
+    secPanel.querySelector('[data-bind="secTrunkBtn"]'),
+    secPanel.querySelector('[data-bind="secWindowsBtn"]'),
+    secPanel.querySelector('[data-bind="ventWinBtn"]'),
+    secPanel.querySelector('[data-bind="secSunroofBtn"]'),
+    secPanel.querySelector('[data-bind="ventSunBtn"]'),
+    secPanel.querySelector('[data-bind="alarmBtn"]'),
+    secPanel.querySelector('[data-bind="remoteStartBtn"]'),
+    secPanel.querySelector('[data-action-id="locate_gps"]'),
+    secPanel.querySelector('[data-action-id="sec_flash_lights"]'),
+  ];
+  const compactControls = [
+    ovPanel.querySelector('[data-bind="quickTrunkBtn"]'),
+    ovPanel.querySelector('[data-action-id="flash_lights"]'),
+  ];
+  assert.equal(wideControls.length, 12);
+  assert.equal(compactControls.length, 2);
+
+  for (const btn of wideControls) {
+    assert.ok(btn);
+    assert.equal(btn.disabled, true);
+    assert.equal(btn.getAttribute("aria-disabled"), "true");
+    assert.equal(btn.classList.contains("is-car-in-use"), true);
+    assert.equal(btn.getAttribute("data-in-use-label"), "Auto in uso");
+  }
+  for (const btn of compactControls) {
+    assert.ok(btn);
+    assert.equal(btn.disabled, true);
+    assert.equal(btn.getAttribute("aria-disabled"), "true");
+    assert.equal(btn.classList.contains("is-car-in-use"), true);
+    assert.equal(btn.getAttribute("data-in-use-label"), null);
+  }
+
+  // Clicks on all disabled Security and Overview quick-dock controls emit 0 service calls
+  const confirmDlg = card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
+  for (const btn of [...wideControls, ...compactControls]) {
+    btn.click();
+  }
+  await Promise.resolve();
+  assert.equal(inUseHass.calls.length, 0);
+  assert.equal(confirmDlg.open, false);
+
+  // Exempt controls remain enabled and operational
+  const exemptControls = [
+    card.shadowRoot.querySelector('[data-action-id="open_stats"]'),
+    ovPanel.querySelector('[data-action-id="wake_car"]'),
+    ovPanel.querySelector('[data-action-id="refresh_location"]'),
+    ovPanel.querySelector('[data-action-id="refresh_full"]'),
+    card.shadowRoot.querySelector('[data-bind="chgToggleBtn"]'),
+  ];
+  for (const btn of exemptControls) {
+    assert.ok(btn);
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.classList.contains("is-car-in-use"), false);
+    assert.equal(btn.getAttribute("data-in-use-label"), null);
+  }
+
+  exemptControls[0].click();
+  const statsDlg = card.shadowRoot.querySelector('dialog[data-bind="statsDialog"]');
+  assert.ok(statsDlg && statsDlg.open);
+  card.shadowRoot.querySelector('[data-dialog-action="close-stats"]').click();
+  assert.equal(statsDlg.open, false);
+
+  exemptControls[3].click();
+  assert.equal(confirmDlg.open, true);
+  card.shadowRoot.querySelector('[data-dialog-action="confirm"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(inUseHass.calls[0], {
+    domain: "button",
+    service: "press",
+    data: { entity_id: "button.lepas_refresh_full_status" },
+  });
+
+  // Also gates Security & Overview when car_in_use comes only from binary_sensor.lepas_high_voltage_active
+  const hvOnlyCard = createCard({ layout: "compact", default_tab: "security" }, makeFullHass({
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "on", {
+      car_in_use: true,
+    }),
+  }, "en"));
+  const hvSecBanner = hvOnlyCard.shadowRoot.querySelector('[data-bind="secCarInUseBanner"]');
+  assert.equal(hvSecBanner.hidden, false);
+  const hvSecLock = hvOnlyCard.shadowRoot.querySelector('[data-bind="secLockBtn"]');
+  assert.equal(hvSecLock.disabled, true);
+  assert.equal(hvSecLock.getAttribute("data-in-use-label"), "Car in use");
+  assert.equal(hvOnlyCard.shadowRoot.querySelector('[data-bind="quickTrunkBtn"]').disabled, true);
+  assert.equal(hvOnlyCard.shadowRoot.querySelector('[data-bind="quickTrunkBtn"]').getAttribute("data-in-use-label"), null);
+  hvOnlyCard.disconnectedCallback();
+
+  // Transition car_in_use: true -> false on the SAME rendered card re-enables all controls
+  const parkedHass = makeFullHass({
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", {
+      temperature: 21.0,
+      min_temp: 16,
+      max_temp: 30,
+      target_temperature_step: 0.5,
+      hvac_modes: ["off", "heat_cool"],
+      car_in_use: false,
+    }),
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "off", {
+      car_in_use: false,
+    }),
+    "button.lepas_remote_start": makeState("button.lepas_remote_start", "unknown"),
+    "button.lepas_refresh_full_status": makeState("button.lepas_refresh_full_status", "unknown"),
+  }, "it");
+  card.hass = parkedHass;
+
+  assert.equal(secBanner.hidden, true);
+  assert.equal(secBanner.classList.contains("hidden"), true);
+  for (const btn of [...wideControls, ...compactControls]) {
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.getAttribute("aria-disabled"), "false");
+    assert.equal(btn.classList.contains("is-car-in-use"), false);
+    assert.equal(btn.getAttribute("data-in-use-label"), null);
+  }
+
+  ovPanel.querySelector('[data-bind="quickClimateBtn"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(parkedHass.calls[0], {
+    domain: "climate",
+    service: "set_hvac_mode",
+    data: { entity_id: "climate.lepas_climate", hvac_mode: "heat_cool" },
+  });
+
+  secPanel.querySelector('[data-bind="secLockBtn"]').click();
+  assert.equal(confirmDlg.open, true);
+  card.shadowRoot.querySelector('[data-dialog-action="confirm"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(parkedHass.calls[1], {
+    domain: "lock",
+    service: "unlock",
+    data: { entity_id: "lock.lepas_lock" },
+  });
+
+  secPanel.querySelector('[data-action-id="sec_flash_lights"]').click();
+  assert.equal(confirmDlg.open, true);
+  card.shadowRoot.querySelector('[data-dialog-action="confirm"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(parkedHass.calls[2], {
+    domain: "button",
+    service: "press",
+    data: { entity_id: "button.lepas_find_car_flash_lights" },
+  });
+  card.disconnectedCallback();
+});
+
+test("formatCommandOutcome rejects ECU 0:95/result=0 and _callService clears _lastCmdFeedback on in-flight error race", async () => {
+  const h = LepasCard._helpers;
+  const nowMs = Date.now();
+  const initialTs = new Date(nowMs - 10_000).toISOString();
+  const errorTs = new Date(nowMs - 2_000).toISOString();
+
+  for (const msg of [
+    "Comando rifiutato dall'auto ⚠️ — blocco centralina (codici 0:95)",
+    "Comando rifiutato dall'auto ⚠️ (codice esito 0)",
+  ]) {
+    const out = h.formatCommandOutcome(
+      Object.assign(makeState("sensor.lepas_command_result", msg), { last_changed: errorTs }),
+      null,
+      "it",
+      nowMs
+    );
+    assert.ok(out, `Expected outcome object for '${msg}'`);
+    assert.equal(out.ok, false);
+    assert.ok(out.text.startsWith("Errore invio comando"));
+    assert.ok(out.text.endsWith("✕"));
+  }
+
+  // Case A: in-place hass.states update arrives while callService is in flight (after prior ok feedback)
+  const raceHass = makeFullHass({
+    "sensor.lepas_command_result": Object.assign(
+      makeState("sensor.lepas_command_result", "OK"),
+      { last_changed: initialTs }
+    ),
+  }, "it");
+  const card = createCard({ layout: "compact", default_tab: "climate" }, raceHass);
+  const badge = card.shadowRoot.querySelector('[data-bind="cmdResultBadge"]');
+
+  // Establish prior _lastCmdFeedback = { ok: true } via a normal command resolution
+  card.shadowRoot.querySelector('[data-action-id="temp_up"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(card._lastCmdFeedback && card._lastCmdFeedback.ok === true);
+  assert.equal(badge.classList.contains("is-emerald"), true);
+
+  let resolveCall;
+  raceHass.callService = (domain, service, data) => {
+    raceHass.calls.push({ domain, service, data });
+    return new Promise((resolve) => { resolveCall = resolve; });
+  };
+
+  card.shadowRoot.querySelector('[data-bind="quickClimateBtn"]').click();
+  assert.equal(typeof resolveCall, "function");
+
+  // Simulate MQTT failure updating sensor.lepas_command_result before callService settles
+  raceHass.states["sensor.lepas_command_result"] = Object.assign(
+    makeState("sensor.lepas_command_result", "Comando rifiutato dall'auto ⚠️ — blocco centralina (codici 0:95)"),
+    { last_changed: errorTs }
+  );
+
+  resolveCall();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(card._lastCmdFeedback, null, "_lastCmdFeedback must be null after in-flight command_result failure");
+  assert.equal(badge.classList.contains("hidden"), false);
+  assert.equal(badge.classList.contains("is-coral"), true);
+  assert.equal(badge.classList.contains("is-emerald"), false);
+  assert.ok(badge.textContent.startsWith("Errore invio comando"));
+  assert.ok(badge.textContent.endsWith("✕"));
+  card.disconnectedCallback();
+
+  // Case B: new hass object pushed via card.hass during callService flight with codice esito 0
+  const hassBefore = makeFullHass({
+    "sensor.lepas_command_result": Object.assign(
+      makeState("sensor.lepas_command_result", "OK"),
+      { last_changed: initialTs }
+    ),
+  }, "it");
+  let resolvePush;
+  hassBefore.callService = (domain, service, data) => {
+    hassBefore.calls.push({ domain, service, data });
+    return new Promise((resolve) => { resolvePush = resolve; });
+  };
+  const cardPush = createCard({ layout: "compact", default_tab: "overview" }, hassBefore);
+  const badgePush = cardPush.shadowRoot.querySelector('[data-bind="cmdResultBadge"]');
+
+  cardPush.shadowRoot.querySelector('[data-bind="quickClimateBtn"]').click();
+  assert.equal(typeof resolvePush, "function");
+
+  cardPush.hass = makeFullHass({
+    "sensor.lepas_command_result": Object.assign(
+      makeState("sensor.lepas_command_result", "Comando rifiutato dall'auto ⚠️ (codice esito 0)"),
+      { last_changed: new Date(Date.now() - 1_000).toISOString() }
+    ),
+  }, "it");
+
+  resolvePush();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(cardPush._lastCmdFeedback, null);
+  assert.equal(badgePush.classList.contains("hidden"), false);
+  assert.equal(badgePush.classList.contains("is-coral"), true);
+  assert.equal(badgePush.classList.contains("is-emerald"), false);
+  assert.ok(badgePush.textContent.endsWith("✕"));
+  cardPush.disconnectedCallback();
+});
+
 
 
 
