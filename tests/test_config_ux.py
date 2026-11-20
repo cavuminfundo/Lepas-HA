@@ -16,6 +16,7 @@ from custom_components.lepas.const import (
     CONF_PIN,
     CONF_TUSERID,
     CONF_VIN,
+    DATA_AIR_DURATIONS,
     DATA_CAPS_PROBED_V3,
     DATA_CAPS_PROBED_V4,
     DATA_VEHICLE_FEATURES,
@@ -54,6 +55,7 @@ async def _setup_entry(
     vin: str = FX.VIN,
     entry_id: str = "ux_entry_1",
     features: dict[str, bool] | None = None,
+    air_durations: list[int] | None = None,
 ) -> MockConfigEntry:
     data: dict = {
         CONF_VIN: vin,
@@ -65,6 +67,8 @@ async def _setup_entry(
         data[DATA_CAPS_PROBED_V3] = True
         data[DATA_CAPS_PROBED_V4] = True
         data[DATA_VEHICLE_FEATURES] = features
+    if air_durations is not None:
+        data[DATA_AIR_DURATIONS] = list(air_durations)
     entry = MockConfigEntry(
         domain=DOMAIN,
         title=f"Lepas ({vin})",
@@ -352,6 +356,103 @@ async def test_number_notify_schedule_and_climate_target_temp_sync(
         )
     finally:
         await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_climate_duration_aligned_to_air_durations_and_clamps(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    _patch_io(monkeypatch)
+    tz = timezone.utc
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 10, 0, tzinfo=tz))
+    mock_restore_cache(
+        hass,
+        [State("number.lepas_climate_duration", "30")],
+    )
+
+    entry = await _setup_entry(hass, air_durations=[5, 10, 15])
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        st = hass.states.get("number.lepas_climate_duration")
+        assert st is not None
+        assert st.attributes["min"] == 5
+        assert st.attributes["max"] == 15
+        assert st.attributes["step"] == 5
+        assert st.attributes["allowed_durations"] == [5, 10, 15]
+        assert float(st.state) == 15.0
+        assert coord.clima_duration == 15
+
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                "number",
+                "set_value",
+                {"entity_id": "number.lepas_climate_duration", "value": 30},
+                blocking=True,
+            )
+
+        coord.quick_departure_minutes = 7 * 60
+        coord.quick_departure_enabled = True
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": "number.lepas_climate_duration", "value": 12},
+            blocking=True,
+        )
+        assert coord.clima_duration == 10
+        assert float(hass.states.get("number.lepas_climate_duration").state) == 10.0
+        assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
+            "06:50:00+00:00"
+        )
+
+        num_entity = next(
+            e
+            for e in hass.data["entity_components"]["number"].entities
+            if e.entity_id == "number.lepas_climate_duration"
+        )
+        await num_entity.async_set_native_value(30)
+        assert coord.clima_duration == 15
+        assert float(hass.states.get("number.lepas_climate_duration").state) == 15.0
+    finally:
+        await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done()
+
+    mock_restore_cache(hass, [State("number.lepas_climate_duration", "10")])
+    entry_gap = await _setup_entry(
+        hass,
+        vin="L8AIRDUR000000002",
+        entry_id="ux_air_gap",
+        air_durations=[5, 15],
+    )
+    coord_gap = hass.data[DOMAIN][entry_gap.entry_id]
+
+    try:
+        st_gap = hass.states.get("number.lepas_climate_duration")
+        assert st_gap is not None
+        assert st_gap.attributes["min"] == 5
+        assert st_gap.attributes["max"] == 15
+        assert st_gap.attributes["step"] == 10
+        assert st_gap.attributes["allowed_durations"] == [5, 15]
+        assert coord_gap.clima_duration == 5
+
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": "number.lepas_climate_duration", "value": 15},
+            blocking=True,
+        )
+        assert coord_gap.clima_duration == 15
+
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": "number.lepas_climate_duration", "value": 10},
+            blocking=True,
+        )
+        assert coord_gap.clima_duration == 5
+        assert float(hass.states.get("number.lepas_climate_duration").state) == 5.0
+    finally:
+        await hass.config_entries.async_remove(entry_gap.entry_id)
         await hass.async_block_till_done()
 
 

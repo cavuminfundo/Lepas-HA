@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.30.0";
+  var CARD_VERSION = "1.30.1";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -84,13 +84,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.30.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.30.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.30.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.30.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.1";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -114,6 +114,8 @@
     alarm_toggle: true,
   });
 
+  var CMD_SUCCESS_TTL_MS = 5 * 60 * 1000;
+  var CMD_WAITING_STATES = ["in attesa", "waiting", "wachten"];
   var CMD_ERROR_PATTERNS = [
     "❌",
     "⚠",
@@ -311,12 +313,8 @@
       statsResetHint: "Questa azione azzera i contatori cumulativi Da inizio.",
       statsConfirmReset: "Azzera",
       statsNoData: "Nessun sensore statistiche disponibile.",
-      editorDefaultScope: "Filtro iniziale",
-      editorDefaultChart: "Grafico iniziale",
-      editorShowCharging: "Mostra sezione Ricarica",
-      editorShowConsumption: "Mostra sezione Consumi medi",
-      editorShowChart: "Mostra grafico storico",
-      editorShowResetButtons: "Mostra pulsanti reset",
+      statsBtnLabel: "Statistiche",
+      closeDialog: "Chiudi",
       climateExtraLabels: {
         driver_seat_heating: "Sedile guida caldo",
         driver_seat_ventilation: "Sedile guida aria",
@@ -526,12 +524,8 @@
       statsResetHint: "This resets the cumulative From start counters.",
       statsConfirmReset: "Reset",
       statsNoData: "No statistics sensors available.",
-      editorDefaultScope: "Default scope",
-      editorDefaultChart: "Default chart",
-      editorShowCharging: "Show Charging section",
-      editorShowConsumption: "Show Average consumption section",
-      editorShowChart: "Show history chart",
-      editorShowResetButtons: "Show reset buttons",
+      statsBtnLabel: "Statistics",
+      closeDialog: "Close",
       climateExtraLabels: {
         driver_seat_heating: "Driver seat heat",
         driver_seat_ventilation: "Driver seat vent",
@@ -741,12 +735,8 @@
       statsResetHint: "Dit zet de cumulatieve Vanaf start-tellers terug op nul.",
       statsConfirmReset: "Resetten",
       statsNoData: "Geen statistieksensoren beschikbaar.",
-      editorDefaultScope: "Standaardbereik",
-      editorDefaultChart: "Standaardgrafiek",
-      editorShowCharging: "Sectie Laden tonen",
-      editorShowConsumption: "Sectie Gemiddeld verbruik tonen",
-      editorShowChart: "Historiekgrafiek tonen",
-      editorShowResetButtons: "Resetknoppen tonen",
+      statsBtnLabel: "Statistieken",
+      closeDialog: "Sluiten",
       climateExtraLabels: {
         driver_seat_heating: "Stoel best. verw.",
         driver_seat_ventilation: "Stoel best. vent.",
@@ -877,10 +867,11 @@
     return !st || st === "unavailable" || st === "unknown";
   }
 
-  function formatCommandOutcome(cmdStateObj, localFeedback, lang) {
+  function formatCommandOutcome(cmdStateObj, localFeedback, lang, nowMs) {
     var code = String(lang || "en").slice(0, 2).toLowerCase();
     var resolvedLang = I18N[code] ? code : "en";
     var t = getTexts(resolvedLang);
+    var now = (typeof nowMs === "number" && Number.isFinite(nowMs)) ? nowMs : Date.now();
     var cmdAlive = !isDeadStateObj(cmdStateObj);
     var hasLocal = Boolean(localFeedback && typeof localFeedback === "object" && typeof localFeedback.ok === "boolean");
     if (!cmdAlive && !hasLocal) return null;
@@ -901,21 +892,33 @@
 
     var ok;
     var chosenTs;
+    var tsMs;
     if (useLocal) {
       ok = Boolean(localFeedback.ok);
       chosenTs = fbRawTs;
+      tsMs = fbMs;
     } else {
       var rawState = String(cmdStateObj.state || "");
-      var lowerState = rawState.toLowerCase();
+      var trimmedLower = rawState.trim().toLowerCase();
+      if (CMD_WAITING_STATES.indexOf(trimmedLower) >= 0) {
+        return null;
+      }
       var isErr = false;
       for (var i = 0; i < CMD_ERROR_PATTERNS.length; i += 1) {
-        if (lowerState.indexOf(CMD_ERROR_PATTERNS[i]) >= 0) {
+        if (trimmedLower.indexOf(CMD_ERROR_PATTERNS[i]) >= 0) {
           isErr = true;
           break;
         }
       }
       ok = !isErr;
       chosenTs = cmdRawTs;
+      tsMs = cmdMs;
+    }
+
+    if (ok) {
+      if (!Number.isFinite(tsMs) || (now - tsMs) > CMD_SUCCESS_TTL_MS) {
+        return null;
+      }
     }
 
     var prefix = ok ? t.lastCommand : t.commandSendError;
@@ -924,10 +927,36 @@
     var text = (timeStr && timeStr !== "—")
       ? prefix + " · " + timeStr + " " + glyph
       : prefix + " " + glyph;
-    return { text: text, ok: ok };
+    return { text: text, ok: ok, tsMs: tsMs };
+  }
+
+  function resolveClimateDurationOptions(cliDurState) {
+    var attrs = (cliDurState && (cliDurState.a || cliDurState.attributes)) || null;
+    if (attrs && Array.isArray(attrs.allowed_durations)) {
+      var seen = Object.create(null);
+      var custom = [];
+      for (var i = 0; i < attrs.allowed_durations.length; i += 1) {
+        var d = attrs.allowed_durations[i];
+        if (typeof d === "number" && Number.isInteger(d) && d > 0 && !seen[d]) {
+          seen[d] = true;
+          custom.push(d);
+        }
+      }
+      if (custom.length) {
+        custom.sort(function (a, b) { return a - b; });
+        return custom;
+      }
+    }
+    var cdMin = (attrs && typeof attrs.min === "number" && Number.isFinite(attrs.min)) ? attrs.min : 5;
+    var cdMax = (attrs && typeof attrs.max === "number" && Number.isFinite(attrs.max)) ? attrs.max : 30;
+    if (cdMax < cdMin) cdMax = cdMin;
+    var base = [5, 10, 15, 20, 25, 30].filter(function (v) { return v >= cdMin && v <= cdMax; });
+    if (base.length) return base;
+    return cdMin === cdMax ? [cdMin] : [cdMin, cdMax];
   }
 
   var SVG_PATHS = {
+    chart: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="17" x2="8" y2="11"/><line x1="12" y1="17" x2="12" y2="7"/><line x1="16" y1="17" x2="16" y2="14"/>',
     overview: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
     climate: '<path d="M12 12c0-3 2.5-5 5-5 1.8 0 3 1.2 3 3 0 2.2-2 3.5-5 3.5"/><path d="M12 12c3 0 5 2.5 5 5 0 1.8-1.2 3-3 3-2.2 0-3.5-2-3.5-5"/><path d="M12 12c0 3-2.5 5-5 5-1.8 0-3-1.2-3-3 0-2.2 2-3.5 5-3.5"/><path d="M12 12c-3 0-5-2.5-5-5 0-1.8 1.2-3 3-3 2.2 0 3.5 2 3.5 5"/><circle cx="12" cy="12" r="1.5"/>',
     charging: '<polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"/>',
@@ -1448,7 +1477,7 @@
 
   function createConfirmDialogController(host, opts) {
     var options = opts || {};
-    var closeImmediate = Boolean(options.closeOnConfirmImmediate);
+    var defaultCloseImmediate = Boolean(options.closeOnConfirmImmediate);
     var ctrl = {
       pendingAction: null,
       inFlight: false,
@@ -1470,6 +1499,22 @@
         if (typeof x !== "number" || typeof y !== "number") return false;
         return x < r.left || x > r.right || y < r.top || y > r.bottom;
       },
+      syncInFlightDisabled: function (disabled) {
+        var flag = Boolean(disabled);
+        var dlg = ctrl.getDialog();
+        if (dlg) {
+          var confirmBtn = dlg.querySelector('[data-dialog-action="confirm"]');
+          var cancelBtn = dlg.querySelector('[data-dialog-action="cancel"]');
+          if (confirmBtn) confirmBtn.disabled = flag;
+          if (cancelBtn) cancelBtn.disabled = flag;
+        }
+        if (host.shadowRoot) {
+          var resetBtns = host.shadowRoot.querySelectorAll("[data-stats-reset]");
+          for (var i = 0; i < resetBtns.length; i += 1) {
+            resetBtns[i].disabled = flag;
+          }
+        }
+      },
       syncTexts: function (t, actionLabel) {
         var dlg = ctrl.getDialog();
         if (!dlg) return;
@@ -1485,7 +1530,10 @@
         if (titleEl && titleEl.textContent !== titleTxt) titleEl.textContent = titleTxt;
         if (actEl && typeof actionLabel === "string" && actEl.textContent !== actionLabel) actEl.textContent = actionLabel;
         if (hintEl && hintEl.textContent !== hintTxt) hintEl.textContent = hintTxt;
-        if (cancelBtn && cancelBtn.textContent !== t.confirmCancel) cancelBtn.textContent = t.confirmCancel;
+        if (cancelBtn) {
+          if (cancelBtn.textContent !== t.confirmCancel) cancelBtn.textContent = t.confirmCancel;
+          cancelBtn.disabled = Boolean(ctrl.inFlight);
+        }
         if (confirmBtn) {
           if (confirmBtn.textContent !== confirmTxt) confirmBtn.textContent = confirmTxt;
           confirmBtn.disabled = Boolean(ctrl.inFlight);
@@ -1508,6 +1556,10 @@
           dialogTitle: spec.dialogTitle || "",
           dialogHint: spec.dialogHint || "",
           confirmBtnText: spec.confirmBtnText || "",
+          closeOnConfirmImmediate: (spec && typeof spec.closeOnConfirmImmediate === "boolean")
+            ? spec.closeOnConfirmImmediate
+            : undefined,
+          execute: (spec && typeof spec.execute === "function") ? spec.execute : null,
         };
         ctrl.outsidePress = false;
         ctrl.syncTexts(t, actionLabel);
@@ -1519,13 +1571,13 @@
           }
         }
       },
-      close: function (returnVal) {
+      close: function (returnVal, force) {
+        if (ctrl.inFlight && !force) return;
         ctrl.pendingAction = null;
         ctrl.outsidePress = false;
         var dlg = ctrl.getDialog();
         if (!dlg) return;
-        var confirmBtn = dlg.querySelector('[data-dialog-action="confirm"]');
-        if (confirmBtn) confirmBtn.disabled = Boolean(ctrl.inFlight);
+        ctrl.syncInFlightDisabled(false);
         if (ctrl.isOpen(dlg)) {
           if (typeof dlg.close === "function") {
             try { dlg.close(returnVal || ""); } catch (e) { dlg.removeAttribute("open"); }
@@ -1539,35 +1591,57 @@
         if (ctrl.inFlight) return;
         var pending = ctrl.pendingAction;
         if (!pending) return;
+        var closeImmediate = (typeof pending.closeOnConfirmImmediate === "boolean")
+          ? pending.closeOnConfirmImmediate
+          : defaultCloseImmediate;
+        var runner = (typeof pending.execute === "function") ? pending.execute : onExecute;
         if (closeImmediate) {
-          ctrl.close("confirm");
-          if (typeof onExecute === "function") onExecute(pending);
+          ctrl.close("confirm", true);
+          if (typeof runner === "function") runner(pending);
           return;
         }
         ctrl.inFlight = true;
-        var dlg = ctrl.getDialog();
-        var confirmBtn = dlg ? dlg.querySelector('[data-dialog-action="confirm"]') : null;
-        if (confirmBtn) confirmBtn.disabled = true;
+        ctrl.syncInFlightDisabled(true);
+        var settled = false;
         var finalize = function () {
+          if (settled) return;
+          settled = true;
           ctrl.inFlight = false;
-          ctrl.close("confirm");
+          ctrl.syncInFlightDisabled(false);
+          ctrl.close("confirm", true);
         };
-        if (typeof onExecute === "function") {
-          onExecute(pending, finalize);
+        if (typeof runner === "function") {
+          try {
+            var res = runner(pending, finalize);
+            if (res && typeof res.then === "function") {
+              res.then(
+                function () { finalize(); },
+                function (err) {
+                  if (typeof options.onError === "function") options.onError(err, pending);
+                  finalize();
+                }
+              );
+            }
+          } catch (syncErr) {
+            if (typeof options.onError === "function") options.onError(syncErr, pending);
+            finalize();
+          }
         } else {
           finalize();
         }
       },
       destroy: function () {
         ctrl.inFlight = false;
-        ctrl.close();
+        ctrl.close("", true);
         ctrl.unbind();
       },
       onClose: function () {
         var dlg = ctrl.boundEl || ctrl.getDialog();
         if (dlg && ctrl.isOpen(dlg)) return;
         if (dlg && "returnValue" in dlg) dlg.returnValue = "";
-        ctrl.pendingAction = null;
+        if (!ctrl.inFlight) {
+          ctrl.pendingAction = null;
+        }
         ctrl.outsidePress = false;
       },
       onCancel: function (ev) {
@@ -1576,6 +1650,10 @@
         ctrl.close("cancel");
       },
       onPointerDown: function (ev) {
+        if (ctrl.inFlight) {
+          ctrl.outsidePress = false;
+          return;
+        }
         var dlg = ctrl.boundEl || ctrl.getDialog();
         ctrl.outsidePress = ctrl.isOpen(dlg) ? ctrl.isPointerOutside(ev, dlg) : false;
       },
@@ -1856,7 +1934,46 @@
       ".hero-stage { position: relative; aspect-ratio: 2 / 1; width: 100%; background: #14171D; overflow: hidden; }",
       ".hero-img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }",
       ".hero-overlay-top { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; pointer-events: none; z-index: 1; }",
-      ".hero-overlay-top .status-pill, .hero-overlay-top .soc-btn { pointer-events: auto; }",
+      ".hero-overlay-top .status-pill, .hero-overlay-top .soc-btn, .hero-overlay-top .stats-btn { pointer-events: auto; }",
+      ".hero-overlay-actions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }",
+      ".stats-btn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0; border-radius: 999px; border: 1px solid var(--lp-border); background: rgba(17, 19, 23, 0.84); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: var(--lp-text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }",
+      ".stats-btn:hover { background: rgba(33, 37, 44, 0.92); border-color: var(--lp-border-strong); }",
+      ".stats-btn .lp-ico { width: 18px; height: 18px; }",
+      ".stats-dialog { padding: 0; border: 1px solid var(--lp-border-strong); border-radius: 16px; background: var(--lp-canvas); color: var(--lp-text); width: min(640px, calc(100vw - 24px)); max-width: 100%; max-height: calc(100dvh - 32px); margin: auto; box-shadow: 0 24px 56px rgba(0, 0, 0, 0.65); overflow: hidden; }",
+      ".stats-dialog[open] { display: flex; flex-direction: column; position: fixed; inset: 0; margin: auto; z-index: 998; }",
+      ".stats-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--lp-surface); border-bottom: 1px solid var(--lp-border); flex-shrink: 0; }",
+      ".stats-dialog-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 1rem; font-weight: 700; color: var(--lp-text); min-width: 0; }",
+      ".stats-dialog-title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
+      ".stats-dialog-close { min-width: 36px; min-height: 36px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--lp-border); background: var(--lp-elevated); color: var(--lp-text); cursor: pointer; font-size: 0.95rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }",
+      ".stats-dialog-close:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); }",
+      ".stats-dialog-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; }",
+      ".stats-sec-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; font-weight: 600; color: var(--lp-text-secondary); }",
+      ".stats-sec-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }",
+      ".stats-scope-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px; padding: 2px; border-radius: 9px; }",
+      ".stats-scope-seg .seg-btn, .stats-chart-seg .seg-btn { min-height: 28px; padding: 3px 9px; border-radius: 6px; font-size: 0.7rem; line-height: 1.15; white-space: nowrap; }",
+      ".stats-reset-btn { min-height: 28px; min-width: 32px; padding: 3px 9px; border-radius: 8px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); font-size: 0.7rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }",
+      ".stats-reset-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); color: var(--lp-text); }",
+      ".stats-reset-btn:disabled, .stats-reset-btn.is-pending { opacity: 0.55; cursor: wait; }",
+      ".stats-reset-btn .lp-ico { width: 13px; height: 13px; }",
+      ".stats-cell-sub { font-size: 0.64rem; color: var(--lp-text-secondary); line-height: 1.2; overflow-wrap: break-word; }",
+      ".stats-chart-box { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--lp-border); }",
+      ".stats-chart-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }",
+      ".stats-chart-title { font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); }",
+      ".stats-chart-legend { display: inline-flex; align-items: center; gap: 8px; font-size: 0.68rem; color: var(--lp-text-secondary); }",
+      ".legend-item { display: inline-flex; align-items: center; gap: 4px; }",
+      ".legend-swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }",
+      ".legend-swatch.is-home { background: var(--lp-emerald); }",
+      ".legend-swatch.is-away { background: var(--lp-glacier); }",
+      ".stats-chart-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px; padding: 2px; border-radius: 9px; }",
+      ".stats-chart-stage { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 8px 8px 4px; min-height: 112px; display: flex; align-items: center; justify-content: center; }",
+      ".stats-chart-svg { width: 100%; height: auto; display: block; overflow: visible; }",
+      ".chart-baseline { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }",
+      ".chart-axis-lbl { fill: #9CA3AF; font-size: 9px; font-weight: 600; }",
+      ".chart-bar-col { cursor: pointer; outline: none; }",
+      ".chart-bar-col:focus-visible .chart-bar-seg { stroke: #F3F4F6; stroke-width: 1; }",
+      ".stats-chart-empty { font-size: 0.76rem; color: var(--lp-text-muted); text-align: center; padding: 20px 8px; }",
+      ".stats-chart-tooltip { font-size: 0.72rem; font-weight: 600; color: var(--lp-text); background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 8px; padding: 5px 9px; }",
+      ".stats-empty-card { font-size: 0.82rem; color: var(--lp-text-secondary); text-align: center; padding: 18px 12px; }",
       ".status-pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; min-height: 30px; border-radius: 999px; background: rgba(17, 19, 23, 0.82); border: 1px solid var(--lp-border); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); font-size: 0.74rem; font-weight: 600; color: var(--lp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72%; }",
       ".status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--lp-text-muted); }",
       ".status-dot.is-online { background: var(--lp-emerald); }",
@@ -1923,7 +2040,6 @@
       ".ctrl-btn.is-car-in-use[data-in-use-label]::after, .chip-btn.is-car-in-use[data-in-use-label]::after { content: \"⊘ \" attr(data-in-use-label); }",
       ".info-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--lp-elevated); border: 1px solid var(--lp-border-strong); color: var(--lp-text); font-size: 0.8rem; font-weight: 600; line-height: 1.35; }",
       ".info-banner.is-amber { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.4); color: #FCD34D; }",
-      ".climate-meta-bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 24px; }",
       ".chip-btn:hover { background: var(--lp-elevated-hover); color: var(--lp-text); }",
       ".chip-btn.is-active { background: #2A313D; color: var(--lp-text); border-color: rgba(243, 244, 246, 0.55); }",
       ".seat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }",
@@ -2105,42 +2221,6 @@
     ]).join("\n");
   }
 
-  function buildStatsStyles() {
-    return buildCommonCardCss().concat([
-      ".stats-shell { display: flex; flex-direction: column; gap: 10px; padding: 12px; }",
-      ".stats-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; }",
-      ".stats-hdr-title { display: inline-flex; align-items: center; gap: 7px; font-size: 1.02rem; font-weight: 700; color: var(--lp-text); letter-spacing: -0.01em; min-width: 0; }",
-      ".stats-hdr-title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
-      ".stats-sec-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; font-weight: 600; color: var(--lp-text-secondary); }",
-      ".stats-sec-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }",
-      ".stats-scope-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px; padding: 2px; border-radius: 9px; }",
-      ".stats-scope-seg .seg-btn, .stats-chart-seg .seg-btn { min-height: 28px; padding: 3px 9px; border-radius: 6px; font-size: 0.7rem; line-height: 1.15; white-space: nowrap; }",
-      ".stats-reset-btn { min-height: 28px; min-width: 32px; padding: 3px 9px; border-radius: 8px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); font-size: 0.7rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }",
-      ".stats-reset-btn:hover { background: var(--lp-elevated-hover); border-color: var(--lp-border-strong); color: var(--lp-text); }",
-      ".stats-reset-btn:disabled, .stats-reset-btn.is-pending { opacity: 0.55; cursor: wait; }",
-      ".stats-reset-btn .lp-ico { width: 13px; height: 13px; }",
-      ".stats-cell-sub { font-size: 0.64rem; color: var(--lp-text-secondary); line-height: 1.2; overflow-wrap: break-word; }",
-      ".stats-chart-box { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid var(--lp-border); }",
-      ".stats-chart-hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }",
-      ".stats-chart-title { font-size: 0.72rem; font-weight: 600; color: var(--lp-text-secondary); }",
-      ".stats-chart-legend { display: inline-flex; align-items: center; gap: 8px; font-size: 0.68rem; color: var(--lp-text-secondary); }",
-      ".legend-item { display: inline-flex; align-items: center; gap: 4px; }",
-      ".legend-swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }",
-      ".legend-swatch.is-home { background: var(--lp-emerald); }",
-      ".legend-swatch.is-away { background: var(--lp-glacier); }",
-      ".stats-chart-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px; padding: 2px; border-radius: 9px; }",
-      ".stats-chart-stage { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 8px 8px 4px; min-height: 112px; display: flex; align-items: center; justify-content: center; }",
-      ".stats-chart-svg { width: 100%; height: auto; display: block; overflow: visible; }",
-      ".chart-baseline { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }",
-      ".chart-axis-lbl { fill: #9CA3AF; font-size: 9px; font-weight: 600; }",
-      ".chart-bar-col { cursor: pointer; outline: none; }",
-      ".chart-bar-col:focus-visible .chart-bar-seg { stroke: #F3F4F6; stroke-width: 1; }",
-      ".stats-chart-empty { font-size: 0.76rem; color: var(--lp-text-muted); text-align: center; padding: 20px 8px; }",
-      ".stats-chart-tooltip { font-size: 0.72rem; font-weight: 600; color: var(--lp-text); background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 8px; padding: 5px 9px; }",
-      ".stats-empty-card { font-size: 0.82rem; color: var(--lp-text-secondary); text-align: center; padding: 18px 12px; }",
-    ]).join("\n");
-  }
-
   function buildEditorStyles() {
     return [
       ":host { display: block; font-family: var(--ha-card-font-family, inherit); color: #F3F4F6; }",
@@ -2290,136 +2370,6 @@
     }
   }
 
-  class LepasStatsCardEditor extends HTMLElement {
-    constructor() {
-      super();
-      this.attachShadow({ mode: "open" });
-      this._config = {};
-      this._hass = null;
-      this._rendered = false;
-      this._onEvent = this._handleFieldChange.bind(this);
-    }
-
-    setConfig(config) {
-      this._config = Object.assign({}, config || {});
-      this._render();
-    }
-
-    set hass(hass) {
-      var prevLang = this._lang;
-      this._hass = hass;
-      var nextLang = getLang(hass);
-      if (prevLang !== nextLang) {
-        this._lang = nextLang;
-        this._rendered = false;
-        this._render();
-      }
-    }
-
-    _emitConfig(patch) {
-      emitEditorConfig(this, patch, ["title"]);
-    }
-
-    _handleFieldChange(ev) {
-      var target = ev.target;
-      if (!target || !target.getAttribute) return;
-      if (ev.type !== "change" && ev.type !== "input") return;
-      var field = target.getAttribute("data-field");
-      if (!field) return;
-      if (ev.type === "input" && field !== "title") return;
-      if (
-        field === "show_charging" ||
-        field === "show_consumption" ||
-        field === "show_chart" ||
-        field === "show_reset_buttons"
-      ) {
-        var bPatch = {};
-        bPatch[field] = Boolean(target.checked);
-        this._emitConfig(bPatch);
-      } else {
-        var patch = {};
-        patch[field] = String(target.value || "").trim();
-        this._emitConfig(patch);
-      }
-    }
-
-    _syncValues() {
-      if (!this.shadowRoot) return;
-      var cfg = this._config || {};
-      var titleEl = this.shadowRoot.querySelector('[data-field="title"]');
-      if (titleEl && this.shadowRoot.activeElement !== titleEl) titleEl.value = cfg.title || "";
-      var scopeEl = this.shadowRoot.querySelector('[data-field="default_scope"]');
-      if (scopeEl) scopeEl.value = VALID_STATS_SCOPES.indexOf(cfg.default_scope) >= 0 ? cfg.default_scope : "all";
-      var chartEl = this.shadowRoot.querySelector('[data-field="default_chart"]');
-      if (chartEl) chartEl.value = VALID_STATS_CHARTS.indexOf(cfg.default_chart) >= 0 ? cfg.default_chart : "7d";
-      var boolFields = ["show_charging", "show_consumption", "show_chart", "show_reset_buttons"];
-      for (var i = 0; i < boolFields.length; i += 1) {
-        var bf = boolFields[i];
-        var chk = this.shadowRoot.querySelector('[data-field="' + bf + '"]');
-        if (chk) chk.checked = cfg[bf] !== false;
-      }
-    }
-
-    _render() {
-      if (!this.shadowRoot) return;
-      var lang = getLang(this._hass);
-      this._lang = lang;
-      var t = getTexts(lang);
-      if (!this._rendered) {
-        var scopeOpts = [
-          { val: "all", lbl: t.statsScopeAll },
-          { val: "home", lbl: t.homeEnergy },
-          { val: "away", lbl: t.awayEnergy },
-        ].map(function (o) {
-          return '<option value="' + o.val + '">' + escapeHtml(o.lbl) + "</option>";
-        }).join("");
-
-        var chartOpts = [
-          { val: "7d", lbl: t.statsChart7d },
-          { val: "30d", lbl: t.statsChart30d },
-          { val: "12m", lbl: t.statsChart12m },
-        ].map(function (o) {
-          return '<option value="' + o.val + '">' + escapeHtml(o.lbl) + "</option>";
-        }).join("");
-
-        var checkRows = [
-          { field: "show_charging", lbl: t.editorShowCharging },
-          { field: "show_consumption", lbl: t.editorShowConsumption },
-          { field: "show_chart", lbl: t.editorShowChart },
-          { field: "show_reset_buttons", lbl: t.editorShowResetButtons },
-        ].map(function (r) {
-          return '<label class="ed-check-row">' +
-            '<span class="ed-lbl">' + escapeHtml(r.lbl) + "</span>" +
-            '<input type="checkbox" data-field="' + r.field + '">' +
-          "</label>";
-        }).join("");
-
-        this.shadowRoot.innerHTML =
-          "<style>" + buildEditorStyles() + "</style>" +
-          '<div class="ed-wrap">' +
-            '<div class="ed-field">' +
-              '<label class="ed-lbl">' + escapeHtml(t.editorTitle) + "</label>" +
-              '<input type="text" class="ed-input" data-field="title" placeholder="' + escapeHtml(t.statsCardDefaultTitle) + '">' +
-            "</div>" +
-            '<div class="ed-field">' +
-              '<label class="ed-lbl">' + escapeHtml(t.editorDefaultScope) + "</label>" +
-              '<select class="ed-select" data-field="default_scope">' + scopeOpts + "</select>" +
-            "</div>" +
-            '<div class="ed-field">' +
-              '<label class="ed-lbl">' + escapeHtml(t.editorDefaultChart) + "</label>" +
-              '<select class="ed-select" data-field="default_chart">' + chartOpts + "</select>" +
-            "</div>" +
-            checkRows +
-          "</div>";
-
-        this.shadowRoot.addEventListener("change", this._onEvent);
-        this.shadowRoot.addEventListener("input", this._onEvent);
-        this._rendered = true;
-      }
-      this._syncValues();
-    }
-  }
-
   class LepasCard extends HTMLElement {
     constructor() {
       super();
@@ -2453,10 +2403,35 @@
       this._allowedClimateExtras = [];
       this._currentEntryId = null;
       this._climateExtrasReqSeq = 0;
-      this._dialogCtrl = createConfirmDialogController(this, { closeOnConfirmImmediate: true });
+      this._statsScope = "all";
+      this._statsChartRange = "7d";
+      this._statsOpen = false;
+      this._lastStatsChartSig = "";
+      this._chartMeta = null;
+      this._consUnitModes = loadConsUnitModes();
+      this._latestResetTargets = Object.create(null);
+      this._statsOutsidePress = false;
+      this._boundStatsDialog = null;
+      this._cmdTtlTimer = null;
+      this._renderedCliDurKey = "";
+      var selfRef = this;
+      this._dialogCtrl = createConfirmDialogController(this, {
+        closeOnConfirmImmediate: true,
+        onError: function (err) {
+          var lang = getLang(selfRef._hass);
+          var t = getTexts(lang);
+          selfRef._errorMsg = (err && err.message) ? String(err.message) : t.commandFailed;
+          if (selfRef._hass) selfRef._render(selfRef._hass);
+        },
+      });
       this._onClick = this._handleClick.bind(this);
       this._onChange = this._handleChange.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
+      this._onBarFocusOrHover = this._handleBarFocusOrHover.bind(this);
+      this._onStatsDialogClose = this._handleStatsDialogClose.bind(this);
+      this._onStatsDialogCancel = this._handleStatsDialogCancel.bind(this);
+      this._onStatsDialogPointerDown = this._handleStatsDialogPointerDown.bind(this);
+      this._onStatsDialogPointerUp = this._handleStatsDialogPointerUp.bind(this);
       var isTimeInput = function (el) {
         return Boolean(el && el.tagName === "INPUT" && (el.type === "time" || (el.getAttribute && el.getAttribute("type") === "time")));
       };
@@ -2508,10 +2483,26 @@
     connectedCallback() {
       this._ensureShellListeners();
       this._dialogCtrl.bind();
+      this._bindStatsDialog();
+      if (this._hass) this._render(this._hass);
     }
 
     disconnectedCallback() {
+      this._clearCmdTtlTimer();
       this._dialogCtrl.destroy();
+      this._pendingKeys.clear();
+      this._statsOpen = false;
+      this._statsOutsidePress = false;
+      var statsDlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null;
+      if (statsDlg) this._closeStatsDialogEl(statsDlg);
+      this._unbindStatsDialog();
+    }
+
+    _clearCmdTtlTimer() {
+      if (this._cmdTtlTimer != null) {
+        clearTimeout(this._cmdTtlTimer);
+        this._cmdTtlTimer = null;
+      }
     }
 
     _dead(s) {
@@ -2600,7 +2591,186 @@
       this.shadowRoot.addEventListener("keydown", this._onKeyDown);
       this.shadowRoot.addEventListener("beforeinput", this._onBlockTimeEdit);
       this.shadowRoot.addEventListener("paste", this._onBlockTimeEdit);
+      this.shadowRoot.addEventListener("focusin", this._onBarFocusOrHover);
+      this.shadowRoot.addEventListener("mouseover", this._onBarFocusOrHover);
       this._listenersBound = true;
+    }
+
+    _isStatsDialogOpen(dlg) {
+      var d = dlg || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null);
+      return Boolean(d && (d.open || (d.hasAttribute && d.hasAttribute("open"))));
+    }
+
+    _openStatsDialogEl(dlg) {
+      if (!dlg || this._isStatsDialogOpen(dlg)) return;
+      if (typeof dlg.showModal === "function") {
+        try { dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); }
+      } else {
+        dlg.setAttribute("open", "");
+      }
+    }
+
+    _closeStatsDialogEl(dlg) {
+      if (!dlg || !this._isStatsDialogOpen(dlg)) return;
+      if (typeof dlg.close === "function") {
+        try { dlg.close(""); } catch (e) { dlg.removeAttribute("open"); }
+      } else {
+        dlg.removeAttribute("open");
+      }
+    }
+
+    _openStatsDialog() {
+      this._statsOpen = true;
+      this._statsOutsidePress = false;
+      this._bindStatsDialog();
+      var dlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null;
+      this._openStatsDialogEl(dlg);
+    }
+
+    _closeStatsDialog() {
+      if (this._dialogCtrl.inFlight) return;
+      this._statsOpen = false;
+      this._statsOutsidePress = false;
+      var dlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null;
+      this._closeStatsDialogEl(dlg);
+    }
+
+    _bindStatsDialog() {
+      var dlg = this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null;
+      if (!dlg || dlg === this._boundStatsDialog) return;
+      this._unbindStatsDialog();
+      dlg.addEventListener("close", this._onStatsDialogClose);
+      dlg.addEventListener("cancel", this._onStatsDialogCancel);
+      dlg.addEventListener("pointerdown", this._onStatsDialogPointerDown);
+      dlg.addEventListener("pointerup", this._onStatsDialogPointerUp);
+      this._boundStatsDialog = dlg;
+    }
+
+    _unbindStatsDialog() {
+      if (!this._boundStatsDialog) return;
+      this._boundStatsDialog.removeEventListener("close", this._onStatsDialogClose);
+      this._boundStatsDialog.removeEventListener("cancel", this._onStatsDialogCancel);
+      this._boundStatsDialog.removeEventListener("pointerdown", this._onStatsDialogPointerDown);
+      this._boundStatsDialog.removeEventListener("pointerup", this._onStatsDialogPointerUp);
+      this._boundStatsDialog = null;
+    }
+
+    _handleStatsDialogClose() {
+      var dlg = this._boundStatsDialog || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null);
+      if (dlg && this._isStatsDialogOpen(dlg)) return;
+      this._statsOpen = false;
+      this._statsOutsidePress = false;
+    }
+
+    _handleStatsDialogCancel(ev) {
+      if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+      // Keep stats modal open when confirmation dialog is stacked on top.
+      if (this._dialogCtrl.isOpen() || this._dialogCtrl.inFlight) return;
+      this._closeStatsDialog();
+    }
+
+    _handleStatsDialogPointerDown(ev) {
+      if (this._dialogCtrl.isOpen() || this._dialogCtrl.inFlight) {
+        this._statsOutsidePress = false;
+        return;
+      }
+      var dlg = this._boundStatsDialog || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null);
+      this._statsOutsidePress = this._isStatsDialogOpen(dlg) ? this._dialogCtrl.isPointerOutside(ev, dlg) : false;
+    }
+
+    _handleStatsDialogPointerUp(ev) {
+      var wasOutside = this._statsOutsidePress;
+      this._statsOutsidePress = false;
+      if (!wasOutside || this._dialogCtrl.isOpen() || this._dialogCtrl.inFlight) return;
+      var dlg = this._boundStatsDialog || (this.shadowRoot ? this.shadowRoot.querySelector('[data-bind="statsDialog"]') : null);
+      if (dlg && this._dialogCtrl.isPointerOutside(ev, dlg)) {
+        this._closeStatsDialog();
+      }
+    }
+
+    _handleChartInteraction(barEl) {
+      if (!this.shadowRoot || !barEl) return;
+      var tipEl = this.shadowRoot.querySelector('[data-bind="chartTooltip"]');
+      if (!tipEl) return;
+      var detail = barEl.getAttribute("data-bar-detail");
+      if (!detail) return;
+      tipEl.textContent = detail;
+      tipEl.classList.remove("hidden");
+    }
+
+    _handleBarFocusOrHover(ev) {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      var barEl = target.closest("[data-bar-idx]");
+      if (barEl) this._handleChartInteraction(barEl);
+    }
+
+    _syncResetButtonsState() {
+      if (!this.shadowRoot) return;
+      var chgBtn = this.shadowRoot.querySelector('[data-stats-reset="charging"]');
+      if (chgBtn) {
+        var chgBusy = this._pendingKeys.has("reset_charging_from_start") || this._dialogCtrl.inFlight;
+        chgBtn.disabled = chgBusy;
+        chgBtn.classList.toggle("is-pending", chgBusy);
+      }
+      var consBtn = this.shadowRoot.querySelector('[data-stats-reset="consumption"]');
+      if (consBtn) {
+        var consBusy = this._pendingKeys.has("reset_consumption_from_start") || this._dialogCtrl.inFlight;
+        consBtn.disabled = consBusy;
+        consBtn.classList.toggle("is-pending", consBusy);
+      }
+    }
+
+    _openStatsResetDialog(kind, actionEl) {
+      var targetEnt = this._latestResetTargets ? this._latestResetTargets[kind] : null;
+      if (!targetEnt || !targetEnt.id || !this._hass) return;
+      var lang = getLang(this._hass);
+      var t = getTexts(lang);
+      var isChg = kind === "charging";
+      var pendingKey = isChg ? "reset_charging_from_start" : "reset_consumption_from_start";
+      if (this._pendingKeys.has(pendingKey) || this._dialogCtrl.inFlight) return;
+      var self = this;
+      this._dialogCtrl.open({
+        domain: "button",
+        service: "press",
+        data: { entity_id: targetEnt.id },
+        confirmKey: pendingKey,
+        confirmLabel: isChg ? t.statsResetChargingConfirm : t.statsResetConsumptionConfirm,
+        dialogTitle: t.statsResetTitle,
+        dialogHint: t.statsResetHint,
+        confirmBtnText: t.statsConfirmReset,
+        closeOnConfirmImmediate: false,
+        execute: function (pending, finalize) {
+          if (!pending || !self._hass || typeof self._hass.callService !== "function") {
+            finalize();
+            return;
+          }
+          var execLang = getLang(self._hass);
+          var execT = getTexts(execLang);
+          self._errorMsg = null;
+          self._pendingKeys.add(pending.pendingKey);
+          self._syncResetButtonsState();
+
+          var settle = function (err) {
+            self._pendingKeys.delete(pending.pendingKey);
+            if (err) {
+              self._errorMsg = (err && err.message) ? String(err.message) : execT.commandFailed;
+            }
+            finalize();
+            self._syncResetButtonsState();
+            if (self._hass) self._render(self._hass);
+          };
+
+          try {
+            return Promise.resolve(self._hass.callService(pending.domain, pending.service, pending.data)).then(
+              function () { settle(null); },
+              function (err) { settle(err || new Error(execT.commandFailed)); }
+            );
+          } catch (syncErr) {
+            settle(syncErr);
+          }
+        },
+      }, t, actionEl);
     }
 
     _handleClick(ev) {
@@ -2611,9 +2781,15 @@
       if (dialogActEl) {
         ev.stopPropagation();
         var dAction = dialogActEl.getAttribute("data-dialog-action");
-        if (dAction === "confirm") {
-          this._confirmPendingDialogAction();
-        } else {
+        if (dAction === "close-stats") {
+          if (!this._dialogCtrl.isOpen() && !this._dialogCtrl.inFlight) {
+            this._closeStatsDialog();
+          }
+        } else if (dAction === "confirm") {
+          if (!dialogActEl.disabled && !this._dialogCtrl.inFlight) {
+            this._confirmPendingDialogAction();
+          }
+        } else if (!dialogActEl.disabled && !this._dialogCtrl.inFlight) {
           this._dialogCtrl.close("cancel");
         }
         return;
@@ -2624,6 +2800,60 @@
         ev.stopPropagation();
         this._errorMsg = null;
         if (this._hass) this._render(this._hass);
+        return;
+      }
+
+      var scopeEl = target.closest("[data-stats-scope]");
+      if (scopeEl) {
+        ev.stopPropagation();
+        var nextScope = scopeEl.getAttribute("data-stats-scope");
+        if (VALID_STATS_SCOPES.indexOf(nextScope) >= 0 && nextScope !== this._statsScope) {
+          this._statsScope = nextScope;
+          this._lastStatsChartSig = "";
+          if (this._hass) this._render(this._hass);
+        }
+        return;
+      }
+
+      var chartEl = target.closest("[data-stats-chart]");
+      if (chartEl) {
+        ev.stopPropagation();
+        var nextChart = chartEl.getAttribute("data-stats-chart");
+        if (VALID_STATS_CHARTS.indexOf(nextChart) >= 0 && nextChart !== this._statsChartRange) {
+          this._statsChartRange = nextChart;
+          this._lastStatsChartSig = "";
+          if (this._hass) this._render(this._hass);
+        }
+        return;
+      }
+
+      var resetEl = target.closest("[data-stats-reset]");
+      if (resetEl) {
+        ev.stopPropagation();
+        if (resetEl.disabled || this._dialogCtrl.inFlight) return;
+        var kind = resetEl.getAttribute("data-stats-reset");
+        this._openStatsResetDialog(kind, resetEl);
+        return;
+      }
+
+      var consUnitEl = target.closest("[data-cons-unit]");
+      if (consUnitEl) {
+        ev.stopPropagation();
+        var consKind = consUnitEl.getAttribute("data-cons-kind") === "hybrid" ? "hybrid" : "ev";
+        var nextConsMode = consUnitEl.getAttribute("data-cons-unit") === "per_km" ? "per_km" : "per_100";
+        if (!this._consUnitModes) this._consUnitModes = { ev: "per_100", hybrid: "per_100" };
+        if (nextConsMode !== this._consUnitModes[consKind]) {
+          this._consUnitModes[consKind] = nextConsMode;
+          saveConsUnitMode(consKind, nextConsMode);
+          if (this._hass) this._render(this._hass);
+        }
+        return;
+      }
+
+      var barEl = target.closest("[data-bar-idx]");
+      if (barEl) {
+        ev.stopPropagation();
+        this._handleChartInteraction(barEl);
         return;
       }
 
@@ -2727,6 +2957,12 @@
       }
       if (ev.key !== "Enter" && ev.key !== " ") return;
       if (target.tagName === "BUTTON" || target.tagName === "INPUT" || target.tagName === "SELECT") return;
+      var barEl = target.closest("[data-bar-idx]");
+      if (barEl) {
+        ev.preventDefault();
+        this._handleChartInteraction(barEl);
+        return;
+      }
       var actionable = target.closest("[data-e], [data-device]");
       if (!actionable) return;
       ev.preventDefault();
@@ -2771,6 +3007,10 @@
 
     _triggerAction(actionId, actionEl) {
       if (actionEl && (actionEl.disabled || (actionEl.hasAttribute && actionEl.hasAttribute("disabled")))) return;
+      if (actionId === "open_stats") {
+        this._openStatsDialog();
+        return;
+      }
       var lookupKey = actionId;
       if (actionEl && actionEl.hasAttribute && actionEl.hasAttribute("data-value")) {
         lookupKey = actionId + "_" + actionEl.getAttribute("data-value");
@@ -3110,6 +3350,32 @@
         { pos: "rear_right", label: "RR", p: this._findDomain(items, "sensor", "tire_pressure_rear_right"), temp: this._findDomain(items, "sensor", "tire_temperature_rear_right"), w: this._findDomain(items, "binary_sensor", "tire_warning_rear_right") },
       ];
 
+      // Statistics entities (charging history + EV/hybrid averages)
+      var chgToday = this._findDomain(items, "sensor", "charging_energy_today");
+      var chgMonth = this._findDomain(items, "sensor", "charging_energy_month");
+      var chgYear = this._findDomain(items, "sensor", "charging_energy_year");
+      var chgFromStart = this._findDomain(items, "sensor", "charging_energy_from_start");
+      var resetChargingBtn = this._findDomain(items, "button", "reset_charging_from_start");
+
+      var avgEnergy50 = this._findDomain(items, "sensor", "average_energy_consumption");
+      var evCons100 = this._findDomain(items, "sensor", "ev_consumption_100km");
+      var evCons1000 = this._findDomain(items, "sensor", "ev_consumption_1000km");
+      var evConsStart = this._findDomain(items, "sensor", "ev_consumption_from_start");
+      var avgFuel50 = this._findDomain(items, "sensor", "average_fuel_consumption");
+      var hybCons100 = this._findDomain(items, "sensor", "hybrid_consumption_100km");
+      var hybCons1000 = this._findDomain(items, "sensor", "hybrid_consumption_1000km");
+      var hybConsStart = this._findDomain(items, "sensor", "hybrid_consumption_from_start");
+      var resetConsBtn = this._findDomain(items, "button", "reset_consumption_from_start");
+
+      var hasChargingStats = Boolean(chgToday || chgMonth || chgYear || chgFromStart);
+      var hasEvCons = Boolean(avgEnergy50 || evCons100 || evCons1000 || evConsStart);
+      var hasHybridCons = Boolean(avgFuel50 || hybCons100 || hybCons1000 || hybConsStart);
+      var hasAnyCons = hasEvCons || hasHybridCons;
+      this._latestResetTargets = {
+        charging: resetChargingBtn,
+        consumption: resetConsBtn,
+      };
+
       // Warnings
       var warns = [];
       items.filter(function (r) {
@@ -3187,11 +3453,7 @@
         regAction("temp_up", "climate", "set_temperature", { entity_id: climate.id, temperature: upT }, false, "temp_step");
       }
       if (cliDur) {
-        var cdAttrs = cliDur.s.attributes || {};
-        var cdMin = typeof cdAttrs.min === "number" ? cdAttrs.min : 5;
-        var cdMax = typeof cdAttrs.max === "number" ? cdAttrs.max : 30;
-        var cdVals = [5, 10, 15, 20, 30].filter(function (v) { return v >= cdMin && v <= cdMax; });
-        if (!cdVals.length) cdVals = [cdMin, cdMax];
+        var cdVals = resolveClimateDurationOptions(cliDur.s);
         cdVals.forEach(function (v) {
           regAction("climate_duration_" + v, "number", "set_value", { entity_id: cliDur.id, value: v }, false, "climate_duration");
         });
@@ -3304,6 +3566,8 @@
         : "";
       var warnSig = warns.map(function (w) { return w.id + ":" + w.text; }).join("|");
       var allowedExtrasSig = allowedClimateExtras.join(",");
+      var cliDurOptsSig = cliDur ? resolveClimateDurationOptions(cliDur.s).join(",") : "";
+      this._renderedCliDurKey = cliDurOptsSig;
       var structKey = [
         lang,
         cfg.layout,
@@ -3311,16 +3575,19 @@
         extraSig,
         warnSig,
         allowedExtrasSig,
+        cliDurOptsSig,
         entityIdsSig,
       ].join("#");
 
-      if (structKey !== this._lastStructKey) {
+      if (structKey !== this._lastStructKey && !this._dialogCtrl.inFlight) {
         var activeEl = this.shadowRoot.activeElement;
         var activeUid = activeEl && activeEl.getAttribute ? activeEl.getAttribute("data-uid") : null;
         var activeVal = (activeEl && activeEl.tagName === "INPUT") ? activeEl.value : null;
 
         this._dialogCtrl.close();
         this._dialogCtrl.unbind();
+        this._unbindStatsDialog();
+        this._lastStatsChartSig = "";
 
         this.shadowRoot.innerHTML = this._buildSkeletonHtml({
           lang: lang,
@@ -3390,6 +3657,24 @@
           remoteStartBtn: remoteStartBtn,
           locateBtn: locateBtn,
           tracker: tracker,
+          hasChargingStats: hasChargingStats,
+          hasEvCons: hasEvCons,
+          hasHybridCons: hasHybridCons,
+          hasAnyCons: hasAnyCons,
+          chgToday: chgToday,
+          chgMonth: chgMonth,
+          chgYear: chgYear,
+          chgFromStart: chgFromStart,
+          resetChargingBtn: resetChargingBtn,
+          avgEnergy50: avgEnergy50,
+          evCons100: evCons100,
+          evCons1000: evCons1000,
+          evConsStart: evConsStart,
+          avgFuel50: avgFuel50,
+          hybCons100: hybCons100,
+          hybCons1000: hybCons1000,
+          hybConsStart: hybConsStart,
+          resetConsBtn: resetConsBtn,
         });
         this._lastStructKey = structKey;
 
@@ -3404,6 +3689,10 @@
         }
       }
       this._dialogCtrl.bind();
+      this._bindStatsDialog();
+      if (this._statsOpen) {
+        this._openStatsDialogEl(this.shadowRoot.querySelector('[data-bind="statsDialog"]'));
+      }
 
       // Always patch live values, classes, SVG offsets, pending states, and non-focused inputs
       this._applyBindings(hass, {
@@ -3483,6 +3772,22 @@
         alarmSw: alarmSw,
         tpmsCorners: tpmsCorners,
         tracker: tracker,
+        hasChargingStats: hasChargingStats,
+        hasEvCons: hasEvCons,
+        hasHybridCons: hasHybridCons,
+        hasAnyCons: hasAnyCons,
+        chgToday: chgToday,
+        chgMonth: chgMonth,
+        chgYear: chgYear,
+        chgFromStart: chgFromStart,
+        avgEnergy50: avgEnergy50,
+        evCons100: evCons100,
+        evCons1000: evCons1000,
+        evConsStart: evConsStart,
+        avgFuel50: avgFuel50,
+        hybCons100: hybCons100,
+        hybCons1000: hybCons1000,
+        hybConsStart: hybConsStart,
       });
     }
 
@@ -3536,7 +3841,12 @@
                   '<span class="status-dot" data-bind="connDot"></span>' +
                   '<span data-bind="statusText"></span>' +
                 "</div>" +
-                socRingHtml +
+                '<div class="hero-overlay-actions">' +
+                  '<button type="button" class="stats-btn" data-action-id="open_stats" data-bind="statsBtn" aria-label="' + self._h(t.statsBtnLabel) + '" title="' + self._h(t.statsCardDefaultTitle) + '">' +
+                    svgIcon("chart", "btn-ico") +
+                  "</button>" +
+                  socRingHtml +
+                "</div>" +
               "</div>" +
             "</div>" +
             '<div class="hero-meta" ' + (ctx.deviceId ? 'role="button" tabindex="0" data-device="' + self._h(ctx.deviceId) + '"' : "") + ">" +
@@ -3640,11 +3950,7 @@
       // Panel 2: Climate
       var durHtml = "";
       if (ctx.cliDur) {
-        var cdAttrs = ctx.cliDur.s.attributes || {};
-        var cdMin = typeof cdAttrs.min === "number" ? cdAttrs.min : 5;
-        var cdMax = typeof cdAttrs.max === "number" ? cdAttrs.max : 30;
-        var cdVals = [5, 10, 15, 20, 30].filter(function (v) { return v >= cdMin && v <= cdMax; });
-        if (!cdVals.length) cdVals = [cdMin, cdMax];
+        var cdVals = resolveClimateDurationOptions(ctx.cliDur.s);
         durHtml = '<div class="sec-hdr"><span>' + self._h(t.duration) + '</span><span class="num" data-bind="cliDurText"></span></div>' +
           '<div class="chip-row">' + cdVals.map(function (v) {
             return '<button type="button" class="chip-btn num" data-action-id="climate_duration" data-value="' + v + '">' + v + "m</button>";
@@ -3721,7 +4027,6 @@
 
       var climateHtml = '<section class="panel" data-panel="climate">' +
         '<div class="info-banner is-amber hidden" role="status" data-bind="carInUseBanner" hidden></div>' +
-        '<div class="climate-meta-bar hidden" data-bind="climateCmdBar"><span class="badge hidden" data-bind="cmdResultBadge"></span></div>' +
         climateHubHtml + macrosHtml + defrostHtml + seatsHtml + "</section>";
 
       // Panel 3: Charging & Departures
@@ -3954,6 +4259,137 @@
 
       var securityHtml = '<section class="panel" data-panel="security">' + blueprintHtml + secCtrlHtml + "</section>";
 
+      // Dedicated Statistics Modal (rendered before confirmDialog for top-layer stacking)
+      var kpiCellsHtml = [
+        { cellBind: "chgTodayCell", valBind: "chgTodayVal", subBind: "chgTodaySub", period: "today", label: t.statsPeriodToday, ent: ctx.chgToday },
+        { cellBind: "chgMonthCell", valBind: "chgMonthVal", subBind: "chgMonthSub", period: "month", label: t.statsPeriodMonth, ent: ctx.chgMonth },
+        { cellBind: "chgYearCell", valBind: "chgYearVal", subBind: "chgYearSub", period: "year", label: t.statsPeriodYear, ent: ctx.chgYear },
+        { cellBind: "chgStartCell", valBind: "chgStartVal", subBind: "chgStartSub", period: "from_start", label: t.statsPeriodFromStart, ent: ctx.chgFromStart },
+      ].map(function (k) {
+        var entAttr = k.ent ? (' role="button" tabindex="0" data-e="' + self._h(k.ent.id) + '"') : "";
+        return '<div class="cons-cell" data-bind="' + k.cellBind + '" data-stats-period="' + k.period + '"' + entAttr + ">" +
+          '<span class="cons-cell-lbl">' + self._h(k.label) + "</span>" +
+          '<span class="cons-cell-val num" data-bind="' + k.valBind + '">—</span>' +
+          '<span class="stats-cell-sub num hidden" data-bind="' + k.subBind + '"></span>' +
+        "</div>";
+      }).join("");
+
+      var chgResetHtml = ctx.resetChargingBtn
+        ? '<button type="button" class="stats-reset-btn" data-stats-reset="charging" data-bind="resetChargingBtn" title="' +
+            self._h(t.statsResetTitle) + '" aria-label="' + self._h(t.statsResetTitle) + '">' +
+            svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.statsResetBtn) + "</span></button>"
+        : "";
+
+      var statsChartHtml =
+        '<div class="stats-chart-box" data-bind="chartBox">' +
+          '<div class="stats-chart-hdr">' +
+            '<span class="stats-chart-title">' + self._h(t.statsChartAriaLabel) + "</span>" +
+            '<div class="stats-chart-legend" data-bind="chartLegend"></div>' +
+            '<div class="seg-switch stats-chart-seg" role="group">' +
+              '<button type="button" class="seg-btn" data-stats-chart="7d" aria-pressed="false">' + self._h(t.statsChart7d) + "</button>" +
+              '<button type="button" class="seg-btn" data-stats-chart="30d" aria-pressed="false">' + self._h(t.statsChart30d) + "</button>" +
+              '<button type="button" class="seg-btn" data-stats-chart="12m" aria-pressed="false">' + self._h(t.statsChart12m) + "</button>" +
+            "</div>" +
+          "</div>" +
+          '<div class="stats-chart-stage" data-bind="chartStage"></div>' +
+          '<div class="stats-chart-tooltip num hidden" data-bind="chartTooltip" aria-live="polite"></div>' +
+        "</div>";
+
+      var statsChargingHtml = ctx.hasChargingStats ? (
+        '<div class="surface stats-charging-section" data-bind="chargingSection">' +
+          '<div class="stats-sec-hdr">' +
+            '<span class="sec-hdr-title">' + svgIcon("bolt", "sec-ico") + "<span>" + self._h(t.statsChargingTitle) + "</span></span>" +
+            '<div class="stats-sec-actions">' +
+              '<div class="seg-switch stats-scope-seg" role="group">' +
+                '<button type="button" class="seg-btn" data-stats-scope="all" aria-pressed="false">' + self._h(t.statsScopeAll) + "</button>" +
+                '<button type="button" class="seg-btn" data-stats-scope="home" aria-pressed="false">' + self._h(t.homeEnergy) + "</button>" +
+                '<button type="button" class="seg-btn" data-stats-scope="away" aria-pressed="false">' + self._h(t.awayEnergy) + "</button>" +
+              "</div>" +
+              chgResetHtml +
+            "</div>" +
+          "</div>" +
+          '<div class="cons-grid stats-chg-grid">' + kpiCellsHtml + "</div>" +
+          statsChartHtml +
+        "</div>"
+      ) : "";
+
+      var consResetHtml = ctx.resetConsBtn
+        ? '<button type="button" class="stats-reset-btn" data-stats-reset="consumption" data-bind="resetConsBtn" title="' +
+            self._h(t.statsResetTitle) + '" aria-label="' + self._h(t.statsResetTitle) + '">' +
+            svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.statsResetBtn) + "</span></button>"
+        : "";
+
+      var statsConsHtml = ctx.hasAnyCons ? (
+        '<div class="surface cons-section" data-bind="consSection">' +
+          '<div class="stats-sec-hdr">' +
+            '<span class="sec-hdr-title">' + svgIcon("gauge", "sec-ico") + "<span>" + self._h(t.avgConsumption) + "</span></span>" +
+            consResetHtml +
+          "</div>" +
+          '<div class="cons-rows">' +
+            buildConsRowHtml({
+              rowBind: "consEvRow",
+              hidden: !ctx.hasEvCons,
+              iconName: "bolt",
+              rowLabel: t.consEv,
+              kind: "ev",
+              u100Lbl: "kWh/100",
+              uKmLbl: "kWh/km",
+              b100: "consEvPer100Btn",
+              bKm: "consEvPerKmBtn",
+              toggleTitle: t.consUnitToggleTitle,
+              cells: [
+                { cellBind: "consEv50Cell", valBind: "consEv50Val", label: t.cons50, ent: ctx.avgEnergy50 },
+                { cellBind: "consEv100Cell", valBind: "consEv100Val", label: t.cons100, ent: ctx.evCons100 },
+                { cellBind: "consEv1000Cell", valBind: "consEv1000Val", label: t.cons1000, ent: ctx.evCons1000 },
+                { cellBind: "consEvStartCell", valBind: "consEvStartVal", label: t.consFromStart, ent: ctx.evConsStart },
+              ],
+            }) +
+            buildConsRowHtml({
+              rowBind: "consHybridRow",
+              hidden: !ctx.hasHybridCons,
+              iconName: "flame",
+              rowLabel: t.consHybrid,
+              kind: "hybrid",
+              u100Lbl: "L/100",
+              uKmLbl: "km/L",
+              b100: "consHybPer100Btn",
+              bKm: "consHybPerKmBtn",
+              toggleTitle: t.consUnitToggleTitle,
+              cells: [
+                { cellBind: "consHyb50Cell", valBind: "consHyb50Val", label: t.cons50, ent: ctx.avgFuel50 },
+                { cellBind: "consHyb100Cell", valBind: "consHyb100Val", label: t.cons100, ent: ctx.hybCons100 },
+                { cellBind: "consHyb1000Cell", valBind: "consHyb1000Val", label: t.cons1000, ent: ctx.hybCons1000 },
+                { cellBind: "consHybStartCell", valBind: "consHybStartVal", label: t.consFromStart, ent: ctx.hybConsStart },
+              ],
+            }) +
+          "</div>" +
+        "</div>"
+      ) : "";
+
+      var statsEmptyHtml = (!ctx.hasChargingStats && !ctx.hasAnyCons)
+        ? '<div class="surface stats-empty-card" data-bind="statsEmptyCard">' + self._h(t.statsNoData) + "</div>"
+        : "";
+
+      var statsDialogHtml =
+        '<dialog class="stats-dialog" data-bind="statsDialog" aria-labelledby="lp-stats-title">' +
+          '<div class="stats-dialog-header">' +
+            '<h2 id="lp-stats-title" class="stats-dialog-title">' +
+              svgIcon("chart", "sec-ico") +
+              '<span data-bind="statsTitle">' + self._h(t.statsCardDefaultTitle) + "</span>" +
+            "</h2>" +
+            '<button type="button" class="stats-dialog-close" data-dialog-action="close-stats" aria-label="' + self._h(t.closeDialog) + '" title="' + self._h(t.closeDialog) + '">×</button>' +
+          "</div>" +
+          '<div class="stats-dialog-body">' +
+            '<div class="error-banner hidden" role="alert" data-bind="statsErrorBanner">' +
+              '<span data-bind="statsErrorText"></span>' +
+              '<button type="button" class="error-dismiss" data-dismiss-error aria-label="Dismiss">×</button>' +
+            "</div>" +
+            statsChargingHtml +
+            statsConsHtml +
+            statsEmptyHtml +
+          "</div>" +
+        "</dialog>";
+
       return "<style>" + buildStyles() + "</style>" +
         '<ha-card data-layout="' + self._h(cfg.layout) + '">' +
           '<div class="cockpit-grid">' +
@@ -3964,6 +4400,7 @@
             chargingHtml +
             securityHtml +
           "</div>" +
+          statsDialogHtml +
           buildConfirmDialogHtml(t, "lp-confirm-title") +
         "</ha-card>";
     }
@@ -4137,12 +4574,18 @@
       var heroSub = root.querySelector('[data-bind="heroSub"]');
       if (heroSub) heroSub.textContent = subParts.join(" · ");
 
-      // Error banner
+      // Error banners (main card + stats modal top-layer)
       var errBanner = root.querySelector('[data-bind="errorBanner"]');
       var errText = root.querySelector('[data-bind="errorText"]');
       if (errBanner && errText) {
         errBanner.classList.toggle("hidden", !this._errorMsg);
         errText.textContent = this._errorMsg || "";
+      }
+      var statsErrBanner = root.querySelector('[data-bind="statsErrorBanner"]');
+      var statsErrText = root.querySelector('[data-bind="statsErrorText"]');
+      if (statsErrBanner && statsErrText) {
+        statsErrBanner.classList.toggle("hidden", !this._errorMsg);
+        statsErrText.textContent = this._errorMsg || "";
       }
 
       // Overview 2x2 Metrics
@@ -4324,11 +4767,11 @@
           ? t.updated + ": " + formatTimestamp(vm.carUpdated.s.state, vm.lang)
           : t.updated + ": —";
       }
+      var nowMs = Date.now();
       var cmdStateAlive = (vm.cmdResult && !this._dead(vm.cmdResult.s)) ? vm.cmdResult.s : null;
-      var outcome = formatCommandOutcome(cmdStateAlive, this._lastCmdFeedback, vm.lang);
-      var cmdBadges = root.querySelectorAll('[data-bind="cmdResultBadge"]');
-      for (var cbi = 0; cbi < cmdBadges.length; cbi += 1) {
-        var cmdBadge = cmdBadges[cbi];
+      var outcome = formatCommandOutcome(cmdStateAlive, this._lastCmdFeedback, vm.lang, nowMs);
+      var cmdBadge = root.querySelector('[data-bind="cmdResultBadge"]');
+      if (cmdBadge) {
         if (outcome) {
           cmdBadge.classList.remove("hidden");
           cmdBadge.hidden = false;
@@ -4342,10 +4785,18 @@
           cmdBadge.textContent = "";
         }
       }
-      var cliCmdBar = root.querySelector('[data-bind="climateCmdBar"]');
-      if (cliCmdBar) {
-        cliCmdBar.classList.toggle("hidden", !outcome);
-        cliCmdBar.hidden = !outcome;
+      this._clearCmdTtlTimer();
+      if (this.isConnected !== false && outcome && outcome.ok && Number.isFinite(outcome.tsMs)) {
+        var ttlDelay = Math.max(50, CMD_SUCCESS_TTL_MS - (nowMs - outcome.tsMs) + 50);
+        this._cmdTtlTimer = setTimeout(function () {
+          self._cmdTtlTimer = null;
+          if (self._hass && self.isConnected !== false) {
+            self._render(self._hass);
+          }
+        }, ttlDelay);
+        if (this._cmdTtlTimer && typeof this._cmdTtlTimer.unref === "function") {
+          this._cmdTtlTimer.unref();
+        }
       }
       var autoUpdatesBtn = root.querySelector('[data-bind="autoUpdatesBtn"]');
       if (autoUpdatesBtn && vm.autoUpdatesSw) {
@@ -4877,594 +5328,23 @@
         else if (st === "not_home") trkEl.textContent = t.away;
         else trkEl.textContent = this._dead(vm.tracker.s) ? "—" : st;
       }
-      if (this._dialogCtrl.pendingAction) {
-        this._dialogCtrl.syncTexts(t, this._dialogCtrl.pendingAction.confirmLabel);
+      // Integrated statistics modal bindings
+      var statsBtnEl = root.querySelector('[data-bind="statsBtn"]');
+      if (statsBtnEl) {
+        statsBtnEl.setAttribute("aria-label", t.statsBtnLabel);
+        statsBtnEl.setAttribute("title", t.statsCardDefaultTitle);
       }
-    }
-  }
-
-  class LepasStatsCard extends HTMLElement {
-    constructor() {
-      super();
-      this.attachShadow({ mode: "open" });
-      this.config = {
-        integration: "lepas",
-        prefix: "lepas_",
-        title: "",
-        default_scope: "all",
-        default_chart: "7d",
-        show_charging: true,
-        show_consumption: true,
-        show_chart: true,
-        show_reset_buttons: true,
-      };
-      this._hass = null;
-      this._scope = "all";
-      this._chartRange = "7d";
-      this._lastDefaultScope = "all";
-      this._lastDefaultChart = "7d";
-      this._consUnitModes = loadConsUnitModes();
-      this._pendingKeys = new Set();
-      this._errorMsg = null;
-      this._lastStructKey = "";
-      this._lastChartSig = "";
-      this._listenersBound = false;
-      this._latestResetTargets = Object.create(null);
-      this._dialogCtrl = createConfirmDialogController(this, { closeOnConfirmImmediate: false });
-      this._onClick = this._handleClick.bind(this);
-      this._onKeyDown = this._handleKeyDown.bind(this);
-      this._onBarFocusOrHover = this._handleBarFocusOrHover.bind(this);
-    }
-
-    static getStubConfig() {
-      return { type: "custom:lepas-stats-card" };
-    }
-
-    static getGridOptions() {
-      return { columns: 12, min_columns: 4, rows: "auto" };
-    }
-
-    static getConfigElement() {
-      return document.createElement("lepas-stats-card-editor");
-    }
-
-    getCardSize() {
-      return 4;
-    }
-
-    setConfig(config) {
-      var raw = config || {};
-      var merged = Object.assign(
-        {
-          integration: "lepas",
-          prefix: "lepas_",
-          title: "",
-          default_scope: "all",
-          default_chart: "7d",
-        },
-        raw
-      );
-      merged.show_charging = raw.show_charging !== false;
-      merged.show_consumption = raw.show_consumption !== false;
-      merged.show_chart = raw.show_chart !== false;
-      merged.show_reset_buttons = raw.show_reset_buttons !== false;
-      if (VALID_STATS_SCOPES.indexOf(merged.default_scope) < 0) merged.default_scope = "all";
-      if (VALID_STATS_CHARTS.indexOf(merged.default_chart) < 0) merged.default_chart = "7d";
-
-      var prevScope = this._lastDefaultScope;
-      var prevChart = this._lastDefaultChart;
-      this.config = merged;
-      if (!this._lastStructKey || merged.default_scope !== prevScope) {
-        this._scope = merged.default_scope;
-      }
-      if (!this._lastStructKey || merged.default_chart !== prevChart) {
-        this._chartRange = merged.default_chart;
-      }
-      this._lastDefaultScope = merged.default_scope;
-      this._lastDefaultChart = merged.default_chart;
-      this._lastChartSig = "";
-      if (this._hass) this._render(this._hass);
-    }
-
-    connectedCallback() {
-      this._ensureShellListeners();
-      this._dialogCtrl.bind();
-    }
-
-    disconnectedCallback() {
-      this._dialogCtrl.destroy();
-      this._pendingKeys.clear();
-    }
-
-    set hass(hass) {
-      this._hass = hass;
-      this._ensureShellListeners();
-      try {
-        this._render(hass);
-      } catch (e) {
-        if (this.shadowRoot) {
-          this.shadowRoot.innerHTML =
-            "<style>" + buildStatsStyles() + "</style>" +
-            '<ha-card><div class="error-banner" role="alert">Lepas stats card error: ' +
-              escapeHtml(e && e.message ? e.message : e) +
-            "</div></ha-card>";
-          this._lastStructKey = "";
-        }
-      }
-    }
-
-    _ensureShellListeners() {
-      if (this._listenersBound || !this.shadowRoot) return;
-      this.shadowRoot.addEventListener("click", this._onClick);
-      this.shadowRoot.addEventListener("keydown", this._onKeyDown);
-      this.shadowRoot.addEventListener("focusin", this._onBarFocusOrHover);
-      this.shadowRoot.addEventListener("mouseover", this._onBarFocusOrHover);
-      this._listenersBound = true;
-    }
-
-    _showBarTooltip(barEl) {
-      if (!this.shadowRoot || !barEl) return;
-      var tipEl = this.shadowRoot.querySelector('[data-bind="chartTooltip"]');
-      if (!tipEl) return;
-      var detail = barEl.getAttribute("data-bar-detail");
-      if (!detail) return;
-      tipEl.textContent = detail;
-      tipEl.classList.remove("hidden");
-    }
-
-    _handleBarFocusOrHover(ev) {
-      var target = ev.target;
-      if (!target || !target.closest) return;
-      var barEl = target.closest("[data-bar-idx]");
-      if (barEl) this._showBarTooltip(barEl);
-    }
-
-    _handleClick(ev) {
-      var target = ev.target;
-      if (!target || !target.closest) return;
-
-      var dialogActEl = target.closest("[data-dialog-action]");
-      if (dialogActEl) {
-        ev.stopPropagation();
-        var dAction = dialogActEl.getAttribute("data-dialog-action");
-        if (dAction === "confirm") {
-          this._confirmPendingDialogAction();
-        } else if (!this._dialogCtrl.inFlight) {
-          this._dialogCtrl.close("cancel");
-        }
-        return;
-      }
-
-      var dismiss = target.closest("[data-dismiss-error]");
-      if (dismiss) {
-        ev.stopPropagation();
-        this._errorMsg = null;
-        if (this._hass) this._render(this._hass);
-        return;
-      }
-
-      var scopeEl = target.closest("[data-stats-scope]");
-      if (scopeEl) {
-        ev.stopPropagation();
-        var nextScope = scopeEl.getAttribute("data-stats-scope");
-        if (VALID_STATS_SCOPES.indexOf(nextScope) >= 0 && nextScope !== this._scope) {
-          this._scope = nextScope;
-          this._lastChartSig = "";
-          if (this._hass) this._render(this._hass);
-        }
-        return;
-      }
-
-      var chartEl = target.closest("[data-stats-chart]");
-      if (chartEl) {
-        ev.stopPropagation();
-        var nextChart = chartEl.getAttribute("data-stats-chart");
-        if (VALID_STATS_CHARTS.indexOf(nextChart) >= 0 && nextChart !== this._chartRange) {
-          this._chartRange = nextChart;
-          this._lastChartSig = "";
-          if (this._hass) this._render(this._hass);
-        }
-        return;
-      }
-
-      var resetEl = target.closest("[data-stats-reset]");
-      if (resetEl) {
-        ev.stopPropagation();
-        if (resetEl.disabled || this._dialogCtrl.inFlight) return;
-        var kind = resetEl.getAttribute("data-stats-reset");
-        this._openResetDialog(kind, resetEl);
-        return;
-      }
-
-      var consUnitEl = target.closest("[data-cons-unit]");
-      if (consUnitEl) {
-        ev.stopPropagation();
-        var consKind = consUnitEl.getAttribute("data-cons-kind") === "hybrid" ? "hybrid" : "ev";
-        var nextConsMode = consUnitEl.getAttribute("data-cons-unit") === "per_km" ? "per_km" : "per_100";
-        if (!this._consUnitModes) this._consUnitModes = { ev: "per_100", hybrid: "per_100" };
-        if (nextConsMode !== this._consUnitModes[consKind]) {
-          this._consUnitModes[consKind] = nextConsMode;
-          saveConsUnitMode(consKind, nextConsMode);
-          if (this._hass) this._render(this._hass);
-        }
-        return;
-      }
-
-      var barEl = target.closest("[data-bar-idx]");
-      if (barEl) {
-        ev.stopPropagation();
-        this._showBarTooltip(barEl);
-        return;
-      }
-
-      if (target.closest("input, select, button")) return;
-
-      var entEl = target.closest("[data-e]");
-      if (entEl) {
-        dispatchMoreInfo(this, entEl.getAttribute("data-e"));
-      }
-    }
-
-    _handleKeyDown(ev) {
-      var target = ev.target;
-      if (!target || !target.closest) return;
-      if (ev.key !== "Enter" && ev.key !== " ") return;
-      if (target.tagName === "BUTTON" || target.tagName === "INPUT" || target.tagName === "SELECT") return;
-      var barEl = target.closest("[data-bar-idx]");
-      if (barEl) {
-        ev.preventDefault();
-        this._showBarTooltip(barEl);
-        return;
-      }
-      var actionable = target.closest("[data-e]");
-      if (!actionable) return;
-      ev.preventDefault();
-      dispatchMoreInfo(this, actionable.getAttribute("data-e"));
-    }
-
-    _openResetDialog(kind, actionEl) {
-      var targetEnt = this._latestResetTargets ? this._latestResetTargets[kind] : null;
-      if (!targetEnt || !targetEnt.id || !this._hass) return;
-      var lang = getLang(this._hass);
-      var t = getTexts(lang);
-      var isChg = kind === "charging";
-      var pendingKey = isChg ? "reset_charging_from_start" : "reset_consumption_from_start";
-      if (this._pendingKeys.has(pendingKey) || this._dialogCtrl.inFlight) return;
-      this._dialogCtrl.open({
-        domain: "button",
-        service: "press",
-        data: { entity_id: targetEnt.id },
-        confirmKey: pendingKey,
-        confirmLabel: isChg ? t.statsResetChargingConfirm : t.statsResetConsumptionConfirm,
-        dialogTitle: t.statsResetTitle,
-        dialogHint: t.statsResetHint,
-        confirmBtnText: t.statsConfirmReset,
-      }, t, actionEl);
-    }
-
-    _confirmPendingDialogAction() {
-      var self = this;
-      this._dialogCtrl.confirm(function (pending, finalize) {
-        if (!pending || !self._hass || typeof self._hass.callService !== "function") {
-          finalize();
-          return;
-        }
-        var lang = getLang(self._hass);
-        var t = getTexts(lang);
-        self._errorMsg = null;
-        self._pendingKeys.add(pending.pendingKey);
-        self._syncResetButtonsState();
-
-        var settle = function (err) {
-          self._pendingKeys.delete(pending.pendingKey);
-          if (err) {
-            self._errorMsg = (err && err.message) ? String(err.message) : t.commandFailed;
-          }
-          finalize();
-          self._syncResetButtonsState();
-          if (self._hass) self._render(self._hass);
-        };
-
-        try {
-          Promise.resolve(self._hass.callService(pending.domain, pending.service, pending.data)).then(
-            function () { settle(null); },
-            function (err) { settle(err || new Error(t.commandFailed)); }
-          );
-        } catch (syncErr) {
-          settle(syncErr);
-        }
-      });
-    }
-
-    _syncResetButtonsState() {
-      if (!this.shadowRoot) return;
-      var chgBtn = this.shadowRoot.querySelector('[data-stats-reset="charging"]');
-      if (chgBtn) {
-        var chgBusy = this._pendingKeys.has("reset_charging_from_start") || this._dialogCtrl.inFlight;
-        chgBtn.disabled = chgBusy;
-        chgBtn.classList.toggle("is-pending", chgBusy);
-      }
-      var consBtn = this.shadowRoot.querySelector('[data-stats-reset="consumption"]');
-      if (consBtn) {
-        var consBusy = this._pendingKeys.has("reset_consumption_from_start") || this._dialogCtrl.inFlight;
-        consBtn.disabled = consBusy;
-        consBtn.classList.toggle("is-pending", consBusy);
-      }
-    }
-
-    _render(hass) {
-      if (!this.shadowRoot) return;
-      var cfg = this.config;
-      var lang = getLang(hass);
-      var t = getTexts(lang);
-      var items = collectIntegrationItems(hass, cfg);
-
-      var chgToday = findDomainEntity(items, "sensor", "charging_energy_today");
-      var chgMonth = findDomainEntity(items, "sensor", "charging_energy_month");
-      var chgYear = findDomainEntity(items, "sensor", "charging_energy_year");
-      var chgFromStart = findDomainEntity(items, "sensor", "charging_energy_from_start");
-      var resetChargingBtn = findDomainEntity(items, "button", "reset_charging_from_start");
-
-      var avgEnergy50 = findDomainEntity(items, "sensor", "average_energy_consumption");
-      var evCons100 = findDomainEntity(items, "sensor", "ev_consumption_100km");
-      var evCons1000 = findDomainEntity(items, "sensor", "ev_consumption_1000km");
-      var evConsStart = findDomainEntity(items, "sensor", "ev_consumption_from_start");
-      var avgFuel50 = findDomainEntity(items, "sensor", "average_fuel_consumption");
-      var hybCons100 = findDomainEntity(items, "sensor", "hybrid_consumption_100km");
-      var hybCons1000 = findDomainEntity(items, "sensor", "hybrid_consumption_1000km");
-      var hybConsStart = findDomainEntity(items, "sensor", "hybrid_consumption_from_start");
-      var resetConsBtn = findDomainEntity(items, "button", "reset_consumption_from_start");
-
-      var hasEvCons = Boolean(avgEnergy50 || evCons100 || evCons1000 || evConsStart);
-      var hasHybridCons = Boolean(avgFuel50 || hybCons100 || hybCons1000 || hybConsStart);
-      var hasAnyCons = hasEvCons || hasHybridCons;
-      var showCharging = cfg.show_charging !== false;
-      var showConsumption = cfg.show_consumption !== false && hasAnyCons;
-      var showChart = cfg.show_chart !== false;
-      var showReset = cfg.show_reset_buttons !== false;
-
-      this._latestResetTargets = {
-        charging: resetChargingBtn,
-        consumption: resetConsBtn,
-      };
-
-      var structKey = [
-        lang,
-        showCharging ? "1" : "0",
-        showConsumption ? "1" : "0",
-        showChart ? "1" : "0",
-        showReset ? "1" : "0",
-        resetChargingBtn ? resetChargingBtn.id : "",
-        resetConsBtn ? resetConsBtn.id : "",
-        hasEvCons ? "1" : "0",
-        hasHybridCons ? "1" : "0",
-        chgToday ? chgToday.id : "",
-        chgMonth ? chgMonth.id : "",
-        chgYear ? chgYear.id : "",
-        chgFromStart ? chgFromStart.id : "",
-        avgEnergy50 ? avgEnergy50.id : "",
-        evCons100 ? evCons100.id : "",
-        evCons1000 ? evCons1000.id : "",
-        evConsStart ? evConsStart.id : "",
-        avgFuel50 ? avgFuel50.id : "",
-        hybCons100 ? hybCons100.id : "",
-        hybCons1000 ? hybCons1000.id : "",
-        hybConsStart ? hybConsStart.id : "",
-      ].join("|");
-
-      if (structKey !== this._lastStructKey) {
-        this._dialogCtrl.close();
-        this._dialogCtrl.unbind();
-        this._lastChartSig = "";
-        this.shadowRoot.innerHTML = this._buildSkeletonHtml({
-          t: t,
-          cfg: cfg,
-          showCharging: showCharging,
-          showConsumption: showConsumption,
-          showChart: showChart,
-          showReset: showReset,
-          resetChargingBtn: resetChargingBtn,
-          resetConsBtn: resetConsBtn,
-          chgToday: chgToday,
-          chgMonth: chgMonth,
-          chgYear: chgYear,
-          chgFromStart: chgFromStart,
-          hasEvCons: hasEvCons,
-          hasHybridCons: hasHybridCons,
-          avgEnergy50: avgEnergy50,
-          evCons100: evCons100,
-          evCons1000: evCons1000,
-          evConsStart: evConsStart,
-          avgFuel50: avgFuel50,
-          hybCons100: hybCons100,
-          hybCons1000: hybCons1000,
-          hybConsStart: hybConsStart,
-        });
-        this._lastStructKey = structKey;
-      }
-      this._dialogCtrl.bind();
-
-      this._applyBindings(hass, {
-        lang: lang,
-        t: t,
-        cfg: cfg,
-        showCharging: showCharging,
-        showConsumption: showConsumption,
-        showChart: showChart,
-        chgToday: chgToday,
-        chgMonth: chgMonth,
-        chgYear: chgYear,
-        chgFromStart: chgFromStart,
-        hasEvCons: hasEvCons,
-        hasHybridCons: hasHybridCons,
-        avgEnergy50: avgEnergy50,
-        evCons100: evCons100,
-        evCons1000: evCons1000,
-        evConsStart: evConsStart,
-        avgFuel50: avgFuel50,
-        hybCons100: hybCons100,
-        hybCons1000: hybCons1000,
-        hybConsStart: hybConsStart,
-      });
-    }
-
-    _buildSkeletonHtml(ctx) {
-      var t = ctx.t;
-      var kpiCells = [
-        { cellBind: "chgTodayCell", valBind: "chgTodayVal", subBind: "chgTodaySub", period: "today", label: t.statsPeriodToday, ent: ctx.chgToday },
-        { cellBind: "chgMonthCell", valBind: "chgMonthVal", subBind: "chgMonthSub", period: "month", label: t.statsPeriodMonth, ent: ctx.chgMonth },
-        { cellBind: "chgYearCell", valBind: "chgYearVal", subBind: "chgYearSub", period: "year", label: t.statsPeriodYear, ent: ctx.chgYear },
-        { cellBind: "chgStartCell", valBind: "chgStartVal", subBind: "chgStartSub", period: "from_start", label: t.statsPeriodFromStart, ent: ctx.chgFromStart },
-      ].map(function (k) {
-        var entAttr = k.ent ? (' role="button" tabindex="0" data-e="' + escapeHtml(k.ent.id) + '"') : "";
-        return '<div class="cons-cell" data-bind="' + k.cellBind + '" data-stats-period="' + k.period + '"' + entAttr + ">" +
-          '<span class="cons-cell-lbl">' + escapeHtml(k.label) + "</span>" +
-          '<span class="cons-cell-val num" data-bind="' + k.valBind + '">—</span>' +
-          '<span class="stats-cell-sub num hidden" data-bind="' + k.subBind + '"></span>' +
-        "</div>";
-      }).join("");
-
-      var chgResetHtml = (ctx.showReset && ctx.resetChargingBtn)
-        ? '<button type="button" class="stats-reset-btn" data-stats-reset="charging" data-bind="resetChargingBtn" title="' +
-            escapeHtml(t.statsResetTitle) + '" aria-label="' + escapeHtml(t.statsResetTitle) + '">' +
-            svgIcon("refresh", "btn-ico") + "<span>" + escapeHtml(t.statsResetBtn) + "</span></button>"
-        : "";
-
-      var chartHtml = ctx.showChart ? (
-        '<div class="stats-chart-box" data-bind="chartBox">' +
-          '<div class="stats-chart-hdr">' +
-            '<span class="stats-chart-title">' + escapeHtml(t.statsChartAriaLabel) + "</span>" +
-            '<div class="stats-chart-legend" data-bind="chartLegend"></div>' +
-            '<div class="seg-switch stats-chart-seg" role="group">' +
-              '<button type="button" class="seg-btn" data-stats-chart="7d" aria-pressed="false">' + escapeHtml(t.statsChart7d) + "</button>" +
-              '<button type="button" class="seg-btn" data-stats-chart="30d" aria-pressed="false">' + escapeHtml(t.statsChart30d) + "</button>" +
-              '<button type="button" class="seg-btn" data-stats-chart="12m" aria-pressed="false">' + escapeHtml(t.statsChart12m) + "</button>" +
-            "</div>" +
-          "</div>" +
-          '<div class="stats-chart-stage" data-bind="chartStage"></div>' +
-          '<div class="stats-chart-tooltip num hidden" data-bind="chartTooltip" aria-live="polite"></div>' +
-        "</div>"
-      ) : "";
-
-      var chargingHtml = ctx.showCharging ? (
-        '<div class="surface stats-charging-section" data-bind="chargingSection">' +
-          '<div class="stats-sec-hdr">' +
-            '<span class="sec-hdr-title">' + svgIcon("bolt", "sec-ico") + "<span>" + escapeHtml(t.statsChargingTitle) + "</span></span>" +
-            '<div class="stats-sec-actions">' +
-              '<div class="seg-switch stats-scope-seg" role="group">' +
-                '<button type="button" class="seg-btn" data-stats-scope="all" aria-pressed="false">' + escapeHtml(t.statsScopeAll) + "</button>" +
-                '<button type="button" class="seg-btn" data-stats-scope="home" aria-pressed="false">' + escapeHtml(t.homeEnergy) + "</button>" +
-                '<button type="button" class="seg-btn" data-stats-scope="away" aria-pressed="false">' + escapeHtml(t.awayEnergy) + "</button>" +
-              "</div>" +
-              chgResetHtml +
-            "</div>" +
-          "</div>" +
-          '<div class="cons-grid stats-chg-grid">' + kpiCells + "</div>" +
-          chartHtml +
-        "</div>"
-      ) : "";
-
-      var consResetHtml = (ctx.showReset && ctx.resetConsBtn)
-        ? '<button type="button" class="stats-reset-btn" data-stats-reset="consumption" data-bind="resetConsBtn" title="' +
-            escapeHtml(t.statsResetTitle) + '" aria-label="' + escapeHtml(t.statsResetTitle) + '">' +
-            svgIcon("refresh", "btn-ico") + "<span>" + escapeHtml(t.statsResetBtn) + "</span></button>"
-        : "";
-
-      var consHtml = ctx.showConsumption ? (
-        '<div class="surface cons-section" data-bind="consSection">' +
-          '<div class="stats-sec-hdr">' +
-            '<span class="sec-hdr-title">' + svgIcon("gauge", "sec-ico") + "<span>" + escapeHtml(t.avgConsumption) + "</span></span>" +
-            consResetHtml +
-          "</div>" +
-          '<div class="cons-rows">' +
-            buildConsRowHtml({
-              rowBind: "consEvRow",
-              hidden: !ctx.hasEvCons,
-              iconName: "bolt",
-              rowLabel: t.consEv,
-              kind: "ev",
-              u100Lbl: "kWh/100",
-              uKmLbl: "kWh/km",
-              b100: "consEvPer100Btn",
-              bKm: "consEvPerKmBtn",
-              toggleTitle: t.consUnitToggleTitle,
-              cells: [
-                { cellBind: "consEv50Cell", valBind: "consEv50Val", label: t.cons50, ent: ctx.avgEnergy50 },
-                { cellBind: "consEv100Cell", valBind: "consEv100Val", label: t.cons100, ent: ctx.evCons100 },
-                { cellBind: "consEv1000Cell", valBind: "consEv1000Val", label: t.cons1000, ent: ctx.evCons1000 },
-                { cellBind: "consEvStartCell", valBind: "consEvStartVal", label: t.consFromStart, ent: ctx.evConsStart },
-              ],
-            }) +
-            buildConsRowHtml({
-              rowBind: "consHybridRow",
-              hidden: !ctx.hasHybridCons,
-              iconName: "flame",
-              rowLabel: t.consHybrid,
-              kind: "hybrid",
-              u100Lbl: "L/100",
-              uKmLbl: "km/L",
-              b100: "consHybPer100Btn",
-              bKm: "consHybPerKmBtn",
-              toggleTitle: t.consUnitToggleTitle,
-              cells: [
-                { cellBind: "consHyb50Cell", valBind: "consHyb50Val", label: t.cons50, ent: ctx.avgFuel50 },
-                { cellBind: "consHyb100Cell", valBind: "consHyb100Val", label: t.cons100, ent: ctx.hybCons100 },
-                { cellBind: "consHyb1000Cell", valBind: "consHyb1000Val", label: t.cons1000, ent: ctx.hybCons1000 },
-                { cellBind: "consHybStartCell", valBind: "consHybStartVal", label: t.consFromStart, ent: ctx.hybConsStart },
-              ],
-            }) +
-          "</div>" +
-        "</div>"
-      ) : "";
-
-      var emptyHtml = (!ctx.showCharging && !ctx.showConsumption)
-        ? '<div class="surface stats-empty-card" data-bind="statsEmptyCard">' + escapeHtml(t.statsNoData) + "</div>"
-        : "";
-
-      return "<style>" + buildStatsStyles() + "</style>" +
-        "<ha-card>" +
-          '<div class="stats-shell">' +
-            '<div class="stats-hdr">' +
-              '<span class="stats-hdr-title">' + svgIcon("charging", "sec-ico") + '<span data-bind="statsTitle"></span></span>' +
-            "</div>" +
-            '<div class="error-banner hidden" role="alert" data-bind="errorBanner">' +
-              '<span data-bind="errorText"></span>' +
-              '<button type="button" class="error-dismiss" data-dismiss-error aria-label="Dismiss">×</button>' +
-            "</div>" +
-            chargingHtml +
-            consHtml +
-            emptyHtml +
-          "</div>" +
-          buildConfirmDialogHtml(t, "lp-stats-confirm-title") +
-        "</ha-card>";
-    }
-
-    _applyBindings(hass, vm) {
-      var root = this.shadowRoot;
-      if (!root) return;
-      var t = vm.t;
-      var titleEl = root.querySelector('[data-bind="statsTitle"]');
-      if (titleEl) {
-        var titleStr = vm.cfg.title ? String(vm.cfg.title) : t.statsCardDefaultTitle;
-        titleEl.textContent = titleStr;
-      }
-
-      var errBanner = root.querySelector('[data-bind="errorBanner"]');
-      var errText = root.querySelector('[data-bind="errorText"]');
-      if (errBanner && errText) {
-        errBanner.classList.toggle("hidden", !this._errorMsg);
-        errText.textContent = this._errorMsg || "";
-      }
-
+      var statsTitleEl = root.querySelector('[data-bind="statsTitle"]');
+      if (statsTitleEl) statsTitleEl.textContent = t.statsCardDefaultTitle;
       this._syncResetButtonsState();
 
-      if (vm.showCharging) {
+      if (vm.hasChargingStats) {
         var scopeBtns = root.querySelectorAll("[data-stats-scope]");
-        for (var si = 0; si < scopeBtns.length; si += 1) {
-          var sVal = scopeBtns[si].getAttribute("data-stats-scope");
-          var sOn = sVal === this._scope;
-          scopeBtns[si].classList.toggle("is-active", sOn);
-          scopeBtns[si].setAttribute("aria-pressed", sOn ? "true" : "false");
+        for (var scIdx = 0; scIdx < scopeBtns.length; scIdx += 1) {
+          var sVal = scopeBtns[scIdx].getAttribute("data-stats-scope");
+          var sOn = sVal === this._statsScope;
+          scopeBtns[scIdx].classList.toggle("is-active", sOn);
+          scopeBtns[scIdx].setAttribute("aria-pressed", sOn ? "true" : "false");
         }
 
         var kpiList = [
@@ -5474,11 +5354,11 @@
           { valBind: "chgStartVal", subBind: "chgStartSub", ent: vm.chgFromStart },
         ];
         for (var ki = 0; ki < kpiList.length; ki += 1) {
-          var item = kpiList[ki];
-          var valEl = root.querySelector('[data-bind="' + item.valBind + '"]');
-          var subEl = root.querySelector('[data-bind="' + item.subBind + '"]');
-          var ent = item.ent;
-          if (!ent || isDeadStateObj(ent.s)) {
+          var kpi = kpiList[ki];
+          var valEl = root.querySelector('[data-bind="' + kpi.valBind + '"]');
+          var subEl = root.querySelector('[data-bind="' + kpi.subBind + '"]');
+          var kEnt = kpi.ent;
+          if (!kEnt || isDeadStateObj(kEnt.s)) {
             if (valEl) valEl.textContent = "—";
             if (subEl) {
               subEl.classList.add("hidden");
@@ -5486,32 +5366,32 @@
             }
             continue;
           }
-          var attrs = ent.s.attributes || {};
-          var unit = attrs.unit_of_measurement ? String(attrs.unit_of_measurement) : "kWh";
-          var dp = typeof attrs.suggested_display_precision === "number" ? attrs.suggested_display_precision : null;
-          var homeNum = safeNonNegNumber(attrs.home_kwh);
-          var awayNum = safeNonNegNumber(attrs.away_kwh);
-          var sessions = (typeof attrs.sessions_count === "number" && isFinite(attrs.sessions_count))
-            ? Math.max(0, Math.round(attrs.sessions_count))
+          var kAttrs = kEnt.s.attributes || {};
+          var kUnit = kAttrs.unit_of_measurement ? String(kAttrs.unit_of_measurement) : "kWh";
+          var kDp = typeof kAttrs.suggested_display_precision === "number" ? kAttrs.suggested_display_precision : null;
+          var homeNum = safeNonNegNumber(kAttrs.home_kwh);
+          var awayNum = safeNonNegNumber(kAttrs.away_kwh);
+          var sessions = (typeof kAttrs.sessions_count === "number" && isFinite(kAttrs.sessions_count))
+            ? Math.max(0, Math.round(kAttrs.sessions_count))
             : 0;
           if (valEl) {
-            if (this._scope === "home") {
+            if (this._statsScope === "home") {
               valEl.textContent = homeNum !== null
-                ? formatMetric({ state: String(homeNum), attributes: { unit_of_measurement: unit, suggested_display_precision: dp } }, vm.lang)
+                ? formatMetric({ state: String(homeNum), attributes: { unit_of_measurement: kUnit, suggested_display_precision: kDp } }, vm.lang)
                 : "—";
-            } else if (this._scope === "away") {
+            } else if (this._statsScope === "away") {
               valEl.textContent = awayNum !== null
-                ? formatMetric({ state: String(awayNum), attributes: { unit_of_measurement: unit, suggested_display_precision: dp } }, vm.lang)
+                ? formatMetric({ state: String(awayNum), attributes: { unit_of_measurement: kUnit, suggested_display_precision: kDp } }, vm.lang)
                 : "—";
             } else {
-              var disp = formatEntityStateDisplay(ent.s, hass);
-              valEl.textContent = (disp !== "—" && !(attrs.unit_of_measurement) && parseStateNumber(ent.s) !== null)
-                ? (disp + " " + unit)
-                : disp;
+              var kDisp = formatEntityStateDisplay(kEnt.s, hass);
+              valEl.textContent = (kDisp !== "—" && !(kAttrs.unit_of_measurement) && parseStateNumber(kEnt.s) !== null)
+                ? (kDisp + " " + kUnit)
+                : kDisp;
             }
           }
           if (subEl) {
-            if (this._scope === "all" && (homeNum !== null || awayNum !== null)) {
+            if (this._statsScope === "all" && (homeNum !== null || awayNum !== null)) {
               var subTxt = t.homeEnergy + " " + formatCompactNumber(homeNum || 0) + " · " +
                 t.awayEnergy + " " + formatCompactNumber(awayNum || 0) +
                 (sessions > 0 ? " · " + sessions + " " + t.statsSessionsShort : "");
@@ -5524,51 +5404,55 @@
           }
         }
 
-        if (vm.showChart) {
-          var chartBtns = root.querySelectorAll("[data-stats-chart]");
-          for (var ci = 0; ci < chartBtns.length; ci += 1) {
-            var cVal = chartBtns[ci].getAttribute("data-stats-chart");
-            var cOn = cVal === this._chartRange;
-            chartBtns[ci].classList.toggle("is-active", cOn);
-            chartBtns[ci].setAttribute("aria-pressed", cOn ? "true" : "false");
-          }
+        var chartBtns = root.querySelectorAll("[data-stats-chart]");
+        for (var chIdx = 0; chIdx < chartBtns.length; chIdx += 1) {
+          var cVal = chartBtns[chIdx].getAttribute("data-stats-chart");
+          var cOn = cVal === this._statsChartRange;
+          chartBtns[chIdx].classList.toggle("is-active", cOn);
+          chartBtns[chIdx].setAttribute("aria-pressed", cOn ? "true" : "false");
+        }
 
-          var legendEl = root.querySelector('[data-bind="chartLegend"]');
-          if (legendEl) {
-            if (this._scope === "home") {
-              legendEl.innerHTML = '<span class="legend-item"><span class="legend-swatch is-home"></span>' + escapeHtml(t.homeEnergy) + "</span>";
-            } else if (this._scope === "away") {
-              legendEl.innerHTML = '<span class="legend-item"><span class="legend-swatch is-away"></span>' + escapeHtml(t.awayEnergy) + "</span>";
-            } else {
-              legendEl.innerHTML =
-                '<span class="legend-item"><span class="legend-swatch is-home"></span>' + escapeHtml(t.homeEnergy) + "</span>" +
-                '<span class="legend-item"><span class="legend-swatch is-away"></span>' + escapeHtml(t.awayEnergy) + "</span>";
-            }
+        var legendEl = root.querySelector('[data-bind="chartLegend"]');
+        if (legendEl) {
+          if (this._statsScope === "home") {
+            legendEl.innerHTML = '<span class="legend-item"><span class="legend-swatch is-home"></span>' + escapeHtml(t.homeEnergy) + "</span>";
+          } else if (this._statsScope === "away") {
+            legendEl.innerHTML = '<span class="legend-item"><span class="legend-swatch is-away"></span>' + escapeHtml(t.awayEnergy) + "</span>";
+          } else {
+            legendEl.innerHTML =
+              '<span class="legend-item"><span class="legend-swatch is-home"></span>' + escapeHtml(t.homeEnergy) + "</span>" +
+              '<span class="legend-item"><span class="legend-swatch is-away"></span>' + escapeHtml(t.awayEnergy) + "</span>";
           }
+        }
 
-          var seriesRaw = this._chartRange === "12m"
-            ? (vm.chgYear && vm.chgYear.s && vm.chgYear.s.attributes ? vm.chgYear.s.attributes.monthly_series : null)
-            : (vm.chgToday && vm.chgToday.s && vm.chgToday.s.attributes ? vm.chgToday.s.attributes.daily_series : null);
-          var seriesSig = "";
-          try { seriesSig = JSON.stringify(seriesRaw || []); } catch (e) { seriesSig = ""; }
-          var chartSig = vm.lang + "|" + this._scope + "|" + this._chartRange + "|" + seriesSig;
-          if (chartSig !== this._lastChartSig) {
-            this._lastChartSig = chartSig;
-            var chartStage = root.querySelector('[data-bind="chartStage"]');
-            if (chartStage) {
-              var chartData = buildChargingChartData(vm.chgToday, vm.chgYear, this._scope, this._chartRange, t);
-              chartStage.innerHTML = renderChargingChartSvg(chartData, this._scope, this._chartRange, t);
-            }
-            var tipEl = root.querySelector('[data-bind="chartTooltip"]');
-            if (tipEl) {
-              tipEl.textContent = "";
-              tipEl.classList.add("hidden");
-            }
+        var seriesRaw = this._statsChartRange === "12m"
+          ? (vm.chgYear && vm.chgYear.s && vm.chgYear.s.attributes ? vm.chgYear.s.attributes.monthly_series : null)
+          : (vm.chgToday && vm.chgToday.s && vm.chgToday.s.attributes ? vm.chgToday.s.attributes.daily_series : null);
+        var seriesSig = "";
+        try { seriesSig = JSON.stringify(seriesRaw || []); } catch (e) { seriesSig = ""; }
+        var chartSig = vm.lang + "|" + this._statsScope + "|" + this._statsChartRange + "|" + seriesSig;
+        if (chartSig !== this._lastStatsChartSig) {
+          this._lastStatsChartSig = chartSig;
+          var chartStage = root.querySelector('[data-bind="chartStage"]');
+          var chartData = buildChargingChartData(vm.chgToday, vm.chgYear, this._statsScope, this._statsChartRange, t);
+          this._chartMeta = {
+            scope: this._statsScope,
+            range: this._statsChartRange,
+            pointsCount: chartData.points.length,
+            maxTotal: chartData.maxTotal,
+          };
+          if (chartStage) {
+            chartStage.innerHTML = renderChargingChartSvg(chartData, this._statsScope, this._statsChartRange, t);
+          }
+          var tipEl = root.querySelector('[data-bind="chartTooltip"]');
+          if (tipEl) {
+            tipEl.textContent = "";
+            tipEl.classList.add("hidden");
           }
         }
       }
 
-      if (vm.showConsumption) {
+      if (vm.hasAnyCons) {
         applyConsumptionBindings(root, hass, this._consUnitModes, vm);
       }
 
@@ -5593,6 +5477,7 @@
     escapeHtml: escapeHtml,
     requiresConfirmation: requiresConfirmation,
     formatCommandOutcome: formatCommandOutcome,
+    resolveClimateDurationOptions: resolveClimateDurationOptions,
     getTexts: getTexts,
     formatMetric: formatMetric,
     translateOption: translateOption,
@@ -5614,27 +5499,13 @@
   if (!customElements.get("lepas-card")) {
     customElements.define("lepas-card", LepasCard);
   }
-  if (!customElements.get("lepas-stats-card-editor")) {
-    customElements.define("lepas-stats-card-editor", LepasStatsCardEditor);
-  }
-  if (!customElements.get("lepas-stats-card")) {
-    customElements.define("lepas-stats-card", LepasStatsCard);
-  }
   window.customCards = window.customCards || [];
   if (!window.customCards.some(function (c) { return c.type === "lepas-card"; })) {
     window.customCards.push({
       type: "lepas-card",
       name: "Lepas Card",
       preview: true,
-      description: "Matte Titanium OEM dashboard card for Lepas Connect (responsive 4-tab / cockpit, blueprint SVG, TPMS, climate, charging, departures).",
-    });
-  }
-  if (!window.customCards.some(function (c) { return c.type === "lepas-stats-card"; })) {
-    window.customCards.push({
-      type: "lepas-stats-card",
-      name: "Lepas Stats Card",
-      preview: true,
-      description: "Matte Titanium charging energy and average consumption statistics card for Lepas Connect (today/month/year/from-start KPIs, 7d/30d/12m chart, EV & hybrid averages).",
+      description: "Matte Titanium OEM dashboard card for Lepas Connect (responsive 4-tab / cockpit, blueprint SVG, TPMS, climate, charging, departures, stats modal).",
     });
   }
 })();

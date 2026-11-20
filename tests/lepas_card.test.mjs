@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -714,8 +715,6 @@ await import("../custom_components/lepas/lovelace/lepas-card.js");
 
 const LepasCard = globalThis.customElements.get("lepas-card");
 const LepasCardEditor = globalThis.customElements.get("lepas-card-editor");
-const LepasStatsCard = globalThis.customElements.get("lepas-stats-card");
-const LepasStatsCardEditor = globalThis.customElements.get("lepas-stats-card-editor");
 
 function makeState(entityId, state, attrs = {}) {
   return {
@@ -951,27 +950,34 @@ function createCard(config = {}, hass = null) {
   return card;
 }
 
-function createStatsCard(config = {}, hass = null) {
-  const card = document.createElement("lepas-stats-card");
-  card.setConfig(config);
-  if (hass) card.hass = hass;
+function createStatsOpenCard(config = {}, hass = null) {
+  const card = createCard(config, hass);
+  const statsBtn = card.shadowRoot.querySelector('[data-action-id="open_stats"]');
+  if (statsBtn) statsBtn.click();
   return card;
 }
 
 test("LepasCard metadata, registration, Shadow DOM, and container queries", () => {
   assert.ok(LepasCard, "LepasCard custom element must be registered");
   assert.ok(LepasCardEditor, "LepasCardEditor custom element must be registered");
+  assert.equal(globalThis.customElements.get("lepas-stats-card"), undefined, "lepas-stats-card must be removed");
+  assert.equal(globalThis.customElements.get("lepas-stats-card-editor"), undefined, "lepas-stats-card-editor must be removed");
   assert.deepEqual(LepasCard.getStubConfig(), { type: "custom:lepas-card" });
   assert.deepEqual(LepasCard.getGridOptions(), { columns: 12, min_columns: 4, rows: "auto" });
 
   const editor = LepasCard.getConfigElement();
   assert.equal(editor.tagName, "LEPAS-CARD-EDITOR");
 
-  const regEntry = window.customCards.find((c) => c.type === "lepas-card");
-  assert.ok(regEntry, "customCards registration missing (must use 'lepas-card' without 'custom:' prefix)");
+  const cardRegs = window.customCards.filter((c) => c.type === "lepas-card");
+  assert.equal(cardRegs.length, 1, "window.customCards must register exactly one 'lepas-card' entry");
   assert.ok(
     !window.customCards.some((c) => c.type === "custom:lepas-card"),
     "window.customCards must NOT include 'custom:' prefix in type"
+  );
+  assert.equal(
+    window.customCards.some((c) => c.type === "lepas-stats-card" || c.type === "custom:lepas-stats-card"),
+    false,
+    "window.customCards must NOT register lepas-stats-card"
   );
 
   const card = createCard({}, makeFullHass());
@@ -985,16 +991,19 @@ test("LepasCard metadata, registration, Shadow DOM, and container queries", () =
 test("Color and hero image resolution, aliases, and precedence", () => {
   const h = LepasCard._helpers;
   assert.ok(h, "LepasCard._helpers must be exposed");
-  assert.equal(h.CARD_VERSION, "1.30.0");
+  const expectedVer = JSON.parse(
+    readFileSync(new URL("../custom_components/lepas/manifest.json", import.meta.url), "utf8")
+  ).version;
+  assert.equal(h.CARD_VERSION, expectedVer);
 
   // Default grey
-  assert.equal(h.resolveHeroImage({}, []), "/lepas_card/lepas-hero-grey.png?v=1.30.0");
+  assert.equal(h.resolveHeroImage({}, []), `/lepas_card/lepas-hero-grey.png?v=${expectedVer}`);
 
   // All 5 canonical colors
   for (const c of ["grey", "teal", "violet", "black", "white"]) {
     assert.equal(
       h.resolveHeroImage({ color: c }, []),
-      `/lepas_card/lepas-hero-${c}.png?v=1.30.0`
+      `/lepas_card/lepas-hero-${c}.png?v=${expectedVer}`
     );
   }
 
@@ -1013,7 +1022,7 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   for (const [alias, expected] of aliases) {
     assert.equal(
       h.resolveHeroImage({ color: alias }, []),
-      `/lepas_card/lepas-hero-${expected}.png?v=1.30.0`
+      `/lepas_card/lepas-hero-${expected}.png?v=${expectedVer}`
     );
   }
 
@@ -2375,37 +2384,54 @@ test("v1.22.0 CONFIRM_ACTIONS helper contract, dynamic departure label, fail-clo
   assert.equal(hassStateful.calls.length, 6);
 });
 
-test("v1.22.0 formatCommandOutcome and cmdResultBadge concise outcome in IT/EN/NL without raw debug strings", async () => {
+test("v1.22.0 formatCommandOutcome and cmdResultBadge concise outcome in IT/EN/NL without raw debug strings + 5m TTL", async () => {
   const h = LepasCard._helpers;
   assert.equal(typeof h.formatCommandOutcome, "function", "formatCommandOutcome must be exported on _helpers");
 
   const tsIso = new Date(2026, 10, 18, 20, 10, 0).toISOString();
+  const tsMs = Date.parse(tsIso);
+  const withinTtlNow = tsMs + 60 * 1000;
   const tsNewerIso = new Date(2026, 10, 18, 20, 15, 0).toISOString();
+  const tsNewerMs = Date.parse(tsNewerIso);
   const enTime = new Date(tsIso).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" });
 
   // Absent / dead state with no local feedback -> null
-  assert.equal(h.formatCommandOutcome(null, null, "it"), null);
-  assert.equal(h.formatCommandOutcome(makeState("sensor.lepas_command_result", "unavailable"), null, "it"), null);
-  assert.equal(h.formatCommandOutcome(makeState("sensor.lepas_command_result", "unknown"), null, "en"), null);
+  assert.equal(h.formatCommandOutcome(null, null, "it", withinTtlNow), null);
+  assert.equal(h.formatCommandOutcome(makeState("sensor.lepas_command_result", "unavailable"), null, "it", withinTtlNow), null);
+  assert.equal(h.formatCommandOutcome(makeState("sensor.lepas_command_result", "unknown"), null, "en", withinTtlNow), null);
 
-  // Success backend states across IT/EN/NL
+  // Waiting placeholder states return null when cmdStateObj is active
+  for (const waitState of ["In attesa", "in attesa", "Waiting", "  waiting  ", "Wachten"]) {
+    assert.equal(
+      h.formatCommandOutcome({ state: waitState, last_changed: tsIso }, null, "it", withinTtlNow),
+      null,
+      `Waiting state '${waitState}' must be hidden`
+    );
+  }
+
+  // Success backend states across IT/EN/NL within 5-minute TTL
   const okObj = { state: "Comando eseguito e confermato dall'auto ✅", last_changed: tsIso };
-  assert.deepEqual(h.formatCommandOutcome(okObj, null, "it"), { text: "Ultimo comando · 20:10 ✓", ok: true });
-  assert.deepEqual(h.formatCommandOutcome(okObj, null, "en"), { text: `Last command · ${enTime} ✓`, ok: true });
-  assert.deepEqual(h.formatCommandOutcome(okObj, null, "nl"), { text: "Laatste opdracht · 20:10 ✓", ok: true });
+  assert.deepEqual(h.formatCommandOutcome(okObj, null, "it", withinTtlNow), { text: "Ultimo comando · 20:10 ✓", ok: true, tsMs });
+  assert.deepEqual(h.formatCommandOutcome(okObj, null, "en", withinTtlNow), { text: `Last command · ${enTime} ✓`, ok: true, tsMs });
+  assert.deepEqual(h.formatCommandOutcome(okObj, null, "nl", withinTtlNow), { text: "Laatste opdracht · 20:10 ✓", ok: true, tsMs });
 
   // Single-climate notice is explicitly non-fatal per backend contract
   const climateNotice = {
     state: "Comando ricevuto dall'auto — unica segnalazione: clima. Da sola non indica un guasto.",
     last_changed: tsIso,
   };
-  assert.deepEqual(h.formatCommandOutcome(climateNotice, null, "it"), { text: "Ultimo comando · 20:10 ✓", ok: true });
+  assert.deepEqual(h.formatCommandOutcome(climateNotice, null, "it", withinTtlNow), { text: "Ultimo comando · 20:10 ✓", ok: true, tsMs });
 
-  // Pending ⏳ counts as non-error
+  // Pending ⏳ counts as non-error within TTL
   const inProgress = { state: "Comando in esecuzione sull'auto… ⏳", last_changed: tsIso };
-  assert.deepEqual(h.formatCommandOutcome(inProgress, null, "it"), { text: "Ultimo comando · 20:10 ✓", ok: true });
+  assert.deepEqual(h.formatCommandOutcome(inProgress, null, "it", withinTtlNow), { text: "Ultimo comando · 20:10 ✓", ok: true, tsMs });
 
-  // Backend errors / partial failures / rejections across IT/EN/NL
+  // 5-minute TTL boundary for success: visible at exactly 300000 ms, hidden at 300001 ms or missing tsMs
+  assert.ok(h.formatCommandOutcome(okObj, null, "it", tsMs + 300000));
+  assert.equal(h.formatCommandOutcome(okObj, null, "it", tsMs + 300001), null);
+  assert.equal(h.formatCommandOutcome({ state: "OK" }, null, "it", withinTtlNow), null);
+
+  // Backend errors / partial failures / rejections across IT/EN/NL (persistent past 5 minutes & without tsMs)
   for (const errState of [
     "Eseguito solo in parte ⚠️ — l'auto segnala un problema su: sedili",
     "Comando rifiutato dal backend ❌",
@@ -2414,45 +2440,69 @@ test("v1.22.0 formatCommandOutcome and cmdResultBadge concise outcome in IT/EN/N
     "Richiesta scaduta",
     "Veicolo bloccato",
   ]) {
-    const resIt = h.formatCommandOutcome({ state: errState, last_changed: tsIso }, null, "it");
-    assert.deepEqual(resIt, { text: "Errore invio comando · 20:10 ✕", ok: false }, `Expected failure for '${errState}'`);
+    const resIt = h.formatCommandOutcome({ state: errState, last_changed: tsIso }, null, "it", tsMs + 3600 * 1000);
+    assert.deepEqual(resIt, { text: "Errore invio comando · 20:10 ✕", ok: false, tsMs }, `Expected persistent failure for '${errState}'`);
   }
   assert.deepEqual(
-    h.formatCommandOutcome({ state: "Comando rifiutato ❌", last_changed: tsIso }, null, "en"),
-    { text: `Command failed · ${enTime} ✕`, ok: false }
+    h.formatCommandOutcome({ state: "Comando rifiutato ❌", last_changed: tsIso }, null, "en", tsMs + 3600 * 1000),
+    { text: `Command failed · ${enTime} ✕`, ok: false, tsMs }
   );
   assert.deepEqual(
-    h.formatCommandOutcome({ state: "Comando rifiutato ❌", last_changed: tsIso }, null, "nl"),
-    { text: "Opdracht mislukt · 20:10 ✕", ok: false }
+    h.formatCommandOutcome({ state: "Comando rifiutato ❌", last_changed: tsIso }, null, "nl", tsMs + 3600 * 1000),
+    { text: "Opdracht mislukt · 20:10 ✕", ok: false, tsMs }
+  );
+  assert.deepEqual(
+    h.formatCommandOutcome({ state: "Command failed" }, null, "en", withinTtlNow),
+    { text: "Command failed ✕", ok: false, tsMs: NaN }
   );
 
-  // Local feedback overrides older backend state, and yields once newer backend state arrives
+  // Local feedback overrides older backend state (including older "In attesa"), and yields once newer backend state (including newer "In attesa") arrives
   const localErr = { ok: false, ts: new Date(2026, 10, 18, 20, 12, 0).getTime() };
   assert.deepEqual(
-    h.formatCommandOutcome(okObj, localErr, "it"),
-    { text: "Errore invio comando · 20:12 ✕", ok: false }
+    h.formatCommandOutcome(okObj, localErr, "it", localErr.ts + 1000),
+    { text: "Errore invio comando · 20:12 ✕", ok: false, tsMs: localErr.ts }
   );
   const newerBackendOk = { state: "Comando eseguito e confermato dall'auto ✅", last_changed: tsNewerIso };
   assert.deepEqual(
-    h.formatCommandOutcome(newerBackendOk, localErr, "it"),
-    { text: "Ultimo comando · 20:15 ✓", ok: true }
+    h.formatCommandOutcome(newerBackendOk, localErr, "it", tsNewerMs + 60 * 1000),
+    { text: "Ultimo comando · 20:15 ✓", ok: true, tsMs: tsNewerMs }
+  );
+  const olderWaiting = { state: "In attesa", last_changed: tsIso };
+  const newerLocalOk = { ok: true, ts: tsMs + 30 * 1000 };
+  assert.deepEqual(
+    h.formatCommandOutcome(olderWaiting, newerLocalOk, "it", newerLocalOk.ts + 1000),
+    { text: `Ultimo comando · ${new Date(newerLocalOk.ts).toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" })} ✓`, ok: true, tsMs: newerLocalOk.ts }
+  );
+  const newerWaiting = { state: "In attesa", last_changed: new Date(newerLocalOk.ts + 5000).toISOString() };
+  assert.equal(
+    h.formatCommandOutcome(newerWaiting, newerLocalOk, "it", newerLocalOk.ts + 10000),
+    null,
+    "Newer waiting backend state must supersede older localFeedback and return null"
   );
 
-  // DOM cmdResultBadge test: hides raw debug text, toggles .is-emerald/.is-coral, and shows local rejection even when sensor is unavailable
+  // DOM cmdResultBadge test: hides raw debug text, toggles .is-emerald/.is-coral, Plancia-only, and shows local rejection even when sensor is unavailable
+  const freshIso = new Date(Date.now() - 30 * 1000).toISOString();
+  const freshItTime = new Date(freshIso).toLocaleTimeString("it", { hour: "2-digit", minute: "2-digit" });
   const hassOk = makeFullHass({
     "sensor.lepas_command_result": Object.assign(
       makeState("sensor.lepas_command_result", "Comando eseguito e confermato dall'auto ✅"),
-      { last_changed: tsIso }
+      { last_changed: freshIso }
     ),
   }, "it");
   const card = createCard({}, hassOk);
-  const badge = card.shadowRoot.querySelector('[data-bind="cmdResultBadge"]');
-  assert.ok(badge);
+  const allBadges = card.shadowRoot.querySelectorAll('[data-bind="cmdResultBadge"]');
+  assert.equal(allBadges.length, 1, "cmdResultBadge must exist only once (in Overview/Plancia)");
+  assert.ok(card.shadowRoot.querySelector('[data-panel="overview"] [data-bind="cmdResultBadge"]'));
+  assert.equal(card.shadowRoot.querySelector('[data-panel="climate"] [data-bind="cmdResultBadge"]'), null);
+  assert.equal(card.shadowRoot.querySelector('[data-bind="climateCmdBar"]'), null);
+
+  const badge = allBadges[0];
   assert.equal(badge.classList.contains("hidden"), false);
   assert.equal(badge.classList.contains("is-emerald"), true);
   assert.equal(badge.classList.contains("is-coral"), false);
-  assert.equal(badge.textContent, "Ultimo comando · 20:10 ✓");
+  assert.equal(badge.textContent, `Ultimo comando · ${freshItTime} ✓`);
   assert.equal(card.shadowRoot.innerHTML.includes("Comando eseguito e confermato dall'auto"), false, "Raw debug text must NEVER render in DOM");
+  card.disconnectedCallback();
 
   // When sensor is unavailable/absent and a command fails locally -> badge still renders in coral
   let rejectCmd = true;
@@ -2487,6 +2537,75 @@ test("v1.22.0 formatCommandOutcome and cmdResultBadge concise outcome in IT/EN/N
   assert.equal(badgeUnavail.classList.contains("is-coral"), false);
   assert.ok(badgeUnavail.textContent.startsWith("Ultimo comando · "));
   assert.ok(badgeUnavail.textContent.endsWith("✓"));
+  cardUnavail.disconnectedCallback();
+});
+
+test("cmdResultBadge 5-minute TTL auto-hide timer calls _render() and cleans up on disconnectedCallback()", () => {
+  const origSetTimeout = globalThis.setTimeout;
+  const origClearTimeout = globalThis.clearTimeout;
+  const origDateNow = Date.now;
+  let fakeNow = Date.parse("2026-11-19T12:00:00.000Z");
+  let nextTimerId = 1;
+  const scheduled = new Map();
+  const clearedIds = [];
+
+  Date.now = () => fakeNow;
+  globalThis.setTimeout = (fn, ms) => {
+    const id = nextTimerId++;
+    scheduled.set(id, { fn, ms });
+    return {
+      id,
+      unref() {},
+      valueOf() { return id; },
+    };
+  };
+  globalThis.clearTimeout = (handle) => {
+    const id = (handle && typeof handle === "object" && "id" in handle) ? handle.id : handle;
+    clearedIds.push(id);
+    scheduled.delete(id);
+  };
+
+  try {
+    const freshIso = new Date(fakeNow - 10 * 1000).toISOString();
+    const hass = makeFullHass({
+      "sensor.lepas_command_result": Object.assign(
+        makeState("sensor.lepas_command_result", "OK ✅"),
+        { last_changed: freshIso }
+      ),
+    }, "it");
+    const card = createCard({}, hass);
+    const badge = card.shadowRoot.querySelector('[data-bind="cmdResultBadge"]');
+    assert.equal(badge.classList.contains("hidden"), false, "Fresh success badge must be visible initially");
+    assert.equal(scheduled.size, 1, "Fresh success badge must schedule one _cmdTtlTimer");
+    const [timerId, entry] = [...scheduled.entries()][0];
+    assert.ok(entry.ms >= 290000 && entry.ms <= 290100, `Expected remaining TTL ~290050ms, got ${entry.ms}`);
+
+    // Advance past 5 minutes and trigger timer callback -> _render() hides badge
+    fakeNow += 290100;
+    scheduled.delete(timerId);
+    entry.fn();
+    assert.equal(badge.classList.contains("hidden"), true, "Expired success badge must hide when timer fires");
+    assert.equal(badge.textContent, "");
+    assert.equal(scheduled.size, 0, "Expired outcome must not reschedule timer");
+
+    // Re-arm timer with new fresh success, then verify disconnectedCallback clears it
+    const freshIso2 = new Date(fakeNow).toISOString();
+    card.hass = makeFullHass({
+      "sensor.lepas_command_result": Object.assign(
+        makeState("sensor.lepas_command_result", "OK ✅"),
+        { last_changed: freshIso2 }
+      ),
+    }, "it");
+    assert.equal(scheduled.size, 1);
+    const [timerId2] = [...scheduled.entries()][0];
+    card.disconnectedCallback();
+    assert.ok(clearedIds.includes(timerId2), "disconnectedCallback must clear active _cmdTtlTimer");
+    assert.equal(scheduled.size, 0);
+  } finally {
+    globalThis.setTimeout = origSetTimeout;
+    globalThis.clearTimeout = origClearTimeout;
+    Date.now = origDateNow;
+  }
 });
 
 test("v1.22.1 stopPropagation on internal controls, incremental dayEditor without rebuild, scrollTop preservation, overflow-anchor", async () => {
@@ -2736,7 +2855,7 @@ test("v1.24.0 Departure status label vs Overview nextDeparture, 3-state button m
   assert.equal(btnUnavail.classList.contains("hidden"), true);
 });
 
-test("v1.25.0 Climate tab car_in_use banner + disabled comfort controls + cmdResultBadge sync in Climate tab", async () => {
+test("v1.25.0 Climate tab car_in_use banner + disabled comfort controls + Plancia-only cmdResultBadge + open_stats always enabled", async () => {
   const h = LepasCard._helpers;
   const tsIso = "2026-11-19T11:13:05Z";
   const climateInUseHass = makeFullHass({
@@ -2769,21 +2888,27 @@ test("v1.25.0 Climate tab car_in_use banner + disabled comfort controls + cmdRes
   assert.equal(banner.getAttribute("role"), "status");
   assert.equal(banner.textContent, h.getTexts("it").carInUseBanner);
 
-  // Both Overview and Climate cmdResultBadge synced and coral
+  // Plancia-only cmdResultBadge (errors stay visible past 5m TTL) and climateCmdBar removed
   const badges = card.shadowRoot.querySelectorAll('[data-bind="cmdResultBadge"]');
-  assert.equal(badges.length, 2, "cmdResultBadge must exist in both Overview and Climate panels");
-  const cliCmdBar = cliPanel.querySelector('[data-bind="climateCmdBar"]');
-  assert.ok(cliCmdBar);
-  assert.equal(cliCmdBar.hidden, false);
-  assert.equal(cliCmdBar.classList.contains("hidden"), false);
-  for (const b of badges) {
-    assert.equal(b.classList.contains("hidden"), false);
-    assert.equal(b.classList.contains("is-coral"), true);
-    assert.equal(b.classList.contains("is-emerald"), false);
-    assert.ok(b.textContent.startsWith("Errore invio comando · "));
-    assert.ok(b.textContent.endsWith("✕"));
-  }
-  assert.equal(badges[0].textContent, badges[1].textContent);
+  assert.equal(badges.length, 1, "cmdResultBadge must exist only in Overview/Plancia");
+  assert.equal(cliPanel.querySelector('[data-bind="climateCmdBar"]'), null, "climateCmdBar must be removed");
+  assert.equal(cliPanel.querySelector('[data-bind="cmdResultBadge"]'), null, "Climate panel must not render cmdResultBadge");
+  assert.equal(badges[0].classList.contains("hidden"), false);
+  assert.equal(badges[0].classList.contains("is-coral"), true);
+  assert.equal(badges[0].classList.contains("is-emerald"), false);
+  assert.ok(badges[0].textContent.startsWith("Errore invio comando · "));
+  assert.ok(badges[0].textContent.endsWith("✕"));
+
+  // AB-LEP-014: [data-action-id="open_stats"] must NEVER be disabled by car_in_use
+  const openStatsBtn = card.shadowRoot.querySelector('[data-action-id="open_stats"]');
+  assert.ok(openStatsBtn, "Hero stats button [data-action-id='open_stats'] must exist");
+  assert.equal(openStatsBtn.disabled, false, "open_stats must remain enabled when car_in_use is true");
+  assert.equal(openStatsBtn.classList.contains("is-car-in-use"), false);
+  openStatsBtn.click();
+  const statsDlg = card.shadowRoot.querySelector('dialog[data-bind="statsDialog"]');
+  assert.ok(statsDlg && statsDlg.open, "Clicking open_stats while car_in_use is true must open statsDialog");
+  card.shadowRoot.querySelector('[data-dialog-action="close-stats"]').click();
+  assert.equal(statsDlg.open, false);
 
   // All comfort buttons in Climate tab disabled + aria-disabled + .is-car-in-use
   const wideControls = [
@@ -2855,11 +2980,7 @@ test("v1.25.0 Climate tab car_in_use banner + disabled comfort controls + cmdRes
 
   assert.equal(banner.hidden, true);
   assert.equal(banner.classList.contains("hidden"), true);
-  assert.equal(cliCmdBar.hidden, true);
-  assert.equal(cliCmdBar.classList.contains("hidden"), true);
-  for (const b of badges) {
-    assert.equal(b.classList.contains("hidden"), true);
-  }
+  assert.equal(badges[0].classList.contains("hidden"), true);
   for (const btn of [...wideControls, ...narrowControls]) {
     assert.equal(btn.disabled, false);
     assert.equal(btn.getAttribute("aria-disabled"), "false");
@@ -3147,8 +3268,11 @@ test("LepasCard Overview omits consSection and Live charging omits fastPortBadge
     "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "In ricarica"),
   }, "it");
   const card = createCard({ layout: "compact", default_tab: "overview" }, hass);
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consSection"]'), null, "LepasCard Overview must not render consSection");
-  assert.equal(card.shadowRoot.querySelector(".cons-section"), null, "LepasCard must not render .cons-section");
+  const overviewPanel = card.shadowRoot.querySelector('[data-panel="overview"]');
+  assert.ok(overviewPanel);
+  assert.equal(overviewPanel.querySelector('[data-bind="consSection"]'), null, "LepasCard Overview must not render consSection");
+  assert.equal(overviewPanel.querySelector(".cons-section"), null, "LepasCard Overview must not render .cons-section");
+  assert.ok(card.shadowRoot.querySelector('dialog[data-bind="statsDialog"] [data-bind="consSection"]'), "Stats modal must host consSection");
   assert.equal(card.shadowRoot.querySelector('[data-bind="fastPortBadge"]'), null, "LepasCard Live charging must not render fastPortBadge");
   assert.equal(card.shadowRoot.querySelector('[data-bind="chgDaysPresetLbl"]'), null, "Scheduled charging must not render chgDaysPresetLbl");
 
@@ -3159,35 +3283,37 @@ test("LepasCard Overview omits consSection and Live charging omits fastPortBadge
   assert.equal(socModeLbl.textContent, "DC");
 });
 
-test("LepasStatsCard consumption section renders EV and Hybrid metrics, dispatches hass-more-info, handles BEV and translations", () => {
-  // 1. Italian (default makeFullHass) EV + Hybrid values and DOM placement
+test("LepasCard stats modal consumption section renders EV and Hybrid metrics, dispatches hass-more-info, handles BEV, empty stats and translations", () => {
+  // 1. Italian (default makeFullHass) EV + Hybrid values inside statsDialog
   const hassIt = makeFullHass({}, "it");
-  const card = createStatsCard({}, hassIt);
-  const consSection = card.shadowRoot.querySelector('[data-bind="consSection"]');
+  const card = createStatsOpenCard({}, hassIt);
+  const statsDlg = card.shadowRoot.querySelector('dialog[data-bind="statsDialog"]');
+  assert.ok(statsDlg && statsDlg.open, "statsDialog must open via [data-action-id='open_stats']");
+  const consSection = statsDlg.querySelector('[data-bind="consSection"]');
   const consEvRow = consSection.querySelector('[data-bind="consEvRow"]');
   const consHybridRow = consSection.querySelector('[data-bind="consHybridRow"]');
-  assert.ok(consSection && consEvRow && consHybridRow, "Consumption section and rows must exist in LepasStatsCard");
+  assert.ok(consSection && consEvRow && consHybridRow, "Consumption section and rows must exist inside statsDialog");
   assert.equal(consSection.classList.contains("hidden"), false);
   assert.equal(consEvRow.classList.contains("hidden"), false);
   assert.equal(consHybridRow.classList.contains("hidden"), false);
 
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv50Val"]').textContent, "18.2 kWh/100 km");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv100Val"]').textContent, "17.45 kWh/100 km");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consEv1000Val"]').textContent, "16.80 kWh/100 km");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consEvStartVal"]').textContent, "16.95 kWh/100 km");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb50Val"]').textContent, "6.4 L/100 km");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb100Val"]').textContent, "6.15 L/100 km");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb1000Val"]').textContent, "5.90 L/100 km");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="consHybStartVal"]').textContent, "6.05 L/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consEv50Val"]').textContent, "18.2 kWh/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consEv100Val"]').textContent, "17.45 kWh/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consEv1000Val"]').textContent, "16.80 kWh/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consEvStartVal"]').textContent, "16.95 kWh/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consHyb50Val"]').textContent, "6.4 L/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consHyb100Val"]').textContent, "6.15 L/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consHyb1000Val"]').textContent, "5.90 L/100 km");
+  assert.equal(statsDlg.querySelector('[data-bind="consHybStartVal"]').textContent, "6.05 L/100 km");
 
   // 2. Click (including inner child span) and Enter key dispatch hass-more-info with exact entityId
   const moreInfoEvents = [];
   card.addEventListener("hass-more-info", (ev) => {
     moreInfoEvents.push(ev.detail.entityId);
   });
-  const ev100Cell = card.shadowRoot.querySelector('[data-bind="consEv100Cell"]');
-  const ev100ValSpan = card.shadowRoot.querySelector('[data-bind="consEv100Val"]');
-  const hybStartCell = card.shadowRoot.querySelector('[data-bind="consHybStartCell"]');
+  const ev100Cell = statsDlg.querySelector('[data-bind="consEv100Cell"]');
+  const ev100ValSpan = statsDlg.querySelector('[data-bind="consEv100Val"]');
+  const hybStartCell = statsDlg.querySelector('[data-bind="consHybStartCell"]');
   assert.equal(ev100Cell.tagName, "DIV");
   assert.equal(ev100Cell.getAttribute("role"), "button");
   assert.equal(ev100Cell.getAttribute("tabindex"), "0");
@@ -3239,6 +3365,25 @@ test("LepasStatsCard consumption section renders EV and Hybrid metrics, dispatch
   }, "it");
   assert.equal(card.shadowRoot.querySelector('[data-bind="consSection"]'), null);
 
+  // Neither charging nor consumption sensors renders statsEmptyCard with t.statsNoData
+  card.hass = makeFullHass({
+    "sensor.lepas_charging_energy_today": null,
+    "sensor.lepas_charging_energy_month": null,
+    "sensor.lepas_charging_energy_year": null,
+    "sensor.lepas_charging_energy_from_start": null,
+    "sensor.lepas_average_energy_consumption": null,
+    "sensor.lepas_ev_consumption_100km": null,
+    "sensor.lepas_ev_consumption_1000km": null,
+    "sensor.lepas_ev_consumption_from_start": null,
+    "sensor.lepas_average_fuel_consumption": null,
+    "sensor.lepas_hybrid_consumption_100km": null,
+    "sensor.lepas_hybrid_consumption_1000km": null,
+    "sensor.lepas_hybrid_consumption_from_start": null,
+  }, "it");
+  const emptyCard = card.shadowRoot.querySelector('[data-bind="statsEmptyCard"]');
+  assert.ok(emptyCard, "statsEmptyCard must render when no stats sensors exist");
+  assert.equal(emptyCard.textContent, LepasCard._helpers.getTexts("it").statsNoData);
+
   // 5. Translations across it / en / nl and responsive CSS check
   const expectedByLang = {
     it: { title: "Consumi medi", ev: "EV", hybrid: "Carburante", start: "Da inizio" },
@@ -3246,7 +3391,7 @@ test("LepasStatsCard consumption section renders EV and Hybrid metrics, dispatch
     nl: { title: "Gemiddeld verbruik", ev: "EV", hybrid: "Brandstof", start: "Vanaf start" },
   };
   for (const [lang, exp] of Object.entries(expectedByLang)) {
-    const locCard = createStatsCard({}, makeFullHass({}, lang));
+    const locCard = createStatsOpenCard({}, makeFullHass({}, lang));
     const sec = locCard.shadowRoot.querySelector('[data-bind="consSection"]');
     const text = sec.textContent;
     assert.ok(text.includes(exp.title), `[${lang}] missing section title ${exp.title}`);
@@ -3311,7 +3456,7 @@ test("Overview automatic_updates switch renders 1-tap toggle, reflects ON/OFF st
   assert.equal(absentCard.shadowRoot.querySelector('[data-bind="autoUpdatesBtn"]'), null);
 });
 
-test("LepasStatsCard consumption unit toggles switch EV (kWh/100 <-> kWh/km) and Hybrid (L/100 <-> km/L) independently with zero-guard and persistence", () => {
+test("LepasCard stats modal consumption unit toggles switch EV (kWh/100 <-> kWh/km) and Hybrid (L/100 <-> km/L) independently with zero-guard and persistence", () => {
   const store = new Map();
   const prevStorage = globalThis.localStorage;
   globalThis.localStorage = {
@@ -3321,7 +3466,7 @@ test("LepasStatsCard consumption unit toggles switch EV (kWh/100 <-> kWh/km) and
   };
   try {
     const hass = makeFullHass({}, "it");
-    const card = createStatsCard({}, hass);
+    const card = createStatsOpenCard({}, hass);
     const moreInfoIds = [];
     card.addEventListener("hass-more-info", (ev) => moreInfoIds.push(ev.detail.entityId));
 
@@ -3371,7 +3516,7 @@ test("LepasStatsCard consumption unit toggles switch EV (kWh/100 <-> kWh/km) and
     assert.equal(card.shadowRoot.querySelector('[data-bind="consEv50Val"]').textContent, "0.000 kWh/km");
 
     // Independent persistence across new card instance + reverting Hybrid only
-    const card2 = createStatsCard({}, makeFullHass({}, "en"));
+    const card2 = createStatsOpenCard({}, makeFullHass({}, "en"));
     assert.equal(card2.shadowRoot.querySelector('[data-bind="consEvPerKmBtn"]').getAttribute("aria-pressed"), "true");
     assert.equal(card2.shadowRoot.querySelector('[data-bind="consHybPerKmBtn"]').getAttribute("aria-pressed"), "true");
     card2.shadowRoot.querySelector('[data-bind="consHybPer100Btn"]').click();
@@ -3383,14 +3528,14 @@ test("LepasStatsCard consumption unit toggles switch EV (kWh/100 <-> kWh/km) and
   }
 });
 
-test("LepasStatsCard fuel consumption cells render single metric without electric sub-line", () => {
+test("LepasCard stats modal fuel consumption cells render single metric without electric sub-line", () => {
   const hass = makeFullHass({
     "sensor.lepas_hybrid_consumption_100km": makeState("sensor.lepas_hybrid_consumption_100km", "6.15", {
       unit_of_measurement: "L/100 km",
       electric_consumption_kwh_100km: 2.4,
     }),
   }, "it");
-  const card = createStatsCard({}, hass);
+  const card = createStatsOpenCard({}, hass);
   assert.equal(card.shadowRoot.querySelector(".cons-cell-sub"), null);
   assert.equal(card.shadowRoot.querySelector('[data-bind="consHyb100Val"]').textContent, "6.15 L/100 km");
 });
@@ -3414,28 +3559,60 @@ test("Live charging power tile uses Power label (IT/EN/NL) and displays kW", () 
   assert.equal(card.shadowRoot.querySelector('[data-stat-val="chgPowerBadge"]').textContent, "2.2 kW");
 });
 
-test("LepasStatsCard metadata, window.customCards anti-duplication, Shadow DOM, and Matte Titanium tokens", () => {
-  assert.ok(LepasStatsCard, "LepasStatsCard custom element must be registered");
-  assert.ok(LepasStatsCardEditor, "LepasStatsCardEditor custom element must be registered");
-  assert.deepEqual(LepasStatsCard.getStubConfig(), { type: "custom:lepas-stats-card" });
-  assert.deepEqual(LepasStatsCard.getGridOptions(), { columns: 12, min_columns: 4, rows: "auto" });
+test("LepasCard integrated stats modal entry, DOM order, open/close/fallback, and Matte Titanium tokens", () => {
+  const card = createCard({}, makeFullHass({}, "it"));
+  const heroActions = card.shadowRoot.querySelector(".hero-overlay-top .hero-overlay-actions");
+  assert.ok(heroActions, ".hero-overlay-top must wrap right-side controls in .hero-overlay-actions");
+  const statsBtn = heroActions.querySelector('button.stats-btn[data-action-id="open_stats"]');
+  const socBtn = heroActions.querySelector('[data-bind="socBtn"]');
+  assert.ok(statsBtn && socBtn, ".hero-overlay-actions must contain .stats-btn and .soc-btn");
+  assert.ok(statsBtn.querySelector("svg"), ".stats-btn must contain inline SVG chart icon");
+  assert.equal(statsBtn.getAttribute("aria-label"), "Statistiche");
+  assert.equal(statsBtn.getAttribute("title"), "Statistiche Lepas");
 
-  const editor = LepasStatsCard.getConfigElement();
-  assert.equal(editor.tagName, "LEPAS-STATS-CARD-EDITOR");
+  const dialogs = card.shadowRoot.querySelectorAll("dialog");
+  assert.equal(dialogs.length, 2, "Shadow DOM must render statsDialog and confirmDialog");
+  assert.equal(dialogs[0].getAttribute("data-bind"), "statsDialog", "statsDialog must precede confirmDialog");
+  assert.equal(dialogs[1].getAttribute("data-bind"), "confirmDialog");
 
-  const statsRegs = window.customCards.filter((c) => c.type === "lepas-stats-card");
-  assert.equal(statsRegs.length, 1, "customCards must register exactly one 'lepas-stats-card' entry");
-  assert.equal(
-    window.customCards.some((c) => c.type === "custom:lepas-stats-card"),
-    false,
-    "window.customCards must NOT include 'custom:' prefix in type"
-  );
+  const statsDlg = dialogs[0];
+  assert.equal(statsDlg.open, false, "statsDialog must start closed");
+  statsBtn.click();
+  assert.equal(statsDlg.open, true, "Clicking .stats-btn must open statsDialog");
 
-  const card = createStatsCard({}, makeFullHass({}, "it"));
-  assert.equal(card.getCardSize(), 4);
-  assert.ok(card.shadowRoot, "LepasStatsCard must use Shadow DOM");
+  // Close via header close button
+  card.shadowRoot.querySelector('[data-dialog-action="close-stats"]').click();
+  assert.equal(statsDlg.open, false);
+
+  // Close via Esc ('cancel' event) & drag-safe outside click
+  statsBtn.click();
+  assert.equal(statsDlg.open, true);
+  const escEv = new MiniEvent("cancel", { cancelable: true });
+  statsDlg.dispatchEvent(escEv);
+  assert.equal(escEv.defaultPrevented, true);
+  assert.equal(statsDlg.open, false);
+
+  statsBtn.click();
+  assert.equal(statsDlg.open, true);
+  statsDlg.dispatchEvent(new MiniEvent("pointerdown", { clientX: 150, clientY: 150 }));
+  statsDlg.dispatchEvent(new MiniEvent("pointerup", { clientX: 10, clientY: 10 }));
+  assert.equal(statsDlg.open, true, "Drag starting inside statsDialog must not close on outside pointerup");
+  statsDlg.dispatchEvent(new MiniEvent("pointerdown", { clientX: 10, clientY: 10 }));
+  statsDlg.dispatchEvent(new MiniEvent("pointerup", { clientX: 10, clientY: 10 }));
+  assert.equal(statsDlg.open, false, "Backdrop click outside statsDialog must close it");
+
+  // Older WebView fallback (no showModal / no close)
+  statsDlg.showModal = undefined;
+  statsDlg.close = undefined;
+  statsBtn.click();
+  assert.equal(statsDlg.hasAttribute("open"), true);
+  card.shadowRoot.querySelector('[data-dialog-action="close-stats"]').click();
+  assert.equal(statsDlg.hasAttribute("open"), false);
+
   const styleText = card.shadowRoot.querySelector("style")?.textContent || "";
-  assert.ok(styleText.includes("container-type: inline-size"), "Must declare container-type: inline-size");
+  assert.ok(styleText.includes(".stats-btn"), "CSS must style .stats-btn");
+  assert.ok(styleText.includes(".stats-dialog"), "CSS must style .stats-dialog");
+  assert.ok(styleText.includes("pointer-events: auto"), "CSS must allow pointer-events on hero buttons");
   assert.ok(!styleText.includes(":host-context("), "Must NOT use :host-context()");
   assert.ok(!styleText.toUpperCase().includes("#00D2FF"), "Must NOT use neon cyan #00D2FF");
   for (const token of ["#111317", "#181B20", "#21252C", "#F3F4F6", "#34D399", "#60A5FA", "#F59E0B", "#EF4444"]) {
@@ -3443,9 +3620,9 @@ test("LepasStatsCard metadata, window.customCards anti-duplication, Shadow DOM, 
   }
 });
 
-test("LepasStatsCard charging KPIs, Tutte/Casa/Fuori scope toggle, sub-rows, and hass-more-info", () => {
+test("LepasCard stats modal charging KPIs, Tutte/Casa/Fuori scope toggle, sub-rows, and hass-more-info", () => {
   const hass = makeFullHass({}, "it");
-  const card = createStatsCard({}, hass);
+  const card = createStatsOpenCard({}, hass);
   const moreInfo = [];
   card.addEventListener("hass-more-info", (ev) => moreInfo.push(ev.detail.entityId));
 
@@ -3488,22 +3665,16 @@ test("LepasStatsCard charging KPIs, Tutte/Casa/Fuori scope toggle, sub-rows, and
   assert.equal(card.shadowRoot.querySelector('[data-bind="chgYearVal"]').textContent, "102.20 kWh");
   assert.equal(card.shadowRoot.querySelector('[data-bind="chgStartVal"]').textContent, "155.50 kWh");
   assert.equal(moreInfo.length, 2, "Scope switches must not emit hass-more-info");
-
-  // default_scope: "home" config initializes on home
-  const homeCard = createStatsCard({ default_scope: "home" }, makeFullHass({}, "en"));
-  assert.equal(homeCard.shadowRoot.querySelector('[data-stats-scope="home"]').getAttribute("aria-pressed"), "true");
-  assert.equal(homeCard.shadowRoot.querySelector('[data-bind="chgTodayVal"]').textContent, "8.20 kWh");
 });
 
-test("LepasStatsCard SVG bar chart renders 7g/30g/12m stacked bars, tooltips, empty state, and show_chart: false", () => {
+test("LepasCard stats modal SVG bar chart renders 7g/30g/12m stacked bars, tooltips, and empty state", () => {
   const hass = makeFullHass({}, "it");
-  const card = createStatsCard({}, hass);
+  const card = createStatsOpenCard({}, hass);
 
   // Default 7d slices last 7 days from daily_series (which has 9 entries -> 7 bars)
   assert.equal(card.shadowRoot.querySelector('[data-stats-chart="7d"]').getAttribute("aria-pressed"), "true");
   let cols = card.shadowRoot.querySelectorAll("[data-bar-idx]");
   assert.equal(cols.length, 7);
-  // 2026-11-17 has total 6.0, home 4.0, away 1.5 -> residual 0.5 (#9CA3AF)
   const homeSegs = card.shadowRoot.querySelectorAll('rect[data-bar-segment="home"]');
   const awaySegs = card.shadowRoot.querySelectorAll('rect[data-bar-segment="away"]');
   const otherSegs = card.shadowRoot.querySelectorAll('rect[data-bar-segment="other"]');
@@ -3557,39 +3728,49 @@ test("LepasStatsCard SVG bar chart renders 7g/30g/12m stacked bars, tooltips, em
   }, "it");
   assert.ok(card.shadowRoot.querySelector('[data-bind="statsChartEmpty"]'));
   assert.equal(card.shadowRoot.querySelector("svg.stats-chart-svg"), null);
-
-  // show_chart: false hides chart box
-  const noChartCard = createStatsCard({ show_chart: false }, makeFullHass({}, "it"));
-  assert.equal(noChartCard.shadowRoot.querySelector('[data-bind="chartBox"]'), null);
 });
 
-test("LepasStatsCard reset buttons open confirm dialog, enforce in-flight double-click lock, handle cancel/errors/hide/disconnect", async () => {
+test("LepasCard stats reset buttons enforce confirmDialog isolation, in-flight lock, sync/async error surfacing in statsErrorBanner, and disconnect cleanup", async () => {
   let resolvePending = null;
-  let rejectNext = false;
+  let failureMode = "none";
   const hass = makeFullHass({}, "it");
   hass.callService = (domain, service, data) => {
     hass.calls.push({ domain, service, data });
-    if (rejectNext) return Promise.reject(new Error("Reset timeout"));
+    if (failureMode === "reject") return Promise.reject(new Error("Reset timeout"));
+    if (failureMode === "syncThrow") throw new Error("Sync reset crash");
     return new Promise((resolve) => { resolvePending = resolve; });
   };
 
-  const card = createStatsCard({}, hass);
+  const card = createStatsOpenCard({}, hass);
+  const statsDlg = card.shadowRoot.querySelector('dialog[data-bind="statsDialog"]');
   const dlg = card.shadowRoot.querySelector('dialog[data-bind="confirmDialog"]');
   const confirmBtn = dlg.querySelector('[data-dialog-action="confirm"]');
   const cancelBtn = dlg.querySelector('[data-dialog-action="cancel"]');
-  const rstChgBtn = card.shadowRoot.querySelector('[data-stats-reset="charging"]');
-  const rstConsBtn = card.shadowRoot.querySelector('[data-stats-reset="consumption"]');
-  assert.ok(dlg && confirmBtn && cancelBtn && rstChgBtn && rstConsBtn);
+  const rstChgBtn = statsDlg.querySelector('[data-stats-reset="charging"]');
+  const rstConsBtn = statsDlg.querySelector('[data-stats-reset="consumption"]');
+  const statsErrBanner = statsDlg.querySelector('[data-bind="statsErrorBanner"]');
+  const statsErrText = statsDlg.querySelector('[data-bind="statsErrorText"]');
+  assert.ok(statsDlg && dlg && confirmBtn && cancelBtn && rstChgBtn && rstConsBtn && statsErrBanner && statsErrText);
+  assert.equal(statsDlg.open, true);
 
-  // 1. Clicking reset charging opens dialog without calling service; cancel closes cleanly
+  // 1. Clicking reset charging opens confirmDialog on top without calling service; cancel/Esc/outside on statsDlg isolated
   rstChgBtn.click();
   assert.equal(dlg.open, true);
-  assert.equal(hass.calls.length, 0);
-  cancelBtn.click();
-  assert.equal(dlg.open, false);
+  assert.equal(statsDlg.open, true);
   assert.equal(hass.calls.length, 0);
 
-  // Escape (cancel event) & outside click close without service call
+  // Isolation: cancel and backdrop click dispatched on statsDlg while confirmDialog is open must NOT close statsDlg
+  statsDlg.dispatchEvent(new MiniEvent("cancel", { cancelable: true }));
+  statsDlg.dispatchEvent(new MiniEvent("pointerdown", { clientX: 10, clientY: 10 }));
+  statsDlg.dispatchEvent(new MiniEvent("pointerup", { clientX: 10, clientY: 10 }));
+  assert.equal(statsDlg.open, true, "statsDialog must ignore cancel/outside click while confirmDialog is open");
+
+  cancelBtn.click();
+  assert.equal(dlg.open, false);
+  assert.equal(statsDlg.open, true);
+  assert.equal(hass.calls.length, 0);
+
+  // Escape & outside click on confirmDialog close confirmDialog without service call
   rstChgBtn.click();
   assert.equal(dlg.open, true);
   dlg.dispatchEvent(new MiniEvent("cancel", { cancelable: true }));
@@ -3602,15 +3783,24 @@ test("LepasStatsCard reset buttons open confirm dialog, enforce in-flight double
   assert.equal(dlg.open, false);
   assert.equal(hass.calls.length, 0);
 
-  // 2. Confirm charging reset with in-flight double-click lock
+  // 2. Confirm charging reset with in-flight double-click / cancel / Esc / outside lock
   rstChgBtn.click();
   assert.equal(dlg.open, true);
   confirmBtn.click();
   assert.equal(confirmBtn.disabled, true, "Confirm button must be disabled while callService is in flight");
-  assert.equal(rstChgBtn.disabled, true, "Reset button must be disabled while callService is in flight");
-  // Double-click confirm & reset while in flight must NOT call service a second time
+  assert.equal(cancelBtn.disabled, true, "Cancel button must be disabled while callService is in flight");
+  assert.equal(rstChgBtn.disabled, true, "Charging reset button must be disabled while callService is in flight");
+  assert.equal(rstConsBtn.disabled, true, "Consumption reset button must be disabled while callService is in flight");
+
+  // Double-click confirm, click cancel, Esc, outside click, and programmatic close() must be ignored while inFlight
   confirmBtn.click();
+  cancelBtn.click();
   rstChgBtn.click();
+  dlg.dispatchEvent(new MiniEvent("cancel", { cancelable: true }));
+  dlg.dispatchEvent(new MiniEvent("pointerdown", { clientX: 5, clientY: 5 }));
+  dlg.dispatchEvent(new MiniEvent("pointerup", { clientX: 5, clientY: 5 }));
+  card._dialogCtrl.close("force-attempt");
+  assert.equal(dlg.open, true, "confirmDialog must stay open while inFlight");
   assert.equal(hass.calls.length, 1);
   assert.deepEqual(hass.calls[0], {
     domain: "button",
@@ -3622,8 +3812,11 @@ test("LepasStatsCard reset buttons open confirm dialog, enforce in-flight double
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(dlg.open, false, "Dialog must close once callService settles");
+  assert.equal(statsDlg.open, true, "statsDialog remains open after reset completes");
   assert.equal(confirmBtn.disabled, false);
+  assert.equal(cancelBtn.disabled, false);
   assert.equal(card.shadowRoot.querySelector('[data-stats-reset="charging"]').disabled, false);
+  assert.equal(card.shadowRoot.querySelector('[data-stats-reset="consumption"]').disabled, false);
 
   // 3. Confirm consumption reset
   rstConsBtn.click();
@@ -3640,30 +3833,47 @@ test("LepasStatsCard reset buttons open confirm dialog, enforce in-flight double
   await Promise.resolve();
   assert.equal(dlg.open, false);
 
-  // 4. Error handling: rejected callService unlocks buttons, closes dialog, shows error banner
-  rejectNext = true;
+  // 4. Async rejection: unlocks buttons, closes confirmDialog, surfaces error inside statsErrorBanner (dismissible)
+  failureMode = "reject";
   card.shadowRoot.querySelector('[data-stats-reset="charging"]').click();
   confirmBtn.click();
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(dlg.open, false);
   assert.equal(confirmBtn.disabled, false);
-  const errBanner = card.shadowRoot.querySelector('[role="alert"].error-banner');
-  assert.equal(errBanner.classList.contains("hidden"), false);
-  assert.ok(errBanner.textContent.includes("Reset timeout"));
+  assert.equal(cancelBtn.disabled, false);
+  assert.equal(rstChgBtn.disabled, false);
+  assert.equal(statsErrBanner.classList.contains("hidden"), false, "statsErrorBanner must appear inside statsDialog top-layer");
+  assert.ok(statsErrText.textContent.includes("Reset timeout"));
 
-  // 5. disconnectedCallback cleans up open dialog
+  // Dismiss error inside statsDialog
+  statsErrBanner.querySelector("[data-dismiss-error]").click();
+  assert.equal(statsErrBanner.classList.contains("hidden"), true);
+
+  // 5. Synchronous throw inside callService: releases inFlight, re-enables buttons, closes confirmDialog, surfaces error in statsErrorBanner
+  failureMode = "syncThrow";
+  card.shadowRoot.querySelector('[data-stats-reset="consumption"]').click();
+  assert.equal(dlg.open, true);
+  confirmBtn.click();
+  assert.equal(dlg.open, false);
+  assert.equal(card._dialogCtrl.inFlight, false);
+  assert.equal(confirmBtn.disabled, false);
+  assert.equal(cancelBtn.disabled, false);
+  assert.equal(rstConsBtn.disabled, false);
+  assert.equal(statsErrBanner.classList.contains("hidden"), false);
+  assert.ok(statsErrText.textContent.includes("Sync reset crash"));
+
+  // 6. disconnectedCallback cleans up both open dialogs
+  failureMode = "none";
   card.shadowRoot.querySelector('[data-stats-reset="charging"]').click();
   assert.equal(dlg.open, true);
+  assert.equal(statsDlg.open, true);
   card.disconnectedCallback();
   assert.equal(dlg.open, false);
+  assert.equal(statsDlg.open, false);
 
-  // 6. show_reset_buttons: false or missing button entities hides reset buttons
-  const noRstCard = createStatsCard({ show_reset_buttons: false }, makeFullHass({}, "it"));
-  assert.equal(noRstCard.shadowRoot.querySelector('[data-stats-reset="charging"]'), null);
-  assert.equal(noRstCard.shadowRoot.querySelector('[data-stats-reset="consumption"]'), null);
-
-  const missingBtnCard = createStatsCard({}, makeFullHass({
+  // 7. Missing button entities omit reset buttons inside statsDialog
+  const missingBtnCard = createStatsOpenCard({}, makeFullHass({
     "button.lepas_reset_charging_from_start": null,
     "button.lepas_reset_consumption_from_start": null,
   }, "it"));
@@ -3671,75 +3881,7 @@ test("LepasStatsCard reset buttons open confirm dialog, enforce in-flight double
   assert.equal(missingBtnCard.shadowRoot.querySelector('[data-stats-reset="consumption"]'), null);
 });
 
-test("LepasStatsCardEditor renders controls, emits config-changed, and preserves extra YAML keys", () => {
-  const editor = LepasStatsCard.getConfigElement();
-  editor.hass = makeFullHass({}, "en");
-  editor.setConfig({
-    type: "custom:lepas-stats-card",
-    title: "Garage Stats",
-    default_scope: "all",
-    default_chart: "7d",
-    show_charging: true,
-    show_consumption: true,
-    show_chart: true,
-    show_reset_buttons: true,
-    prefix: "mycar_",
-    integration: "lepas",
-  });
-
-  const events = [];
-  editor.addEventListener("config-changed", (ev) => events.push(ev.detail.config));
-
-  const titleEl = editor.shadowRoot.querySelector('[data-field="title"]');
-  const scopeEl = editor.shadowRoot.querySelector('[data-field="default_scope"]');
-  const chartEl = editor.shadowRoot.querySelector('[data-field="default_chart"]');
-  const showChg = editor.shadowRoot.querySelector('[data-field="show_charging"]');
-  const showCons = editor.shadowRoot.querySelector('[data-field="show_consumption"]');
-  const showChart = editor.shadowRoot.querySelector('[data-field="show_chart"]');
-  const showReset = editor.shadowRoot.querySelector('[data-field="show_reset_buttons"]');
-  assert.ok(titleEl && scopeEl && chartEl && showChg && showCons && showChart && showReset);
-  assert.equal(showChg.checked, true);
-  assert.equal(showCons.checked, true);
-  assert.equal(showChart.checked, true);
-  assert.equal(showReset.checked, true);
-
-  titleEl.value = "My Charging";
-  titleEl.dispatchEvent(new Event("input", { bubbles: true }));
-  assert.equal(events[0].title, "My Charging");
-  assert.equal(events[0].prefix, "mycar_");
-
-  scopeEl.value = "home";
-  scopeEl.dispatchEvent(new Event("change", { bubbles: true }));
-  assert.equal(events[1].default_scope, "home");
-
-  chartEl.value = "12m";
-  chartEl.dispatchEvent(new Event("change", { bubbles: true }));
-  assert.equal(events[2].default_chart, "12m");
-
-  showReset.checked = false;
-  showReset.dispatchEvent(new Event("change", { bubbles: true }));
-  assert.equal(events[3].show_reset_buttons, false);
-
-  showChart.checked = false;
-  showChart.dispatchEvent(new Event("change", { bubbles: true }));
-  assert.equal(events[4].show_chart, false);
-
-  showCons.checked = false;
-  showCons.dispatchEvent(new Event("change", { bubbles: true }));
-  assert.equal(events[5].show_consumption, false);
-
-  showChg.checked = false;
-  showChg.dispatchEvent(new Event("change", { bubbles: true }));
-  assert.equal(events[6].show_charging, false);
-  assert.equal(events[6].integration, "lepas");
-
-  // Empty title removes title key cleanly
-  titleEl.value = "";
-  titleEl.dispatchEvent(new Event("change", { bubbles: true }));
-  assert.equal(Object.prototype.hasOwnProperty.call(events[7], "title"), false);
-});
-
-test("LepasStatsCard XSS escaping, zero PII leakage, and IT/EN/NL i18n", () => {
+test("LepasCard stats modal XSS escaping, zero PII leakage, and IT/EN/NL i18n", () => {
   const payload = '<img src=x onerror=alert(1)><script>alert("xss")</script>';
   const hass = makeFullHass({
     "sensor.lepas_charging_energy_today": makeState("sensor.lepas_charging_energy_today", "5.00", {
@@ -3751,31 +3893,118 @@ test("LepasStatsCard XSS escaping, zero PII leakage, and IT/EN/NL i18n", () => {
       ],
     }),
   }, "en");
-  const card = createStatsCard({ title: payload }, hass);
+  const card = createStatsOpenCard({ title: payload }, hass);
+  const statsDlg = card.shadowRoot.querySelector('dialog[data-bind="statsDialog"]');
 
   assert.equal(card.shadowRoot.querySelector("script"), null, "Must never inject <script>");
   assert.equal(card.shadowRoot.querySelector("img[onerror]"), null, "Must never inject <img onerror>");
   assert.equal(card.shadowRoot.querySelector("[onload]"), null, "Must never inject onload attribute in SVG");
-  assert.equal(card.shadowRoot.querySelector('[data-bind="statsTitle"]').textContent, payload);
 
-  const html = card.shadowRoot.innerHTML;
-  assert.ok(!html.includes("L1234567890ABCDEF"), "VIN must never appear in LepasStatsCard DOM");
-  assert.ok(!html.includes("45.464211"), "Latitude must never appear in LepasStatsCard DOM");
-  assert.ok(!html.includes("9.189982"), "Longitude must never appear in LepasStatsCard DOM");
+  const html = statsDlg.innerHTML;
+  assert.ok(!html.includes("L1234567890ABCDEF"), "VIN must never appear in statsDialog DOM");
+  assert.ok(!html.includes("45.464211"), "Latitude must never appear in statsDialog DOM");
+  assert.ok(!html.includes("9.189982"), "Longitude must never appear in statsDialog DOM");
 
   const i18nChecks = {
-    it: { title: "Statistiche Lepas", chg: "Ricarica", all: "Tutte", home: "Casa", away: "Fuori", today: "Oggi", month: "Mese", year: "Anno", start: "Da inizio", c7: "7g", c30: "30g" },
-    en: { title: "Lepas Statistics", chg: "Charging", all: "All", home: "Home", away: "Away", today: "Today", month: "Month", year: "Year", start: "From start", c7: "7d", c30: "30d" },
-    nl: { title: "Lepas Statistieken", chg: "Laden", all: "Alle", home: "Thuis", away: "Onderweg", today: "Vandaag", month: "Maand", year: "Jaar", start: "Vanaf start", c7: "7d", c30: "30d" },
+    it: { btn: "Statistiche", close: "Chiudi", title: "Statistiche Lepas", chg: "Ricarica", all: "Tutte", home: "Casa", away: "Fuori", today: "Oggi", month: "Mese", year: "Anno", start: "Da inizio", c7: "7g", c30: "30g" },
+    en: { btn: "Statistics", close: "Close", title: "Lepas Statistics", chg: "Charging", all: "All", home: "Home", away: "Away", today: "Today", month: "Month", year: "Year", start: "From start", c7: "7d", c30: "30d" },
+    nl: { btn: "Statistieken", close: "Sluiten", title: "Lepas Statistieken", chg: "Laden", all: "Alle", home: "Thuis", away: "Onderweg", today: "Vandaag", month: "Maand", year: "Jaar", start: "Vanaf start", c7: "7d", c30: "30d" },
   };
   for (const [lang, exp] of Object.entries(i18nChecks)) {
-    const locCard = createStatsCard({}, makeFullHass({}, lang));
-    const txt = locCard.shadowRoot.textContent;
-    for (const v of Object.values(exp)) {
-      assert.ok(txt.includes(v), `[${lang}] LepasStatsCard missing translation '${v}'`);
+    const hTexts = LepasCard._helpers.getTexts(lang);
+    assert.equal(hTexts.statsBtnLabel, exp.btn);
+    assert.equal(hTexts.closeDialog, exp.close);
+    const locCard = createStatsOpenCard({}, makeFullHass({}, lang));
+    const dlgTxt = locCard.shadowRoot.querySelector('dialog[data-bind="statsDialog"]').textContent;
+    for (const v of [exp.title, exp.chg, exp.all, exp.home, exp.away, exp.today, exp.month, exp.year, exp.start, exp.c7, exp.c30]) {
+      assert.ok(dlgTxt.includes(v), `[${lang}] statsDialog missing translation '${v}'`);
     }
   }
 });
+
+test("resolveClimateDurationOptions and dynamic climate duration chips align with allowed_durations and runtime updates", async () => {
+  const h = LepasCard._helpers;
+  assert.equal(typeof h.resolveClimateDurationOptions, "function", "resolveClimateDurationOptions must be exposed on _helpers");
+
+  // Supports both .attributes and .a, deduplicates/sorts, and rejects booleans/floats/zero/negatives/strings
+  assert.deepEqual(
+    h.resolveClimateDurationOptions({ attributes: { allowed_durations: [15, 5, 10, 5, true, false, 7.5, 0, -5, "20"] } }),
+    [5, 10, 15]
+  );
+  assert.deepEqual(
+    h.resolveClimateDurationOptions({ a: { allowed_durations: [20, 10] } }),
+    [10, 20]
+  );
+
+  // Fallback without allowed_durations uses [5, 10, 15, 20, 25, 30] clamped to [min, max] or [min, max] deduped
+  assert.deepEqual(
+    h.resolveClimateDurationOptions({ attributes: { min: 5, max: 30 } }),
+    [5, 10, 15, 20, 25, 30]
+  );
+  assert.deepEqual(
+    h.resolveClimateDurationOptions({ attributes: { min: 10, max: 20 } }),
+    [10, 15, 20]
+  );
+  assert.deepEqual(
+    h.resolveClimateDurationOptions({ attributes: { min: 12, max: 12 } }),
+    [12]
+  );
+  assert.deepEqual(
+    h.resolveClimateDurationOptions({ attributes: { min: 12, max: 14 } }),
+    [12, 14]
+  );
+  assert.deepEqual(h.resolveClimateDurationOptions(null), [5, 10, 15, 20, 25, 30]);
+
+  // Rendered chips with allowed_durations: [5, 10, 15] show only 5m, 10m, 15m
+  const hassLimited = makeFullHass({
+    "number.lepas_climate_duration": makeState("number.lepas_climate_duration", "15", {
+      min: 5,
+      max: 15,
+      step: 5,
+      allowed_durations: [5, 10, 15],
+    }),
+  }, "it");
+  const card = createCard({ layout: "compact", default_tab: "climate" }, hassLimited);
+  const chipValues = () => Array.from(card.shadowRoot.querySelectorAll('[data-action-id="climate_duration"]'))
+    .map((b) => Number(b.getAttribute("data-value")));
+
+  assert.deepEqual(chipValues(), [5, 10, 15]);
+  const chip15 = card.shadowRoot.querySelector('[data-action-id="climate_duration"][data-value="15"]');
+  assert.equal(chip15.classList.contains("is-active"), true);
+  card.shadowRoot.querySelector('[data-action-id="climate_duration"][data-value="10"]').click();
+  await Promise.resolve();
+  assert.deepEqual(hassLimited.calls[0], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_climate_duration", value: 10 },
+  });
+
+  // Runtime update of allowed_durations rebuilds chips & action map automatically
+  const hassExpanded = makeFullHass({
+    "number.lepas_climate_duration": makeState("number.lepas_climate_duration", "20", {
+      min: 5,
+      max: 20,
+      step: 5,
+      allowed_durations: [5, 10, 15, 20],
+    }),
+  }, "it");
+  card.hass = hassExpanded;
+  assert.deepEqual(chipValues(), [5, 10, 15, 20]);
+  card.shadowRoot.querySelector('[data-action-id="climate_duration"][data-value="20"]').click();
+  await Promise.resolve();
+  assert.deepEqual(hassExpanded.calls[0], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_climate_duration", value: 20 },
+  });
+
+  // Fallback without allowed_durations renders [5, 10, 15, 20, 25, 30]
+  const fallbackCard = createCard({ layout: "compact", default_tab: "climate" }, makeFullHass({}, "it"));
+  const fallbackVals = Array.from(fallbackCard.shadowRoot.querySelectorAll('[data-action-id="climate_duration"]'))
+    .map((b) => Number(b.getAttribute("data-value")));
+  assert.deepEqual(fallbackVals, [5, 10, 15, 20, 25, 30]);
+});
+
 
 
 

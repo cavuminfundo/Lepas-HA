@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.30.1 — 2026-11-19
+
+### 🇬🇧 English
+
+- **Integrated Statistics Modal inside `LepasCard` & Removal of `LepasStatsCard` (`lepas-card.js`)**: Consolidated all charging statistics (`All | Home | Away` scope toggle, 4 KPI tiles, `7d | 30d | 12m` SVG bar chart with tooltips, confirmed reset) and average consumption grids (EV + Hybrid with persistent unit toggles, `50 km`/`100 km`/`1000 km`/`From start` metrics, and confirmed reset) into an on-demand modal `<dialog>` opened from a compact Statistics icon button in the hero overlay (keeping the 4-tab layout and desktop Cockpit grid unchanged, with an internal modal error banner and in-flight reset lock). Removed `LepasStatsCard`, `LepasStatsCardEditor`, and the `lepas-stats-card` registration from `window.customCards` and `customElements`.
+- **Overview-Only Command Badge with 5-Minute Success TTL (`lepas-card.js`)**: Removed the duplicate `climateCmdBar` from the *Climate* tab so `cmdResultBadge` appears only in the *Overview* footer, suppressed idle `"In attesa"` / `"Waiting"` / `"Wachten"` placeholders, kept error outcomes persistently visible, and added a 5-minute TTL (plus auto-hide timer cleanup) for successful command outcomes.
+- **Climate Duration Capability Alignment (`number.py`, `lepas-card.js`)**: Aligned `number.lepas_climate_duration` (`min`, `max`, `step`, `allowed_durations` attribute, and restore/input snapping via `durata_ammessa`) and `LepasCard` duration chips with the vehicle's declared `maxAirDuration` capabilities (`5, 10, 15` min on Lepas L8) while preserving immediate `notify_schedule_changed()` updates on `sensor.lepas_next_departure`, and bumped card assets to `?v=1.30.1`.
+
+### 🇮🇹 Italiano
+
+- **Modale Statistiche Integrata in `LepasCard` e Rimozione `LepasStatsCard` (`lepas-card.js`)**: Integrate le statistiche di ricarica (selettore `Tutte | Casa | Fuori`, 4 KPI, grafico a barre SVG `7g | 30g | 12m` con tooltip, reset con conferma) e i consumi medi (EV + Ibrido con selettori unità persistenti, metriche `50 km`/`100 km`/`1000 km`/`Da inizio` e reset con conferma) in un popup `<dialog>` dedicato accessibile dal pulsante compatto Statistiche in alto nell'hero (mantenendo invariati i 4 tab e la griglia Cockpit desktop, con banner errori interno al modale e lock anti-doppio invio sul reset). Rimosse `LepasStatsCard`, `LepasStatsCardEditor` e la registrazione `lepas-stats-card` da `window.customCards` e `customElements`.
+- **Badge `Ultimo comando` Solo in Plancia con Scadenza 5 Minuti (`lepas-card.js`)**: Rimossa la barra duplicata `climateCmdBar` dal pannello *Clima* lasciando `cmdResultBadge` solo nel footer di *Plancia*, nascosti gli stati di attesa (`"In attesa"` / `"Waiting"` / `"Wachten"`), mantenuti sempre visibili eventuali errori, e introdotto un TTL di 5 minuti sui successi con timer automatico di pulizia.
+- **Allineamento Durata Clima alle Capability del Veicolo (`number.py`, `lepas-card.js`)**: Allineati `number.lepas_climate_duration` (`min`, `max`, `step`, attributo `allowed_durations` e snap in ripristino/impostazione tramite `durata_ammessa`) e i chip di durata nella scheda alle durate ammesse da `maxAirDuration` (`5, 10, 15` min su Lepas L8) preservando l'aggiornamento immediato di `sensor.lepas_next_departure`, con aggiornamento asset a `?v=1.30.1`.
+
 ## v1.30.0 — 2026-11-19
 
 ### 🇬🇧 English

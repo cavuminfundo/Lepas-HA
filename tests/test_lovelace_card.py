@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -123,15 +124,17 @@ def test_hero_png_assets_exist_valid_and_tracked() -> None:
 
 
 def test_card_version_and_matte_titanium_design_tokens() -> None:
-    """Verify v1.30.0 cache-busting query, customCards tag, and Matte Titanium OEM tokens."""
+    """Verify cache-busting query matches manifest.json, customCards tag, and Matte Titanium OEM tokens."""
     source = CARD_JS.read_text(encoding="utf-8")
+    manifest = json.loads((REPO / "custom_components" / "lepas" / "manifest.json").read_text(encoding="utf-8"))
+    version = manifest["version"]
 
-    assert re.search(r"\?v=1\.30\.0\b", source), "Expected ?v=1.30.0 cache-busting query in lepas-card.js"
+    assert re.search(rf"\?v={re.escape(version)}\b", source), (
+        f"Expected ?v={version} cache-busting query in lepas-card.js"
+    )
     assert re.search(r"\?v=\d+\.\d+\.\d+\b", source), "Expected semver ?v=X.Y.Z query in lepas-card.js"
     assert 'type: "lepas-card"' in source, "window.customCards must register type: 'lepas-card' (no custom: prefix)"
-    assert 'type: "lepas-stats-card"' in source, (
-        "window.customCards must register type: 'lepas-stats-card' (no custom: prefix)"
-    )
+    assert "lepas-stats-card" not in source, "lepas-stats-card must be completely removed from lepas-card.js"
     assert ":host-context" not in source, "lepas-card.js must NOT use :host-context()"
     assert "container-type: inline-size" in source, "lepas-card.js must declare container-type: inline-size"
 

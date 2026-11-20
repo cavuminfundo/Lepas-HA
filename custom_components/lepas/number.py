@@ -12,6 +12,9 @@ riscrivono sul coordinator (da cui climate/switch lo leggono).
 """
 from __future__ import annotations
 
+import itertools
+import math
+
 from homeassistant.components.number import (
     ENTITY_ID_FORMAT,
     NumberMode,
@@ -23,6 +26,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, entity_allowed
+from .core.commands import durata_ammessa
 from .entity import LepasEntity
 
 # (nome, suffix, attributo sul coordinator, min, max, step, default, unità, icona)
@@ -50,20 +54,73 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
     def __init__(self, coord, name, suffix, attr, vmin, vmax, step, default, unit, icon) -> None:
         super().__init__(coord, name, suffix, entity_id_format=ENTITY_ID_FORMAT)
         self._attr = attr
+        self._allowed_durations: list[int] = []
+        if attr == "clima_duration" and hasattr(coord, "air_durations"):
+            raw_allowed = coord.air_durations() or ()
+            allowed = sorted(
+                {
+                    int(d)
+                    for d in raw_allowed
+                    if isinstance(d, int) and not isinstance(d, bool) and d > 0
+                }
+            )
+            if allowed:
+                self._allowed_durations = allowed
+                vmin = min(allowed)
+                vmax = max(allowed)
+                if len(allowed) >= 2:
+                    diffs = [b - a for a, b in itertools.pairwise(allowed) if b > a]
+                    step = math.gcd(*diffs) if diffs else step
+                else:
+                    step = min(step, allowed[0])
         self._attr_native_min_value = vmin
         self._attr_native_max_value = vmax
         self._attr_native_step = step
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
-        self._value = float(default)
-        setattr(coord, attr, default)   # default subito disponibile ai consumatori
+        self._value = self._snap_value(default)
+        self._push()
+
+    def _snap_value(self, value: float) -> float:
+        fallback = (
+            self._value
+            if hasattr(self, "_value")
+            else (float(self._allowed_durations[0]) if self._allowed_durations else 0.0)
+        )
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            return fallback
+        if not math.isfinite(num):
+            return fallback
+        if not self._allowed_durations:
+            return num
+        corrected = durata_ammessa(num, self._allowed_durations)
+        return float(corrected) if corrected is not None else float(int(num))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, list[int]] | None:
+        if self._allowed_durations:
+            return {"allowed_durations": list(self._allowed_durations)}
+        return None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last = await self.async_get_last_number_data()
-        restored = last is not None and last.native_value is not None
-        if restored:
-            self._value = float(last.native_value)
+        raw_val = last.native_value if last is not None else None
+        if raw_val is None:
+            last_state = await self.async_get_last_state()
+            if last_state is not None:
+                raw_val = last_state.state
+        restored = False
+        if raw_val is not None:
+            try:
+                parsed = float(raw_val)
+            except (TypeError, ValueError, OverflowError):
+                parsed = math.nan
+            if math.isfinite(parsed):
+                self._value = self._snap_value(parsed)
+                restored = True
         self._push()
         if restored and hasattr(self.coordinator, "notify_schedule_changed"):
             self.coordinator.notify_schedule_changed()
@@ -85,7 +142,7 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
         return self._value
 
     async def async_set_native_value(self, value: float) -> None:
-        self._value = float(value)
+        self._value = self._snap_value(value)
         self._push()
         if hasattr(self.coordinator, "notify_schedule_changed"):
             self.coordinator.notify_schedule_changed(
