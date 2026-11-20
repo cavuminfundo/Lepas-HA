@@ -7,7 +7,7 @@
 
 # Lepas Connect (`custom_components/lepas`)
 
-## Home Assistant custom integration and async Python client for the **Lepas L8** connected vehicle platform (**Chery EU**, `com.chery.eu.lepas`) — currently **v1.32.0** (Home Assistant `2024.1.0+`, Python `3.13+`).
+## Home Assistant custom integration and async Python client for the **Lepas L8** connected vehicle platform (**Chery EU**, `com.chery.eu.lepas`) — currently **v1.32.1** (Home Assistant `2024.1.0+`, Python `3.13+`).
 
 > [!CAUTION]
 > **Active Development & Use at Your Own Risk Disclaimer**

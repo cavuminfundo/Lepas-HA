@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.32.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.32.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.32.0";
+  var CARD_VERSION = "1.32.1";
   var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -96,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.32.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.32.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.32.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.32.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.32.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.32.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.32.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.32.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.32.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.32.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.32.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.32.1";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -1488,6 +1488,19 @@
     return { points: points, maxTotal: maxTotal };
   }
 
+  function niceChartStep(maxVal) {
+    if (!(maxVal > 0)) return 1;
+    var target = maxVal / 2;
+    var mag = Math.pow(10, Math.floor(Math.log(target) / Math.LN10));
+    var norm = target / mag;
+    var steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+    var nice = 10;
+    for (var i = 0; i < steps.length; i += 1) {
+      if (norm <= steps[i] + 1e-9) { nice = steps[i]; break; }
+    }
+    return Number((nice * mag).toPrecision(6));
+  }
+
   function renderChargingChartSvg(chartData, scope, chartRange, t) {
     var points = chartData.points;
     var maxTotal = chartData.maxTotal;
@@ -1496,26 +1509,31 @@
     }
     var n = points.length;
     var width = 360;
+    var plotX = 42;
+    var plotW = width - plotX - 6;
     var baseY = 92;
     var plotH = 76;
-    var slotW = width / n;
+    var topY = baseY - plotH;
+    var yStep = niceChartStep(maxTotal);
+    var scaleMax = Number((yStep * 2).toPrecision(6));
+    var slotW = plotW / n;
     var barW = Math.max(4, Math.min(26, slotW * 0.62));
     var labelStep = n > 12 ? Math.ceil(n / 6) : 1;
 
     var colsHtml = points.map(function (pt, idx) {
-      var slotX = idx * slotW;
+      var slotX = plotX + idx * slotW;
       var barX = slotX + (slotW - barW) / 2;
       var curY = baseY;
       var segs = [];
 
       var pushSeg = function (val, cls, segName, color) {
         if (val <= 0) return;
-        var h = (val / maxTotal) * plotH;
+        var h = (val / scaleMax) * plotH;
         if (h < 1.5) h = 1.5;
         var y = curY - h;
-        if (y < 10) {
-          h = curY - 10;
-          y = 10;
+        if (y < topY) {
+          h = curY - topY;
+          y = topY;
         }
         curY = y;
         segs.push(
@@ -1547,14 +1565,27 @@
       var safeDetail = escapeHtml(detail);
       return '<g class="chart-bar-col" tabindex="0" role="button" data-bar-idx="' + idx + '" data-bar-detail="' + safeDetail + '" aria-label="' + safeDetail + '">' +
         "<title>" + safeDetail + "</title>" +
-        '<rect class="chart-bar-hit" x="' + slotX.toFixed(1) + '" y="8" width="' + slotW.toFixed(1) + '" height="88" fill="transparent"/>' +
+        '<rect class="chart-bar-hit" x="' + slotX.toFixed(1) + '" y="' + topY + '" width="' + slotW.toFixed(1) + '" height="' + (plotH + 4) + '" fill="transparent"/>' +
         segs.join("") +
         lblHtml +
       "</g>";
     }).join("");
 
+    var yTicks = [
+      { val: 0, y: baseY, grid: false },
+      { val: yStep, y: baseY - plotH / 2, grid: true },
+      { val: scaleMax, y: topY, grid: true },
+    ];
+    var yAxisHtml = '<line class="chart-yaxis" x1="' + plotX + '" y1="' + topY + '" x2="' + plotX + '" y2="' + baseY + '"/>' +
+      '<text class="chart-yaxis-unit" x="' + (plotX - 5) + '" y="8" text-anchor="end">kWh</text>' +
+      yTicks.map(function (tk) {
+        return (tk.grid ? '<line class="chart-gridline" x1="' + plotX + '" y1="' + tk.y + '" x2="' + (width - 6) + '" y2="' + tk.y + '"/>' : "") +
+          '<text class="chart-yaxis-lbl" x="' + (plotX - 5) + '" y="' + (tk.y + 3) + '" text-anchor="end">' + escapeHtml(formatCompactNumber(tk.val)) + "</text>";
+      }).join("");
+
     return '<svg class="stats-chart-svg" viewBox="0 0 360 118" role="img" aria-label="' + escapeHtml(t.statsChartAriaLabel) + '">' +
-      '<line class="chart-baseline" x1="0" y1="' + baseY + '" x2="360" y2="' + baseY + '"/>' +
+      yAxisHtml +
+      '<line class="chart-baseline" x1="' + plotX + '" y1="' + baseY + '" x2="' + (width - 6) + '" y2="' + baseY + '"/>' +
       colsHtml +
     "</svg>";
   }
@@ -2111,8 +2142,10 @@
       ".stats-chart-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px; padding: 2px; border-radius: 9px; }",
       ".stats-chart-stage { background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 10px; padding: 8px 8px 4px; min-height: 112px; display: flex; align-items: center; justify-content: center; }",
       ".stats-chart-svg { width: 100%; height: auto; display: block; overflow: visible; }",
-      ".chart-baseline { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }",
-      ".chart-axis-lbl { fill: #9CA3AF; font-size: 9px; font-weight: 600; }",
+      ".chart-baseline, .chart-yaxis { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }",
+      ".chart-gridline { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; stroke-dasharray: 2 3; }",
+      ".chart-axis-lbl, .chart-yaxis-lbl { fill: #9CA3AF; font-size: 9px; font-weight: 600; }",
+      ".chart-yaxis-unit { fill: #6B7280; font-size: 8px; font-weight: 700; }",
       ".chart-bar-col { cursor: pointer; outline: none; }",
       ".chart-bar-col:focus-visible .chart-bar-seg { stroke: #F3F4F6; stroke-width: 1; }",
       ".stats-chart-empty { font-size: 0.76rem; color: var(--lp-text-muted); text-align: center; padding: 20px 8px; }",

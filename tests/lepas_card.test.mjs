@@ -4135,6 +4135,14 @@ test("LepasCard stats modal SVG bar chart renders 7g/30g/12m stacked bars, toolt
   assert.equal(card.shadowRoot.querySelector('[data-stats-chart="7d"]').getAttribute("aria-pressed"), "true");
   let cols = card.shadowRoot.querySelectorAll("[data-bar-idx]");
   assert.equal(cols.length, 7);
+  const svg = card.shadowRoot.querySelector("svg.stats-chart-svg");
+  assert.ok(svg, "stats-chart-svg must render");
+  assert.ok(svg.querySelector("line.chart-yaxis"), "SVG chart must include a vertical Y-axis line");
+  assert.equal(svg.querySelectorAll("line.chart-gridline").length, 2, "SVG chart must include mid and top Y-axis gridlines");
+  const yUnit = svg.querySelector("text.chart-yaxis-unit");
+  assert.ok(yUnit && yUnit.textContent.trim() === "kWh", "Y-axis must display kWh unit legend");
+  const yTicks = [...svg.querySelectorAll("text.chart-yaxis-lbl")].map((el) => el.textContent.trim());
+  assert.deepEqual(yTicks, ["0", "8", "16"], "Y-axis ticks for maxTotal=14.0 must scale cleanly to 0 / 8 / 16");
   const homeSegs = card.shadowRoot.querySelectorAll('rect[data-bar-segment="home"]');
   const awaySegs = card.shadowRoot.querySelectorAll('rect[data-bar-segment="away"]');
   const otherSegs = card.shadowRoot.querySelectorAll('rect[data-bar-segment="other"]');
@@ -4142,6 +4150,9 @@ test("LepasCard stats modal SVG bar chart renders 7g/30g/12m stacked bars, toolt
   assert.equal(homeSegs[0].getAttribute("fill"), "#34D399");
   assert.equal(awaySegs[0].getAttribute("fill"), "#60A5FA");
   assert.equal(otherSegs[0].getAttribute("fill"), "#9CA3AF");
+  // Bar for 14.0 kWh (index 5) must scale proportionally to scaleMax=16 (y = 92 - (14/16)*76 = 25.5)
+  const peakTop = Math.min(...[...cols[5].querySelectorAll("rect.chart-bar-seg")].map((r) => Number(r.getAttribute("y"))));
+  assert.ok(Math.abs(peakTop - 25.5) < 0.6, `Expected 14.0 kWh bar top near y=25.5 on 0..16 scale, got ${peakTop}`);
 
   // Focusing / clicking a bar updates accessible tooltip without emitting hass-more-info
   const moreInfo = [];

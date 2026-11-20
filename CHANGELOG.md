@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.32.1 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Statistics Modal Chart Y-Axis & `kWh` Scale (`lepas-card.js`, `docs/images/lepas-card-stats.png`)**: Added a vertical Y-axis (`chart-yaxis`), subtle mid/top horizontal dashed gridlines (`chart-gridline`), proportional `niceChartStep` scaling (`0`, mid, and top ticks), and a `kWh` unit legend (`chart-yaxis-unit`) to the **Charged energy history** SVG bar chart inside the Statistics modal so bar heights are immediately readable without hovering. Updated `docs/images/lepas-card-stats.png` and bumped card assets to `?v=1.32.1`.
+
+### 🇮🇹 Italiano
+
+- **Asse Verticale `kWh` e Griglie nel Grafico Statistiche (`lepas-card.js`, `docs/images/lepas-card-stats.png`)**: Aggiunti asse verticale (`chart-yaxis`), griglie orizzontali tratteggiate intermedia e superiore (`chart-gridline`), scala proporzionale dinamica tramite `niceChartStep` (`0`, valore intermedio e massimo) e legenda unità **`kWh`** (`chart-yaxis-unit`) nel grafico SVG **Storico energia ricaricata** della modale Statistiche, così da rendere leggibili a colpo d'occhio i valori delle barre. Aggiornato `docs/images/lepas-card-stats.png` e aggiornati gli asset della card a `?v=1.32.1`.
+
 ## v1.32.0 — 2026-11-20
 
 ### 🇬🇧 English
