@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.2).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.3).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.30.2";
+  var CARD_VERSION = "1.30.3";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -84,13 +84,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.2",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.2",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.2",
-    black: "/lepas_card/lepas-hero-black.png?v=1.30.2",
-    white: "/lepas_card/lepas-hero-white.png?v=1.30.2",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.3",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.3",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.3",
+    black: "/lepas_card/lepas-hero-black.png?v=1.30.3",
+    white: "/lepas_card/lepas-hero-white.png?v=1.30.3",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.2";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.3";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -292,7 +292,7 @@
       batteryPreheatTime: "Orario preriscaldamento batteria",
       syncBatteryHeat: "Allinea alla partenza",
       batteryHeatHint: "Avvio batteria",
-      statsCardDefaultTitle: "Statistiche Lepas",
+      statsCardDefaultTitle: "Statistiche",
       statsChargingTitle: "Ricarica",
       statsScopeAll: "Tutte",
       statsPeriodToday: "Oggi",
@@ -503,7 +503,7 @@
       batteryPreheatTime: "Battery preheat time",
       syncBatteryHeat: "Align to departure",
       batteryHeatHint: "Battery heat",
-      statsCardDefaultTitle: "Lepas Statistics",
+      statsCardDefaultTitle: "Statistics",
       statsChargingTitle: "Charging",
       statsScopeAll: "All",
       statsPeriodToday: "Today",
@@ -714,7 +714,7 @@
       batteryPreheatTime: "Tijd batterij voorverwarming",
       syncBatteryHeat: "Afstemmen op vertrek",
       batteryHeatHint: "Accu start",
-      statsCardDefaultTitle: "Lepas Statistieken",
+      statsCardDefaultTitle: "Statistieken",
       statsChargingTitle: "Laden",
       statsScopeAll: "Alle",
       statsPeriodToday: "Vandaag",
@@ -1975,6 +1975,7 @@
       ".stats-chart-tooltip { font-size: 0.72rem; font-weight: 600; color: var(--lp-text); background: var(--lp-elevated); border: 1px solid var(--lp-border); border-radius: 8px; padding: 5px 9px; }",
       ".stats-empty-card { font-size: 0.82rem; color: var(--lp-text-secondary); text-align: center; padding: 18px 12px; }",
       ".status-pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; min-height: 30px; border-radius: 999px; background: rgba(17, 19, 23, 0.82); border: 1px solid var(--lp-border); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); font-size: 0.74rem; font-weight: 600; color: var(--lp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72%; }",
+      ".status-pill[data-e] { cursor: pointer; }",
       ".status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--lp-text-muted); }",
       ".status-dot.is-online { background: var(--lp-emerald); }",
       ".status-dot.is-offline { background: var(--lp-coral); }",
@@ -2000,8 +2001,11 @@
       ".soc-chg-ico { position: absolute; bottom: 4px; display: none; color: var(--lp-emerald); pointer-events: none; }",
       ".soc-btn.is-fast-charge .soc-chg-ico { color: var(--lp-amber); }",
       ".soc-chg-ico .lp-ico { width: 10px; height: 10px; }",
-      ".hero-meta { padding: 12px 14px; border-top: 1px solid var(--lp-border); background: var(--lp-surface); display: flex; flex-direction: column; gap: 3px; }",
+      ".hero-meta { padding: 12px 14px; border-top: 1px solid var(--lp-border); background: var(--lp-surface); display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }",
       ".hero-meta[data-device] { cursor: pointer; }",
+      ".hero-meta-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }",
+      ".hero-meta .stats-btn { background: var(--lp-elevated); }",
+      ".hero-meta .stats-btn:hover { background: var(--lp-elevated-hover); }",
       ".hero-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }",
       ".hero-title { font-size: 1.24rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; color: var(--lp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
       ".hero-sub { font-size: 0.8rem; color: var(--lp-text-secondary); min-height: 1.2em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }",
@@ -3409,7 +3413,6 @@
       if (this._isOn(lowFuel)) warns.push({ id: lowFuel.id, text: t.fuelLow, amber: true });
       var chgNeed = this._findDomain(items, "binary_sensor", "charge_needed_warning");
       if (this._isOn(chgNeed)) warns.push({ id: chgNeed.id, text: t.chargeNeeded, amber: true });
-      if (conn && conn.s && conn.s.state === "off") warns.push({ id: conn.id, text: t.offline, amber: false });
 
       var lockIsLocked = lock && lock.s && lock.s.state === "locked";
       var anyDoorOpen = this._isOn(doorFL) || this._isOn(doorFR) || this._isOn(doorRL) || this._isOn(doorRR) || this._isOn(hood);
@@ -3615,6 +3618,7 @@
           deviceId: deviceId,
           deviceRe: deviceRe,
           warns: warns,
+          conn: conn,
           bat: bat,
           evRange: evRange,
           totalRange: totalRange,
@@ -3855,24 +3859,26 @@
             '<div class="hero-stage">' +
               '<img class="hero-img" data-bind="heroImg" alt="" decoding="async" fetchpriority="high">' +
               '<div class="hero-overlay-top">' +
-                '<div class="status-pill">' +
+                '<div class="status-pill"' + (ctx.conn ? ' role="button" tabindex="0" data-e="' + self._h(ctx.conn.id) + '"' : "") + ">" +
                   '<span class="status-dot" data-bind="connDot"></span>' +
                   '<span data-bind="statusText"></span>' +
                 "</div>" +
                 '<div class="hero-overlay-actions">' +
-                  '<button type="button" class="stats-btn" data-action-id="open_stats" data-bind="statsBtn" aria-label="' + self._h(t.statsBtnLabel) + '" title="' + self._h(t.statsCardDefaultTitle) + '">' +
-                    svgIcon("chart", "btn-ico") +
-                  "</button>" +
                   socRingHtml +
                 "</div>" +
               "</div>" +
             "</div>" +
             '<div class="hero-meta" ' + (ctx.deviceId ? 'role="button" tabindex="0" data-device="' + self._h(ctx.deviceId) + '"' : "") + ">" +
-              '<div class="hero-meta-row">' +
-                '<div class="hero-title" data-bind="heroTitle"></div>' +
-                '<span class="badge hidden" data-bind="heroStateBadge"></span>' +
+              '<div class="hero-meta-main">' +
+                '<div class="hero-meta-row">' +
+                  '<div class="hero-title" data-bind="heroTitle"></div>' +
+                  '<span class="badge hidden" data-bind="heroStateBadge"></span>' +
+                "</div>" +
+                '<div class="hero-sub" data-bind="heroSub"></div>' +
               "</div>" +
-              '<div class="hero-sub" data-bind="heroSub"></div>' +
+              '<button type="button" class="stats-btn" data-action-id="open_stats" data-bind="statsBtn" aria-label="' + self._h(t.statsBtnLabel) + '" title="' + self._h(t.statsCardDefaultTitle) + '">' +
+                svgIcon("chart", "btn-ico") +
+              "</button>" +
             "</div>" +
           "</div>" +
           warnsHtml +

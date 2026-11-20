@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.30.3 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Hero Layout & Status Pill Deduplication (`lepas-card.js`)**: Removed the redundant `"Offline"` warning chip from `.warns-row` while making the top-left `.status-pill` clickable and keyboard-accessible (`more-info` on `binary_sensor.lepas_connection`), moved the Statistics modal button (`statsBtn`) from the top-right hero image overlay into the bottom-right `.hero-meta` bar (isolated from `data-device` navigation) so the SoC ring stands cleanly on the vehicle render, shortened `statsCardDefaultTitle` to `Statistics` / `Statistiche` / `Statistieken`, and bumped card assets to `?v=1.30.3`.
+
+### 🇮🇹 Italiano
+
+- **Pulizia Layout Hero e Rimozione Stato `Offline` Duplicato (`lepas-card.js`)**: Rimosso il chip rosso ridondante `Offline` da `.warns-row` rendendo cliccabile e accessibile da tastiera la pillola `.status-pill` in alto a sinistra (`more-info` su `binary_sensor.lepas_connection`), spostato il pulsante delle Statistiche (`statsBtn`) dall'angolo superiore destro della foto alla fascia inferiore `.hero-meta` in basso a destra (isolato dalla navigazione `data-device`) per lasciare pulito l'anello SoC sull'auto, abbreviato il titolo del modale `statsCardDefaultTitle` in `Statistiche` (`Statistics` / `Statistieken`), e aggiornati gli asset della card a `?v=1.30.3`.
+
 ## v1.30.2 — 2026-11-20
 
 ### 🇬🇧 English

@@ -3563,12 +3563,16 @@ test("LepasCard integrated stats modal entry, DOM order, open/close/fallback, an
   const card = createCard({}, makeFullHass({}, "it"));
   const heroActions = card.shadowRoot.querySelector(".hero-overlay-top .hero-overlay-actions");
   assert.ok(heroActions, ".hero-overlay-top must wrap right-side controls in .hero-overlay-actions");
-  const statsBtn = heroActions.querySelector('button.stats-btn[data-action-id="open_stats"]');
+  const heroMeta = card.shadowRoot.querySelector(".hero-meta");
+  assert.ok(heroMeta, ".hero-meta must exist");
+  const statsBtn = heroMeta.querySelector('button.stats-btn[data-action-id="open_stats"]');
   const socBtn = heroActions.querySelector('[data-bind="socBtn"]');
-  assert.ok(statsBtn && socBtn, ".hero-overlay-actions must contain .stats-btn and .soc-btn");
+  assert.ok(statsBtn, ".hero-meta must contain .stats-btn at bottom-right");
+  assert.equal(heroActions.querySelector('button.stats-btn[data-action-id="open_stats"]'), null, ".hero-overlay-actions must not contain .stats-btn");
+  assert.ok(socBtn, ".hero-overlay-actions must contain .soc-btn");
   assert.ok(statsBtn.querySelector("svg"), ".stats-btn must contain inline SVG chart icon");
   assert.equal(statsBtn.getAttribute("aria-label"), "Statistiche");
-  assert.equal(statsBtn.getAttribute("title"), "Statistiche Lepas");
+  assert.equal(statsBtn.getAttribute("title"), "Statistiche");
 
   const dialogs = card.shadowRoot.querySelectorAll("dialog");
   assert.equal(dialogs.length, 2, "Shadow DOM must render statsDialog and confirmDialog");
@@ -3577,7 +3581,10 @@ test("LepasCard integrated stats modal entry, DOM order, open/close/fallback, an
 
   const statsDlg = dialogs[0];
   assert.equal(statsDlg.open, false, "statsDialog must start closed");
+  const navEvents = [];
+  card.addEventListener("location-changed", () => navEvents.push("nav"));
   statsBtn.click();
+  assert.equal(navEvents.length, 0, "Clicking .stats-btn inside .hero-meta must not trigger device navigation");
   assert.equal(statsDlg.open, true, "Clicking .stats-btn must open statsDialog");
 
   // Close via header close button
@@ -3906,9 +3913,9 @@ test("LepasCard stats modal XSS escaping, zero PII leakage, and IT/EN/NL i18n", 
   assert.ok(!html.includes("9.189982"), "Longitude must never appear in statsDialog DOM");
 
   const i18nChecks = {
-    it: { btn: "Statistiche", close: "Chiudi", title: "Statistiche Lepas", chg: "Ricarica", all: "Tutte", home: "Casa", away: "Fuori", today: "Oggi", month: "Mese", year: "Anno", start: "Da inizio", c7: "7g", c30: "30g" },
-    en: { btn: "Statistics", close: "Close", title: "Lepas Statistics", chg: "Charging", all: "All", home: "Home", away: "Away", today: "Today", month: "Month", year: "Year", start: "From start", c7: "7d", c30: "30d" },
-    nl: { btn: "Statistieken", close: "Sluiten", title: "Lepas Statistieken", chg: "Laden", all: "Alle", home: "Thuis", away: "Onderweg", today: "Vandaag", month: "Maand", year: "Jaar", start: "Vanaf start", c7: "7d", c30: "30d" },
+    it: { btn: "Statistiche", close: "Chiudi", title: "Statistiche", chg: "Ricarica", all: "Tutte", home: "Casa", away: "Fuori", today: "Oggi", month: "Mese", year: "Anno", start: "Da inizio", c7: "7g", c30: "30g" },
+    en: { btn: "Statistics", close: "Close", title: "Statistics", chg: "Charging", all: "All", home: "Home", away: "Away", today: "Today", month: "Month", year: "Year", start: "From start", c7: "7d", c30: "30d" },
+    nl: { btn: "Statistieken", close: "Sluiten", title: "Statistieken", chg: "Laden", all: "Alle", home: "Thuis", away: "Onderweg", today: "Vandaag", month: "Maand", year: "Jaar", start: "Vanaf start", c7: "7d", c30: "30d" },
   };
   for (const [lang, exp] of Object.entries(i18nChecks)) {
     const hTexts = LepasCard._helpers.getTexts(lang);
@@ -4295,6 +4302,43 @@ test("formatCommandOutcome rejects ECU 0:95/result=0 and _callService clears _la
   assert.equal(badgePush.classList.contains("is-emerald"), false);
   assert.ok(badgePush.textContent.endsWith("✕"));
   cardPush.disconnectedCallback();
+});
+
+test("Offline status appears only in clickable .status-pill and never duplicates in .warns-row", () => {
+  const offlineHass = makeFullHass({
+    "binary_sensor.lepas_connection": makeState("binary_sensor.lepas_connection", "off"),
+    "binary_sensor.lepas_at_home": makeState("binary_sensor.lepas_at_home", "off"),
+  }, "it");
+  const card = createCard({}, offlineHass);
+
+  const pill = card.shadowRoot.querySelector(".hero-overlay-top .status-pill");
+  assert.ok(pill, ".status-pill must exist");
+  assert.equal(pill.getAttribute("data-e"), "binary_sensor.lepas_connection");
+  assert.equal(pill.getAttribute("role"), "button");
+  assert.equal(card.shadowRoot.querySelector('[data-bind="connDot"]').classList.contains("is-offline"), true);
+  assert.ok(card.shadowRoot.querySelector('[data-bind="statusText"]').textContent.startsWith("Offline"));
+
+  const warnChips = [...card.shadowRoot.querySelectorAll(".warns-row .warn-chip")];
+  assert.equal(
+    warnChips.some((c) => c.textContent.trim().toLowerCase() === "offline"),
+    false,
+    "Offline must NOT render a duplicate .warn-chip in .warns-row"
+  );
+
+  // Clicking .status-pill opens hass-more-info for binary_sensor.lepas_connection
+  const moreInfoIds = [];
+  card.addEventListener("hass-more-info", (ev) => moreInfoIds.push(ev.detail.entityId));
+  pill.click();
+  assert.deepEqual(moreInfoIds, ["binary_sensor.lepas_connection"]);
+
+  // Real vehicle warnings (e.g. low_battery) still render in .warns-row
+  const warnCard = createCard({}, makeFullHass({
+    "binary_sensor.lepas_connection": makeState("binary_sensor.lepas_connection", "off"),
+    "binary_sensor.lepas_low_battery": makeState("binary_sensor.lepas_low_battery", "on"),
+  }, "it"));
+  const activeChips = [...warnCard.shadowRoot.querySelectorAll(".warns-row .warn-chip")];
+  assert.equal(activeChips.length, 1);
+  assert.equal(activeChips[0].getAttribute("data-e"), "binary_sensor.lepas_low_battery");
 });
 
 
