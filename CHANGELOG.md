@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.31.2 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Documentation & Dashboard Preview Update (`README.md`, `docs/images/`)**: Aligned `README.md` with `v1.31.2` capabilities (`147` active entities across `11` platforms, Matte Titanium `custom:lepas-card`, persistent charging statistics & EV/Hybrid consumption engine, scheduled departures & battery preheating, climate/closure sync, `5` services, active `.agents/memory/antibodies/lepas.md` index, and verified local test commands), added the adaptive light/dark brand logo (`logo@2x.png` / `dark_logo@2x.png`) and three synthetic PII-free dashboard previews (`lepas-card-cockpit.png`, `lepas-card-security.png`, `lepas-card-stats.png`), clarified in the `[!CAUTION]` disclaimer that the integration is currently tested only on the Lepas L8 version distributed in Italy, and added a `[!TIP]` recommending a dedicated/delegated secondary account so Home Assistant polling does not sign out the official mobile app. Also bumped card assets in `lepas-card.js` to `?v=1.31.2`.
+
+### 🇮🇹 Italiano
+
+- **Aggiornamento Documentazione & Anteprima Plancia (`README.md`, `docs/images/`)**: Allineato `README.md` alle funzionalità di `v1.31.2` (`147` entità attive su `11` piattaforme, card Matte Titanium `custom:lepas-card`, statistiche di ricarica persistenti e motore consumi EV/Ibrido, partenze programmate e preriscaldamento batteria, sincronizzazione clima/chiusure, `5` servizi, collegamento aggiornato a `.agents/memory/antibodies/lepas.md` e comandi di test verificati), aggiunti il nuovo logo adattivo chiaro/scuro (`logo@2x.png` / `dark_logo@2x.png`) e tre screenshot sintetici senza PII della plancia (`lepas-card-cockpit.png`, `lepas-card-security.png`, `lepas-card-stats.png`), precisato nel disclaimer `[!CAUTION]` che l'integrazione è attualmente testata solo sulla versione Lepas L8 distribuita in Italia, e aggiunto il riquadro `[!TIP]` che consiglia un account dedicato/delegato per evitare la disconnessione dell'app ufficiale sullo smartphone. Aggiornati anche gli asset della card in `lepas-card.js` a `?v=1.31.2`.
+
 ## v1.31.1 — 2026-11-20
 
 ### 🇬🇧 English
