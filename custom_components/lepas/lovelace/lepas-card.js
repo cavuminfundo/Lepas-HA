@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.31.2).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.32.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,8 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.31.2";
+  var CARD_VERSION = "1.32.0";
+  var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -95,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.31.2",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.31.2",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.31.2",
-    black: "/lepas_card/lepas-hero-black.png?v=1.31.2",
-    white: "/lepas_card/lepas-hero-white.png?v=1.31.2",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.32.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.32.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.32.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.32.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.32.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.31.2";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.32.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -325,6 +326,7 @@
       statsConfirmReset: "Azzera",
       statsNoData: "Nessun sensore statistiche disponibile.",
       statsBtnLabel: "Statistiche",
+      statsExpandBtn: "Grafici e dettagli",
       closeDialog: "Chiudi",
       climateExtraLabels: {
         driver_seat_heating: "Sedile guida caldo",
@@ -536,6 +538,7 @@
       statsConfirmReset: "Reset",
       statsNoData: "No statistics sensors available.",
       statsBtnLabel: "Statistics",
+      statsExpandBtn: "Charts & details",
       closeDialog: "Close",
       climateExtraLabels: {
         driver_seat_heating: "Driver seat heat",
@@ -747,6 +750,7 @@
       statsConfirmReset: "Resetten",
       statsNoData: "Geen statistieksensoren beschikbaar.",
       statsBtnLabel: "Statistieken",
+      statsExpandBtn: "Grafieken & details",
       closeDialog: "Sluiten",
       climateExtraLabels: {
         driver_seat_heating: "Stoel best. verw.",
@@ -1306,36 +1310,76 @@
     "</div>";
   }
 
+  function syncInteractiveCellAttrs(cellEl, ent) {
+    if (!cellEl) return;
+    if (ent && ent.id) {
+      cellEl.setAttribute("role", "button");
+      cellEl.setAttribute("tabindex", "0");
+      cellEl.setAttribute("data-e", ent.id);
+    } else {
+      cellEl.removeAttribute("role");
+      cellEl.removeAttribute("tabindex");
+      cellEl.removeAttribute("data-e");
+    }
+  }
+
+  function formatChargingKpiValue(kEnt, hass, lang, scope) {
+    if (!kEnt || isDeadStateObj(kEnt.s)) return "—";
+    var kAttrs = kEnt.s.attributes || {};
+    var kUnit = kAttrs.unit_of_measurement ? String(kAttrs.unit_of_measurement) : "kWh";
+    var kDp = typeof kAttrs.suggested_display_precision === "number" ? kAttrs.suggested_display_precision : null;
+    if (scope === "home") {
+      var homeNum = safeNonNegNumber(kAttrs.home_kwh);
+      return homeNum !== null
+        ? formatMetric({ state: String(homeNum), attributes: { unit_of_measurement: kUnit, suggested_display_precision: kDp } }, lang)
+        : "—";
+    }
+    if (scope === "away") {
+      var awayNum = safeNonNegNumber(kAttrs.away_kwh);
+      return awayNum !== null
+        ? formatMetric({ state: String(awayNum), attributes: { unit_of_measurement: kUnit, suggested_display_precision: kDp } }, lang)
+        : "—";
+    }
+    var kDisp = formatEntityStateDisplay(kEnt.s, hass);
+    return (kDisp !== "—" && !(kAttrs.unit_of_measurement) && parseStateNumber(kEnt.s) !== null)
+      ? (kDisp + " " + kUnit)
+      : kDisp;
+  }
+
   function applyConsumptionBindings(root, hass, modes, vm) {
     var consModes = modes || { ev: "per_100", hybrid: "per_100" };
-    var consSegPairs = [
-      { kind: "ev", b100: "consEvPer100Btn", bKm: "consEvPerKmBtn" },
-      { kind: "hybrid", b100: "consHybPer100Btn", bKm: "consHybPerKmBtn" },
+    var toggleSync = [
+      { bind100: "consEvPer100Btn", bindKm: "consEvPerKmBtn", mode: consModes.ev },
+      { bind100: "consHybPer100Btn", bindKm: "consHybPerKmBtn", mode: consModes.hybrid },
     ];
-    for (var cpi = 0; cpi < consSegPairs.length; cpi += 1) {
-      var pair = consSegPairs[cpi];
-      var isKm = consModes[pair.kind] === "per_km";
-      var b100El = root.querySelector('[data-bind="' + pair.b100 + '"]');
-      var bKmEl = root.querySelector('[data-bind="' + pair.bKm + '"]');
-      if (b100El) {
-        b100El.setAttribute("aria-pressed", !isKm ? "true" : "false");
-        b100El.classList.toggle("is-active", !isKm);
+    for (var ti = 0; ti < toggleSync.length; ti += 1) {
+      var ts = toggleSync[ti];
+      var btn100 = root.querySelector('[data-bind="' + ts.bind100 + '"]');
+      var btnKm = root.querySelector('[data-bind="' + ts.bindKm + '"]');
+      var isPerKm = ts.mode === "per_km";
+      if (btn100) {
+        btn100.classList.toggle("is-active", !isPerKm);
+        btn100.setAttribute("aria-pressed", !isPerKm ? "true" : "false");
       }
-      if (bKmEl) {
-        bKmEl.setAttribute("aria-pressed", isKm ? "true" : "false");
-        bKmEl.classList.toggle("is-active", isKm);
+      if (btnKm) {
+        btnKm.classList.toggle("is-active", isPerKm);
+        btnKm.setAttribute("aria-pressed", isPerKm ? "true" : "false");
       }
     }
-    var consEvRow = root.querySelector('[data-bind="consEvRow"]');
-    if (consEvRow) {
-      consEvRow.classList.toggle("hidden", !vm.hasEvCons);
-      consEvRow.hidden = !vm.hasEvCons;
+
+    var rowSync = [
+      { bind: "consEvRow", hidden: !vm.hasEvCons },
+      { bind: "consHybridRow", hidden: !vm.hasHybridCons },
+    ];
+    for (var ri = 0; ri < rowSync.length; ri += 1) {
+      var rs = rowSync[ri];
+      var rEls = root.querySelectorAll('[data-bind="' + rs.bind + '"], [data-stats-mirror="' + rs.bind + '"]');
+      for (var rj = 0; rj < rEls.length; rj += 1) {
+        rEls[rj].classList.toggle("hidden", rs.hidden);
+        rEls[rj].hidden = rs.hidden;
+      }
     }
-    var consHybridRow = root.querySelector('[data-bind="consHybridRow"]');
-    if (consHybridRow) {
-      consHybridRow.classList.toggle("hidden", !vm.hasHybridCons);
-      consHybridRow.hidden = !vm.hasHybridCons;
-    }
+
     var consBindings = [
       { cell: "consEv50Cell", val: "consEv50Val", ent: vm.avgEnergy50, kind: "ev", unit: "kWh/100 km" },
       { cell: "consEv100Cell", val: "consEv100Val", ent: vm.evCons100, kind: "ev", unit: "kWh/100 km" },
@@ -1348,21 +1392,14 @@
     ];
     for (var csi = 0; csi < consBindings.length; csi += 1) {
       var cb = consBindings[csi];
-      var consCell = root.querySelector('[data-bind="' + cb.cell + '"]');
-      var consVal = root.querySelector('[data-bind="' + cb.val + '"]');
-      if (consCell) {
-        if (cb.ent && cb.ent.id) {
-          consCell.setAttribute("role", "button");
-          consCell.setAttribute("tabindex", "0");
-          consCell.setAttribute("data-e", cb.ent.id);
-        } else {
-          consCell.removeAttribute("role");
-          consCell.removeAttribute("tabindex");
-          consCell.removeAttribute("data-e");
-        }
+      var cellText = formatConsumptionCell(hass, cb.ent, cb.kind, cb.unit, consModes[cb.kind]);
+      var consCells = root.querySelectorAll('[data-bind="' + cb.cell + '"], [data-stats-mirror="' + cb.cell + '"]');
+      for (var cj = 0; cj < consCells.length; cj += 1) {
+        syncInteractiveCellAttrs(consCells[cj], cb.ent);
       }
-      if (consVal) {
-        consVal.textContent = formatConsumptionCell(hass, cb.ent, cb.kind, cb.unit, consModes[cb.kind]);
+      var consVals = root.querySelectorAll('[data-bind="' + cb.val + '"], [data-stats-mirror="' + cb.val + '"]');
+      for (var vj = 0; vj < consVals.length; vj += 1) {
+        consVals[vj].textContent = cellText;
       }
     }
   }
@@ -1988,6 +2025,51 @@
   }
 
   function buildStyles() {
+    function desktopLayoutRules(cardSel, indent) {
+      var p = indent || "";
+      var s = cardSel + " ";
+      return [
+        p + s + ".cockpit-left, " + s + ".cockpit-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }",
+        p + s + ".tabs-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }",
+        p + s + '.tabs-bar [data-tab="overview"] { display: none; }',
+        p + s + ".hero-region, " + s + ".tabs-bar, " + s + ".panel, " + s + ".overview-extras { order: initial; }",
+        p + s + '.panel[data-panel="overview"] { display: flex; flex: 1; }',
+        p + s + ".cockpit-right > .panel.is-active, " + s + ".cockpit-right > .panel.is-desktop-fallback { flex: 1; }",
+        p + s + '.panel[data-panel="overview"] > .surface:last-of-type, ' + s + ".cockpit-right > .panel > .surface:last-of-type, " + s + '.panel[data-panel="charging"] > .surface[data-schedule-panel]:not(.is-schedule-hidden) { flex: 1; }',
+        p + s + ".cockpit-stats-surface { display: flex; flex-direction: column; gap: 8px; flex: 1; }",
+        p + s + ".cockpit-stats-row { flex: 1; align-items: stretch; max-height: 152px; }",
+        p + s + ".cockpit-stats-slot > .cons-cell { justify-content: center; gap: 4px; }",
+        p + s + '.cockpit-left.has-cockpit-stats .panel[data-panel="overview"] { flex: 0 0 auto; }',
+        p + s + '.cockpit-left.has-cockpit-stats .panel[data-panel="overview"] > .surface:last-of-type { flex: 0 0 auto; }',
+        p + s + ".panel.is-desktop-fallback { display: flex; }",
+        p + s + ".tab-btn.is-desktop-fallback { background: #262B34; color: var(--lp-text); border-color: rgba(255, 255, 255, 0.16); font-weight: 700; }",
+        p + s + '.tab-btn.is-desktop-fallback::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 3px; height: 2.5px; border-radius: 999px; background: #E5E7EB; }',
+        p + s + ".overview-extras { display: flex; flex-direction: column; gap: 12px; }",
+        p + s + ".quick-actions-surface { display: none; }",
+        p + s + ".cockpit-wake-btn { display: inline-flex; }",
+        p + s + ".schedule-switcher { display: grid; }",
+        p + s + ".is-schedule-hidden { display: none; }",
+        p + s + ".hero-stage { aspect-ratio: 16 / 9; }",
+        p + s + '.panel[data-panel="security"] .bp-stage { grid-template-columns: minmax(80px, 1fr) minmax(136px, 162px) minmax(80px, 1fr); padding: 20px 6px; gap: 12px; }',
+        p + s + '.panel[data-panel="security"] .tpms-col { gap: 26px; }',
+        p + s + '.panel[data-panel="security"] .tpms-box { padding: 11px 12px; }',
+        p + s + '.panel[data-panel="security"] > .surface:last-of-type { gap: 14px; justify-content: space-between; }',
+        p + s + '.panel[data-panel="security"] .btn-grid { gap: 11px; }',
+        p + s + '.panel[data-panel="security"] .ctrl-btn { min-height: 50px; }',
+        p + s + '.panel[data-panel="climate"] > .surface { padding: 14px 13px; gap: 12px; }',
+        p + s + '.panel[data-panel="climate"] .ctrl-btn { min-height: 48px; }',
+        p + s + '.panel[data-panel="climate"] .seat-btns .ctrl-btn { min-height: 46px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="depSurface"] { gap: 7px; padding: 10px 12px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-btn { min-height: 36px; }',
+        p + s + '.panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-input, ' + s + '.panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-select { min-height: 36px; }',
+        p + s + '.panel[data-panel="charging"] .dep-summary-row { min-height: 38px; padding: 6px 10px; }',
+        p + s + '.panel[data-panel="charging"] .day-chip { min-height: 44px; padding: 3px 2px; }',
+        p + s + '.panel[data-panel="charging"] .dep-subbox { padding-top: 6px; gap: 5px; }',
+        p + s + '.panel[data-panel="charging"] .climate-extras-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }',
+        p + s + '.panel[data-panel="charging"] .climate-extra-chip { min-height: 34px; padding: 4px 6px; font-size: 0.7rem; }',
+      ];
+    }
+
     return buildCommonCardCss().concat([
       ".tab-ico { width: 18px; height: 18px; }",
       ".cockpit-grid { display: flex; flex-direction: column; gap: 10px; padding: 10px; }",
@@ -2046,9 +2128,7 @@
       ".soc-btn.is-charging.is-fast-charge { border-color: rgba(245, 158, 11, 0.65); }",
       ".soc-btn svg.soc-svg { position: absolute; inset: 2px; width: 48px; height: 48px; transform: rotate(-90deg); }",
       ".soc-ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 3; }",
-      ".soc-ring-fg { fill: none; stroke: var(--lp-emerald); stroke-width: 3; stroke-linecap: round; }",
-      ".soc-ring-fg.is-warn { stroke: var(--lp-amber); }",
-      ".soc-ring-fg.is-low { stroke: var(--lp-coral); }",
+      ".soc-ring-fg { fill: none; stroke-width: 3; stroke-linecap: round; }",
       ".soc-ring-pulse { fill: none; stroke: var(--lp-emerald); stroke-width: 2.2; opacity: 0.85; }",
       ".soc-btn.is-fast-charge .soc-ring-pulse { stroke: var(--lp-amber); }",
       ".soc-viewport { position: relative; width: 38px; height: 22px; overflow: hidden; }",
@@ -2225,41 +2305,46 @@
       ".info-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; min-height: 44px; border-radius: 9px; background: var(--lp-elevated); border: 1px solid var(--lp-border); cursor: pointer; font-size: 0.84rem; }",
       ".info-row:hover { border-color: var(--lp-border-strong); }",
       ".info-val { font-weight: 600; color: var(--lp-text); }",
-      "ha-card[data-layout=\"cockpit\"] .tabs-bar { display: none; }",
-      "ha-card[data-layout=\"cockpit\"] .panel { display: flex; }",
-      "@container (min-width: 680px) {",
-      "  ha-card[data-layout=\"auto\"] .tabs-bar { display: none; }",
-      "  ha-card[data-layout=\"auto\"] .panel { display: flex; }",
-      "  ha-card[data-layout=\"auto\"] .cockpit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }",
-      "  ha-card[data-layout=\"auto\"] .hero-region { grid-column: 1 / -1; }",
-      "}",
+      ".cockpit-left, .cockpit-right { display: contents; }",
+      ".hero-region { order: 1; }",
+      ".tabs-bar { order: 2; }",
+      ".panel { order: 3; }",
+      ".overview-extras { display: none; order: 4; }",
+      ".overview-extras.is-active { display: flex; flex-direction: column; gap: 12px; }",
+      ".cockpit-wake-btn { display: none; }",
+      ".schedule-switcher { display: none; grid-template-columns: repeat(2, minmax(0, 1fr)); }",
+      ".cockpit-stats-surface { display: none; }",
+      ".cockpit-stats-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; }",
+      ".cockpit-stats-open { min-height: 28px; padding: 3px 8px; border-radius: 7px; background: var(--lp-elevated); border: 1px solid var(--lp-border); color: var(--lp-text-secondary); font-size: 0.72rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }",
+      ".cockpit-stats-open:hover { background: var(--lp-elevated-hover); color: var(--lp-text); }",
+      ".cockpit-stats-block { display: flex; flex-direction: column; gap: 5px; }",
+      ".cockpit-stats-row { display: flex; gap: 6px; }",
+      ".cockpit-stats-slot { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }",
+      ".cockpit-stats-slot > .cons-cell { flex: 1; padding: 7px 8px; }",
+      ".cockpit-stats-slot .cons-cell-lbl { font-size: 0.65rem; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }",
+      ".cockpit-stats-slot .cons-cell-val { font-size: 0.74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }",
+    ]).concat(
+      desktopLayoutRules('ha-card[data-layout="cockpit"]', "")
+    ).concat([
       "@container (min-width: 560px) {",
-      "  ha-card[data-layout=\"cockpit\"] .cockpit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }",
-      "  ha-card[data-layout=\"cockpit\"] .hero-region { grid-column: 1 / -1; }",
+      "  ha-card[data-layout=\"cockpit\"] .cockpit-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.12fr); align-items: stretch; }",
       "}",
-      "@container (min-width: 960px) {",
-      "  ha-card[data-layout=\"auto\"] .cockpit-grid, ha-card[data-layout=\"cockpit\"] .cockpit-grid { grid-template-columns: minmax(250px, 1fr) minmax(290px, 1.15fr) minmax(250px, 1fr); }",
-      "  ha-card[data-layout=\"auto\"] .hero-region, ha-card[data-layout=\"cockpit\"] .hero-region { grid-column: 1; grid-row: 1; }",
-      "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"security\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"security\"] { grid-column: 1; grid-row: 2; }",
-      "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"overview\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"overview\"] { grid-column: 2; grid-row: 1; }",
-      "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"charging\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"charging\"] { grid-column: 2; grid-row: 2; }",
-      "  ha-card[data-layout=\"auto\"] .panel[data-panel=\"climate\"], ha-card[data-layout=\"cockpit\"] .panel[data-panel=\"climate\"] { grid-column: 3; grid-row: 1 / span 2; }",
+      "@container (min-width: 680px) {",
+      "  ha-card[data-layout=\"auto\"] .cockpit-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.12fr); align-items: stretch; }",
+    ]).concat(
+      desktopLayoutRules('ha-card[data-layout="auto"]', "  ")
+    ).concat([
       "}",
       "@container (max-width: 340px) { .bp-stage { grid-template-columns: minmax(60px, 1fr) minmax(92px, 120px) minmax(60px, 1fr); gap: 5px; } }",
       "@supports not (container-type: inline-size) {",
-      "  @media (min-width: 680px) {",
-      "    ha-card[data-layout=\"auto\"] .tabs-bar { display: none; }",
-      "    ha-card[data-layout=\"auto\"] .panel { display: flex; }",
-      "    ha-card[data-layout=\"auto\"] .cockpit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }",
-      "    ha-card[data-layout=\"auto\"] .hero-region { grid-column: 1 / -1; }",
+      "  @media (min-width: 560px) {",
+      "    ha-card[data-layout=\"cockpit\"] .cockpit-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.12fr); align-items: stretch; }",
       "  }",
-      "  @media (min-width: 960px) {",
-      "    ha-card[data-layout=\"auto\"] .cockpit-grid { grid-template-columns: minmax(250px, 1fr) minmax(290px, 1.15fr) minmax(250px, 1fr); }",
-      "    ha-card[data-layout=\"auto\"] .hero-region { grid-column: 1; grid-row: 1; }",
-      "    ha-card[data-layout=\"auto\"] .panel[data-panel=\"security\"] { grid-column: 1; grid-row: 2; }",
-      "    ha-card[data-layout=\"auto\"] .panel[data-panel=\"overview\"] { grid-column: 2; grid-row: 1; }",
-      "    ha-card[data-layout=\"auto\"] .panel[data-panel=\"charging\"] { grid-column: 2; grid-row: 2; }",
-      "    ha-card[data-layout=\"auto\"] .panel[data-panel=\"climate\"] { grid-column: 3; grid-row: 1 / span 2; }",
+      "  @media (min-width: 680px) {",
+      "    ha-card[data-layout=\"auto\"] .cockpit-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.12fr); align-items: stretch; }",
+    ]).concat(
+      desktopLayoutRules('ha-card[data-layout="auto"]', "    ")
+    ).concat([
       "  }",
       "}",
       "@media (prefers-reduced-motion: no-preference) {",
@@ -2313,6 +2398,7 @@
       this.attachShadow({ mode: "open" });
       this._config = {};
       this._hass = null;
+      this._socGradPrefix = "lp-soc-grad-" + (++_socGradSeq);
       this._rendered = false;
       this._onEvent = this._handleFieldChange.bind(this);
     }
@@ -2427,7 +2513,7 @@
             "</div>" +
             '<div class="ed-field">' +
               '<label class="ed-lbl">' + escapeHtml(t.editorImage) + "</label>" +
-              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=1.30.0">' +
+              '<input type="text" class="ed-input" data-field="image" placeholder="/lepas_card/lepas-hero-grey.png?v=' + CARD_VERSION + '">' +
             "</div>" +
             '<label class="ed-check-row">' +
               '<span class="ed-lbl">' + escapeHtml(t.editorShowAll) + "</span>" +
@@ -2457,12 +2543,15 @@
         default_tab: "overview",
       };
       this._hass = null;
+      this._socGradPrefix = "lp-soc-grad-" + (++_socGradSeq);
       this._activeTab = "overview";
+      this._scheduleTab = "charge";
       this._expandedDay = null;
       this._lastCmdFeedback = null;
       this._pendingKeys = new Set();
       this._errorMsg = null;
       this._lastStructKey = "";
+      this._lastWarnSig = "";
       this._lastDefaultTab = "overview";
       this._listenersBound = false;
       this._latestActions = Object.create(null);
@@ -2942,6 +3031,17 @@
         return;
       }
 
+      var schedTabEl = target.closest("[data-schedule-tab]");
+      if (schedTabEl) {
+        ev.stopPropagation();
+        var nextSchedTab = schedTabEl.getAttribute("data-schedule-tab");
+        if ((nextSchedTab === "charge" || nextSchedTab === "departure") && nextSchedTab !== this._scheduleTab) {
+          this._scheduleTab = nextSchedTab;
+          this._syncScheduleTabUi(this.shadowRoot);
+        }
+        return;
+      }
+
       var dayChip = target.closest("[data-day-chip]");
       if (dayChip) {
         ev.stopPropagation();
@@ -3255,6 +3355,7 @@
             "<style>" + buildStyles() + "</style>" +
             `<ha-card><div class="error-banner" role="alert">Lepas card error: ${this._h(e && e.message ? e.message : e)}</div></ha-card>`;
           this._lastStructKey = "";
+          this._lastWarnSig = "";
         }
       }
     }
@@ -3650,12 +3751,11 @@
 
       this._latestActions = actions;
 
-      // Structural signature: rebuild DOM only when structure/entities/warnings/lang change
+      // Structural signature: rebuild DOM only when structure/entities/lang change
       var entityIdsSig = items.map(function (r) { return r.id; }).sort().join(",");
       var extraSig = Array.isArray(cfg.entities)
         ? cfg.entities.map(function (e) { return typeof e === "string" ? e : (e && e.entity ? e.entity : ""); }).join(",")
         : "";
-      var warnSig = warns.map(function (w) { return w.id + ":" + w.text; }).join("|");
       var allowedExtrasSig = allowedClimateExtras.join(",");
       var cliDurOptsSig = cliDur ? resolveClimateDurationOptions(cliDur.s).join(",") : "";
       this._renderedCliDurKey = cliDurOptsSig;
@@ -3664,7 +3764,6 @@
         cfg.layout,
         cfg.show_all ? "1" : "0",
         extraSig,
-        warnSig,
         allowedExtrasSig,
         cliDurOptsSig,
         entityIdsSig,
@@ -3679,6 +3778,7 @@
         this._dialogCtrl.unbind();
         this._unbindStatsDialog();
         this._lastStatsChartSig = "";
+        this._lastWarnSig = "";
 
         this.shadowRoot.innerHTML = this._buildSkeletonHtml({
           lang: lang,
@@ -3794,6 +3894,7 @@
         items: items,
         title: title,
         deviceRe: deviceRe,
+        warns: warns,
         conn: conn,
         atHome: atHome,
         awake: awake,
@@ -3888,13 +3989,6 @@
       var cfg = ctx.cfg;
       var self = this;
 
-      var warnsHtml = ctx.warns.length
-        ? '<div class="warns-row">' + ctx.warns.map(function (w) {
-            return '<div class="warn-chip' + (w.amber ? " is-amber" : "") + '" role="button" tabindex="0" data-e="' +
-              self._h(w.id) + '">' + self._h(w.text) + "</div>";
-          }).join("") + "</div>"
-        : "";
-
       var tabsHtml = '<div class="tabs-bar" role="tablist">' + VALID_TABS.map(function (tb) {
         return '<button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="' + tb + '" data-uid="tab:' + tb + '">' +
           svgIcon(tb, "tab-ico") +
@@ -3902,11 +3996,29 @@
       }).join("") + "</div>";
 
       // Hero region (2:1 full-car stage + dedicated meta bar below)
+      var gp = self._h(self._socGradPrefix);
       var socRingHtml = ctx.bat ? (
         '<div class="soc-btn" data-bind="socBtn" role="button" tabindex="0" data-e="' + self._h(ctx.bat.id) + '">' +
           '<svg class="soc-svg" viewBox="0 0 52 52" aria-hidden="true">' +
+            "<defs>" +
+              '<linearGradient id="' + gp + '-ok" gradientUnits="userSpaceOnUse" x1="48" y1="20" x2="4" y2="34">' +
+                '<stop offset="0%" stop-color="#6EE7B7"></stop>' +
+                '<stop offset="45%" stop-color="#34D399"></stop>' +
+                '<stop offset="100%" stop-color="#06B6D4"></stop>' +
+              "</linearGradient>" +
+              '<linearGradient id="' + gp + '-warn" gradientUnits="userSpaceOnUse" x1="48" y1="20" x2="4" y2="34">' +
+                '<stop offset="0%" stop-color="#FDE047"></stop>' +
+                '<stop offset="55%" stop-color="#F59E0B"></stop>' +
+                '<stop offset="100%" stop-color="#EA580C"></stop>' +
+              "</linearGradient>" +
+              '<linearGradient id="' + gp + '-low" gradientUnits="userSpaceOnUse" x1="48" y1="20" x2="4" y2="34">' +
+                '<stop offset="0%" stop-color="#FB923C"></stop>' +
+                '<stop offset="55%" stop-color="#F87171"></stop>' +
+                '<stop offset="100%" stop-color="#EF4444"></stop>' +
+              "</linearGradient>" +
+            "</defs>" +
             '<circle class="soc-ring-bg" cx="26" cy="26" r="22"/>' +
-            '<circle class="soc-ring-fg" data-soc-ring cx="26" cy="26" r="22" stroke-dasharray="138.23" stroke-dashoffset="138.23"/>' +
+            '<circle class="soc-ring-fg" data-soc-ring cx="26" cy="26" r="22" stroke="url(#' + gp + '-ok)" stroke-dasharray="138.23" stroke-dashoffset="138.23"/>' +
             '<circle class="soc-ring-pulse hidden" data-bind="socPulse" cx="26" cy="26" r="17"/>' +
           "</svg>" +
           '<div class="soc-viewport">' +
@@ -3951,7 +4063,7 @@
               "</button>" +
             "</div>" +
           "</div>" +
-          warnsHtml +
+          '<div class="warns-row hidden" data-bind="warnsRow" hidden></div>' +
           '<div class="error-banner hidden" role="alert" data-bind="errorBanner">' +
             '<span data-bind="errorText"></span>' +
             '<button type="button" class="error-dismiss" data-dismiss-error aria-label="Dismiss">×</button>' +
@@ -3996,6 +4108,9 @@
         }
       }
 
+      var showCockpitWake = Boolean(ctx.wakeBtn && cfg.layout !== "compact");
+      var overviewExtrasHtml = extraRowsHtml ? '<section class="overview-extras" data-bind="overviewExtras">' + extraRowsHtml + "</section>" : "";
+
       var overviewHtml =
         '<section class="panel" data-panel="overview">' +
           '<div class="metrics-grid">' +
@@ -4018,27 +4133,27 @@
             "</div>" +
           "</div>" +
           ((quickPrimaryBtns.length || quickSecondaryBtns.length)
-            ? '<div class="surface"><div class="sec-hdr"><span>' + self._h(t.quickActions) + "</span></div>" +
+            ? '<div class="surface quick-actions-surface" data-bind="quickActionsSurface"><div class="sec-hdr"><span>' + self._h(t.quickActions) + "</span></div>" +
                 (quickPrimaryBtns.length ? '<div class="btn-grid">' + quickPrimaryBtns.join("") + "</div>" : "") +
                 (quickSecondaryBtns.length ? '<div class="btn-triple">' + quickSecondaryBtns.join("") + "</div>" : "") +
               "</div>"
             : "") +
-          '<div class="surface">' +
+          '<div class="surface" data-bind="syncSurface">' +
             '<div class="footer-bar">' +
               '<span class="meta-inline">' + svgIcon("clock", "meta-ico") + '<span data-bind="freshnessText"></span></span>' +
               '<span class="badge hidden" data-bind="cmdResultBadge"></span>' +
             "</div>" +
-            ((ctx.refreshLocBtn || ctx.refreshFullBtn)
+            ((ctx.refreshLocBtn || ctx.refreshFullBtn || showCockpitWake)
               ? '<div class="btn-row">' +
                   (ctx.refreshLocBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_location" data-confirm-key="refresh_location">' + svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.refreshLoc) + "</span></button>" : "") +
                   (ctx.refreshFullBtn ? '<button type="button" class="ctrl-btn" data-action-id="refresh_full" data-confirm-key="refresh_full">' + svgIcon("refresh", "btn-ico") + "<span>" + self._h(t.refreshFull) + "</span></button>" : "") +
+                  (showCockpitWake ? '<button type="button" class="ctrl-btn cockpit-wake-btn" data-action-id="wake_car" data-confirm-key="wake_car">' + svgIcon("wake", "btn-ico") + "<span>" + self._h(t.wakeCar) + "</span></button>" : "") +
                 "</div>"
               : "") +
             (ctx.autoUpdatesSw
               ? '<div class="btn-row"><button type="button" class="ctrl-btn btn-compact" data-action-id="auto_updates_toggle" data-bind="autoUpdatesBtn"></button></div>'
               : "") +
           "</div>" +
-          extraRowsHtml +
         "</section>";
 
       // Panel 2: Climate
@@ -4168,7 +4283,7 @@
       ) : "";
 
       var schedChgHtml = (ctx.schedSwitch || ctx.schedWindow || ctx.chgStartTime || ctx.chgDur || ctx.chgDays || ctx.applySchedBtn) ? (
-        '<div class="surface">' +
+        '<div class="surface" data-bind="schedChgSurface" data-schedule-panel="charge">' +
           '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.scheduledCharging) + '</span></span><span class="badge hidden" data-bind="schedSyncBadge"></span></div>' +
           (ctx.schedSwitch ? '<button type="button" class="ctrl-btn" data-action-id="scheduled_charging_toggle" data-confirm-key="scheduled_charging_toggle" data-bind="schedToggleBtn"></button>' : "") +
           chargeModeSwitchHtml +
@@ -4264,7 +4379,7 @@
       );
 
       var depHtml = hasDepSection ? (
-        '<div class="surface" data-bind="depSurface">' +
+        '<div class="surface" data-bind="depSurface" data-schedule-panel="departure">' +
           '<div class="sec-hdr">' +
             '<span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.departures) + "</span></span>" +
             '<span class="dep-hdr-badges">' +
@@ -4291,7 +4406,14 @@
         "</div>"
       ) : "";
 
-      var chargingHtml = '<section class="panel" data-panel="charging">' + liveChgHtml + schedChgHtml + depHtml + "</section>";
+      var scheduleSwitcherHtml = (schedChgHtml && depHtml) ? (
+        '<div class="seg-switch schedule-switcher" role="group">' +
+          '<button type="button" class="seg-btn" data-schedule-tab="charge" data-uid="schedtab:charge" aria-pressed="true">' + svgIcon("clock", "btn-ico") + "<span>" + self._h(t.scheduledCharging) + "</span></button>" +
+          '<button type="button" class="seg-btn" data-schedule-tab="departure" data-uid="schedtab:departure" aria-pressed="false">' + svgIcon("calendar", "btn-ico") + "<span>" + self._h(t.departures) + "</span></button>" +
+        "</div>"
+      ) : "";
+
+      var chargingHtml = '<section class="panel" data-panel="charging">' + liveChgHtml + scheduleSwitcherHtml + schedChgHtml + depHtml + "</section>";
 
       // Panel 4: Security & Blueprint
       var tpmsCard = function (c) {
@@ -4485,15 +4607,48 @@
           "</div>" +
         "</dialog>";
 
+      var cockpitStatsHtml = "";
+      if (ctx.chgToday || ctx.hasAnyCons) {
+        var buildMirrorSlotHtml = function (slotBind, slotHidden, cellBind, valBind, iconName, label, ent) {
+          var entAttr = ent ? (' role="button" tabindex="0" data-e="' + self._h(ent.id) + '"') : "";
+          var slotAttrs = slotBind
+            ? (' class="cockpit-stats-slot' + (slotHidden ? " hidden" : "") + '" data-stats-mirror="' + slotBind + '"' + (slotHidden ? " hidden" : ""))
+            : ' class="cockpit-stats-slot"';
+          return "<div" + slotAttrs + ">" +
+            '<div class="cons-cell" data-stats-mirror="' + cellBind + '"' + entAttr + ">" +
+              '<span class="cons-cell-lbl">' + svgIcon(iconName, "meta-ico") + "<span>" + self._h(label) + "</span></span>" +
+              '<span class="cons-cell-val num" data-stats-mirror="' + valBind + '">—</span>' +
+            "</div>" +
+          "</div>";
+        };
+        var inlineSlots = [];
+        if (ctx.chgToday) {
+          inlineSlots.push(buildMirrorSlotHtml(null, false, "chgTodayCell", "chgTodayVal", "bolt", t.statsChargingTitle + " · " + t.statsPeriodToday, ctx.chgToday));
+        }
+        if (ctx.hasAnyCons) {
+          inlineSlots.push(buildMirrorSlotHtml("consEvRow", !ctx.hasEvCons, "consEv50Cell", "consEv50Val", "gauge", t.consEv + " · " + t.cons50, ctx.avgEnergy50));
+          inlineSlots.push(buildMirrorSlotHtml("consHybridRow", !ctx.hasHybridCons, "consHyb50Cell", "consHyb50Val", "flame", t.consHybrid + " · " + t.cons50, ctx.avgFuel50));
+        }
+        if (inlineSlots.length) {
+          cockpitStatsHtml =
+            '<section class="surface cockpit-stats-surface" data-bind="cockpitStatsSurface">' +
+              '<div class="cockpit-stats-hdr">' +
+                '<span class="sec-hdr-title">' + svgIcon("chart", "sec-ico") + "<span>" + self._h(t.statsCardDefaultTitle) + "</span></span>" +
+                '<button type="button" class="cockpit-stats-open" data-action-id="open_stats" aria-label="' + self._h(t.statsExpandBtn) + '" title="' + self._h(t.statsExpandBtn) + '">' +
+                  svgIcon("chart", "btn-ico") + "<span>" + self._h(t.statsExpandBtn) + "</span>" +
+                "</button>" +
+              "</div>" +
+              '<div class="cockpit-stats-row">' + inlineSlots.join("") + "</div>" +
+            "</section>";
+        }
+      }
+
+      var leftColClass = cockpitStatsHtml ? "cockpit-left has-cockpit-stats" : "cockpit-left";
       return "<style>" + buildStyles() + "</style>" +
         '<ha-card data-layout="' + self._h(cfg.layout) + '">' +
           '<div class="cockpit-grid">' +
-            heroHtml +
-            tabsHtml +
-            overviewHtml +
-            climateHtml +
-            chargingHtml +
-            securityHtml +
+            '<div class="' + leftColClass + '">' + heroHtml + overviewHtml + cockpitStatsHtml + overviewExtrasHtml + "</div>" +
+            '<div class="cockpit-right">' + tabsHtml + climateHtml + chargingHtml + securityHtml + "</div>" +
           "</div>" +
           statsDialogHtml +
           buildConfirmDialogHtml(t, "lp-confirm-title") +
@@ -4520,6 +4675,37 @@
       }
     }
 
+    _syncScheduleTabUi(root) {
+      if (!root) return;
+      var panels = root.querySelectorAll("[data-schedule-panel]");
+      var activeSched = this._scheduleTab === "departure" ? "departure" : "charge";
+      var hasCharge = false;
+      var hasDeparture = false;
+      for (var pi = 0; pi < panels.length; pi += 1) {
+        var pName = panels[pi].getAttribute("data-schedule-panel");
+        if (pName === "charge") hasCharge = true;
+        else if (pName === "departure") hasDeparture = true;
+      }
+      var hasBoth = hasCharge && hasDeparture;
+      if (!hasBoth) {
+        for (var ui = 0; ui < panels.length; ui += 1) {
+          panels[ui].classList.remove("is-schedule-hidden");
+        }
+      } else {
+        for (var bi = 0; bi < panels.length; bi += 1) {
+          var panelName = panels[bi].getAttribute("data-schedule-panel");
+          panels[bi].classList.toggle("is-schedule-hidden", panelName !== activeSched);
+        }
+      }
+      var btns = root.querySelectorAll("[data-schedule-tab]");
+      for (var ti = 0; ti < btns.length; ti += 1) {
+        var bName = btns[ti].getAttribute("data-schedule-tab");
+        var isSel = bName === activeSched;
+        btns[ti].classList.toggle("is-active", isSel);
+        btns[ti].setAttribute("aria-pressed", isSel ? "true" : "false");
+      }
+    }
+
     _applyBindings(hass, vm) {
       var scrollSnap = this._captureScroll();
       try {
@@ -4539,16 +4725,47 @@
       if (haCard) haCard.setAttribute("data-layout", vm.cfg.layout);
 
       // Tabs & Panels
+      var isDesktopFallback = this._activeTab === "overview";
       for (var i = 0; i < VALID_TABS.length; i += 1) {
         var tb = VALID_TABS[i];
         var tabBtn = root.querySelector('[data-tab="' + tb + '"]');
         var panelEl = root.querySelector('[data-panel="' + tb + '"]');
         var active = tb === this._activeTab;
+        var fallbackActive = isDesktopFallback && tb === "security";
         if (tabBtn) {
           tabBtn.classList.toggle("is-active", active);
+          tabBtn.classList.toggle("is-desktop-fallback", fallbackActive);
           tabBtn.setAttribute("aria-selected", active ? "true" : "false");
         }
-        if (panelEl) panelEl.classList.toggle("is-active", active);
+        if (panelEl) {
+          panelEl.classList.toggle("is-active", active);
+          panelEl.classList.toggle("is-desktop-fallback", fallbackActive);
+        }
+      }
+      var overviewExtras = root.querySelector('[data-bind="overviewExtras"]');
+      if (overviewExtras) overviewExtras.classList.toggle("is-active", this._activeTab === "overview");
+      this._syncScheduleTabUi(root);
+
+      // Incremental warnings (avoids full DOM rebuild on transient alerts)
+      var warns = Array.isArray(vm.warns) ? vm.warns : [];
+      var nextWarnSig = warns.map(function (w) {
+        return w.id + ":" + (w.amber ? "1" : "0") + ":" + w.text;
+      }).join("|");
+      var warnsRow = root.querySelector('[data-bind="warnsRow"]');
+      if (warnsRow && nextWarnSig !== this._lastWarnSig) {
+        this._lastWarnSig = nextWarnSig;
+        if (warns.length) {
+          warnsRow.innerHTML = warns.map(function (w) {
+            return '<div class="warn-chip' + (w.amber ? " is-amber" : "") + '" role="button" tabindex="0" data-e="' +
+              self._h(w.id) + '">' + self._h(w.text) + "</div>";
+          }).join("");
+          warnsRow.classList.remove("hidden");
+          warnsRow.hidden = false;
+        } else {
+          warnsRow.innerHTML = "";
+          warnsRow.classList.add("hidden");
+          warnsRow.hidden = true;
+        }
       }
 
       // Hero
@@ -4645,9 +4862,13 @@
         if (socRing) {
           var circ = 138.23;
           var offset = circ * (1 - pct / 100);
+          var isLow = !isCharging && pct <= 15;
+          var isWarn = !isCharging && pct > 15 && pct <= 30;
+          var gradSuffix = isLow ? "-low" : (isWarn ? "-warn" : "-ok");
           socRing.setAttribute("stroke-dashoffset", offset.toFixed(2));
-          socRing.classList.toggle("is-low", !isCharging && pct <= 15);
-          socRing.classList.toggle("is-warn", !isCharging && pct > 15 && pct <= 30);
+          socRing.setAttribute("stroke", "url(#" + this._socGradPrefix + gradSuffix + ")");
+          socRing.classList.toggle("is-low", isLow);
+          socRing.classList.toggle("is-warn", isWarn);
         }
       }
 
@@ -5480,16 +5701,24 @@
         }
 
         var kpiList = [
-          { valBind: "chgTodayVal", subBind: "chgTodaySub", ent: vm.chgToday },
-          { valBind: "chgMonthVal", subBind: "chgMonthSub", ent: vm.chgMonth },
-          { valBind: "chgYearVal", subBind: "chgYearSub", ent: vm.chgYear },
-          { valBind: "chgStartVal", subBind: "chgStartSub", ent: vm.chgFromStart },
+          { cellBind: "chgTodayCell", valBind: "chgTodayVal", subBind: "chgTodaySub", ent: vm.chgToday },
+          { cellBind: "chgMonthCell", valBind: "chgMonthVal", subBind: "chgMonthSub", ent: vm.chgMonth },
+          { cellBind: "chgYearCell", valBind: "chgYearVal", subBind: "chgYearSub", ent: vm.chgYear },
+          { cellBind: "chgStartCell", valBind: "chgStartVal", subBind: "chgStartSub", ent: vm.chgFromStart },
         ];
         for (var ki = 0; ki < kpiList.length; ki += 1) {
           var kpi = kpiList[ki];
+          var modalCell = root.querySelector('[data-bind="' + kpi.cellBind + '"]');
           var valEl = root.querySelector('[data-bind="' + kpi.valBind + '"]');
           var subEl = root.querySelector('[data-bind="' + kpi.subBind + '"]');
+          var mirrorCell = root.querySelector('[data-stats-mirror="' + kpi.cellBind + '"]');
+          var mirrorVal = root.querySelector('[data-stats-mirror="' + kpi.valBind + '"]');
           var kEnt = kpi.ent;
+          syncInteractiveCellAttrs(modalCell, kEnt);
+          syncInteractiveCellAttrs(mirrorCell, kEnt);
+          if (mirrorVal) {
+            mirrorVal.textContent = formatChargingKpiValue(kEnt, hass, vm.lang, "all");
+          }
           if (!kEnt || isDeadStateObj(kEnt.s)) {
             if (valEl) valEl.textContent = "—";
             if (subEl) {
@@ -5499,28 +5728,13 @@
             continue;
           }
           var kAttrs = kEnt.s.attributes || {};
-          var kUnit = kAttrs.unit_of_measurement ? String(kAttrs.unit_of_measurement) : "kWh";
-          var kDp = typeof kAttrs.suggested_display_precision === "number" ? kAttrs.suggested_display_precision : null;
           var homeNum = safeNonNegNumber(kAttrs.home_kwh);
           var awayNum = safeNonNegNumber(kAttrs.away_kwh);
           var sessions = (typeof kAttrs.sessions_count === "number" && isFinite(kAttrs.sessions_count))
             ? Math.max(0, Math.round(kAttrs.sessions_count))
             : 0;
           if (valEl) {
-            if (this._statsScope === "home") {
-              valEl.textContent = homeNum !== null
-                ? formatMetric({ state: String(homeNum), attributes: { unit_of_measurement: kUnit, suggested_display_precision: kDp } }, vm.lang)
-                : "—";
-            } else if (this._statsScope === "away") {
-              valEl.textContent = awayNum !== null
-                ? formatMetric({ state: String(awayNum), attributes: { unit_of_measurement: kUnit, suggested_display_precision: kDp } }, vm.lang)
-                : "—";
-            } else {
-              var kDisp = formatEntityStateDisplay(kEnt.s, hass);
-              valEl.textContent = (kDisp !== "—" && !(kAttrs.unit_of_measurement) && parseStateNumber(kEnt.s) !== null)
-                ? (kDisp + " " + kUnit)
-                : kDisp;
-            }
+            valEl.textContent = formatChargingKpiValue(kEnt, hass, vm.lang, this._statsScope);
           }
           if (subEl) {
             if (this._statsScope === "all" && (homeNum !== null || awayNum !== null)) {
@@ -5584,7 +5798,7 @@
         }
       }
 
-      if (vm.hasAnyCons) {
+      if (vm.hasAnyCons || root.querySelector('[data-stats-mirror="consEvRow"]')) {
         applyConsumptionBindings(root, hass, this._consUnitModes, vm);
       }
 

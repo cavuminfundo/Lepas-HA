@@ -7,7 +7,7 @@
 
 # Lepas Connect (`custom_components/lepas`)
 
-## Home Assistant custom integration and async Python client for the **Lepas L8** connected vehicle platform (**Chery EU**, `com.chery.eu.lepas`) — currently **v1.31.2** (Home Assistant `2024.1.0+`, Python `3.13+`).
+## Home Assistant custom integration and async Python client for the **Lepas L8** connected vehicle platform (**Chery EU**, `com.chery.eu.lepas`) — currently **v1.32.0** (Home Assistant `2024.1.0+`, Python `3.13+`).
 
 > [!CAUTION]
 > **Active Development & Use at Your Own Risk Disclaimer**
@@ -76,9 +76,9 @@ Before configuring the integration in Home Assistant, make sure you meet the fol
 
 - **147 Active Entities Across 11 Platforms**: Covers `sensor` (54), `switch` (30), `binary_sensor` (26 active, plus `binary_sensor.lepas_sunroof_blind` disabled by default), `button` (17), `time` (10), `cover` (3), `number` (2), `select` (2), `climate` (1), `lock` (1), and `device_tracker` (1), with full **English**, **Italian**, and **Dutch** translations.
 - **Matte Titanium Lovelace Card (`custom:lepas-card`)**:
-  - **Responsive Layouts & Visual Editor**: Built-in `LepasCardEditor` with `auto | compact | cockpit` layouts (4-tab compact view and multi-column desktop Cockpit) and Sections grid support.
+  - **Responsive Layouts & Visual Editor**: Built-in `LepasCardEditor` with `auto | compact | cockpit` layouts (vertical 4-tab view on mobile/compact, and an equal-height horizontal 2-column desktop Cockpit pairing Hero + KPIs + Sync + compact **Statistics** summary on the left with a 3-tab operational switcher `Climate | Charging | Security` on the right and a `Scheduled Charging | Departures` switcher inside Charging) plus Sections grid support.
   - **Automatic Vehicle Color & Top-Down Blueprint**: Automatically detects vehicle paint from `vmc/queryList` (`Auto` swatch) or lets you pick from 5 Lepas L8 studio renders (`grey`, `teal`, `violet`, `black`, `white`), synchronized with an animated OEM top-down SUV SVG blueprint (doors, trunk, panoramic sunroof slide vs. tilt-ventilation, and 4-corner TPMS alerts).
-  - **SoC Ring & Integrated Statistics Modal**: Dual concentric SoC ring with orbital AC (emerald) / fast DC (amber) charging animation, plus an on-demand `<dialog>` **Statistics** modal (`7d | 30d | 12m` charging bar charts for `All | Home | Away` and EV/Hybrid consumption grids with persistent unit toggles and confirmed resets).
+  - **Gradient SoC Ring & Integrated Statistics Modal**: Dual concentric SoC ring with a per-level SVG color gradient (`mint → emerald → cyan`, `amber`, or `coral`) and orbital AC / fast DC charging pulse animation, plus an on-demand `<dialog>` **Statistics** modal (`7d | 30d | 12m` charging bar charts for `All | Home | Away` and EV/Hybrid consumption grids with persistent unit toggles and confirmed resets).
   - **Confirmation Modal & `car_in_use` Safety Gating**: Native `<dialog>` confirmation modal for one-shot commands and sensitive actions (`unlock`, `trunk_open`, `windows_open`, `sunroof_open`, `alarm_toggle`), concise Overview command outcome badge (5-minute TTL on success), and automatic `car_in_use` lockout across Climate, Security, and Overview quick actions while driving or when HV safety interlocks apply.
 - **Persistent Charging Statistics & Consumption Engine**:
   - **Charging Energy Statistics**: Home Assistant `Store`-backed periodic sensors (`sensor.lepas_charging_energy_today`, `month`, `year`, `from_start` with `home_kwh` / `away_kwh` attributes and `button.lepas_reset_charging_from_start`), plus Energy Dashboard counters (`home_charging_energy`, `away_charging_energy`) using hybrid `chargingPower` integration and SoC-delta gap reconciliation.
@@ -93,7 +93,7 @@ Before configuring the integration in Home Assistant, make sure you meet the fol
 
 ## Dashboard Preview (`custom:lepas-card`)
 
-*Synthetic preview renders of `custom:lepas-card` (`v1.31.2`) showing the multi-column Cockpit view, Compact Security & TPMS blueprint tab, and integrated Statistics modal.*
+*Synthetic preview renders of `custom:lepas-card` showing the equal-height horizontal 2-column Cockpit view, mobile/compact Security & TPMS blueprint tab, and integrated Statistics modal.*
 
 <p align="center">
   <img src="docs/images/lepas-card-cockpit.png" alt="Lepas Connect Lovelace Card — Desktop Cockpit View" width="820">

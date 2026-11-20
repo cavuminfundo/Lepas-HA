@@ -16,6 +16,16 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.32.0 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Horizontal 2-Column Desktop Cockpit, Compact Inline Statistics & Zero-Flicker Updates (`lepas-card.js`, `README.md`, `docs/images/`)**: Redesigned `custom:lepas-card` for desktop (`cockpit` and `auto >= 680px` via shared `desktopLayoutRules` ES5 CSS parity across `@container` and `@supports not`) into a balanced 2-column horizontal Cockpit: the left column pairs the `16:9` hero render (with a multi-stop SoC SVG ring gradient), 2×2 KPI grid, Overview `Updated / Sync` surface (with desktop `Wake car` button), and a compact 3-KPI inline **Statistics** card (`Charging · Today`, `EV · 50 km`, `Fuel/Hybrid · 50 km`, capped at `max-height: 152px` with 1-click access to the full `<dialog>` modal); the right column places the 3-tab operational switcher (`Climate | Charging | Security`) on top with `.is-desktop-fallback` to Security when `default_tab` is `overview`, hides duplicate quick actions, adds a `Scheduled charging | Departure scheduler` switcher inside Charging, renders all 12 `Departure climate extras` in a compact 3-column desktop grid without removing any Mobile/Compact control, and gives `Climate` and `Security` (expanded top-down SUV + TPMS stage) balanced desktop ergonomics. Also removed `warnSig` from `structKey` to eliminate DOM-rebuild flicker on warning updates, aligned `LepasCardEditor` image placeholder to `CARD_VERSION`, updated `docs/images/lepas-card-cockpit.png` & `docs/images/lepas-card-security.png`, and bumped card assets to `?v=1.32.0`.
+
+### 🇮🇹 Italiano
+
+- **Plancia Cockpit Orizzontale a 2 Colonne, Statistiche Compatte Inline e Zero Flicker (`lepas-card.js`, `README.md`, `docs/images/`)**: Ridisegnata la `custom:lepas-card` su desktop (`cockpit` e `auto >= 680px` con parità ES5 condivisa tramite `desktopLayoutRules` su `@container` e `@supports not`) in un layout Cockpit orizzontale bilanciato a 2 colonne: la colonna sinistra abbina l'immagine hero `16:9` (con gradiente SVG dinamico sull'anello SoC), la griglia KPI 2×2, la sezione `Aggiornato / Sync` (con tasto desktop `Sveglia auto`) e il riquadro compatto **Statistiche** a 3 KPI inline (`Ricarica · Oggi`, `EV · 50 km`, `Carburante/Ibrido · 50 km`, limitato a `max-height: 152px` con apertura rapida del `<dialog>` completo); la colonna destra sposta in alto lo switcher operativo a 3 tab (`Clima | Ricarica | Sicurezza`) con fallback desktop automatico su `Sicurezza` quando `default_tab` è `overview`, nasconde i comandi rapidi duplicati, aggiunge il selettore `Ricarica programmata | Partenze programmate` in Ricarica, dispone tutti i 12 extra clima alla partenza su 3 colonne compatte su desktop senza rimuovere nessun controllo rispetto a Mobile/Compact e bilancia spaziature ed ergonomia di `Clima` e `Sicurezza` (schema auto dall'alto e TPMS ingranditi). Rimosso inoltre `warnSig` da `structKey` per eliminare il flicker di ricostruzione DOM sugli avvisi, allineato il placeholder di `LepasCardEditor` a `CARD_VERSION`, aggiornati gli screenshot `docs/images/lepas-card-cockpit.png` e `docs/images/lepas-card-security.png` e aggiornati gli asset della card a `?v=1.32.0`.
+
 ## v1.31.2 — 2026-11-20
 
 ### 🇬🇧 English

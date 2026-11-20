@@ -3486,6 +3486,235 @@ test("SoC ring animates only during active charging, differentiates AC/DC, and r
   assert.match(cssText, /prefers-reduced-motion:\s*reduce[\s\S]*?\.soc-mode-slide[\s\S]*?\.soc-chg-ico:not\(\.hidden\)/);
 });
 
+test("SoC outer percentage ring applies per-instance SVG gradients across OK, warn, low, and charging states", () => {
+  const cardA = createCard({ layout: "compact" }, makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "Non in ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "0"),
+    "sensor.lepas_battery": makeState("sensor.lepas_battery", "78"),
+  }, "it"));
+  const cardB = createCard({ layout: "compact" }, makeFullHass({}, "it"));
+
+  const svgA = cardA.shadowRoot.querySelector("svg.soc-svg");
+  const svgB = cardB.shadowRoot.querySelector("svg.soc-svg");
+  const ringA = cardA.shadowRoot.querySelector("[data-soc-ring]");
+  assert.ok(svgA && svgB && ringA);
+
+  const gradsA = svgA.querySelectorAll("defs linearGradient");
+  const gradsB = svgB.querySelectorAll("defs linearGradient");
+  assert.equal(gradsA.length, 3, "SoC SVG must define ok, warn, and low linearGradients");
+  assert.notEqual(gradsA[0].getAttribute("id"), gradsB[0].getAttribute("id"), "Gradient IDs must be unique per card instance");
+  for (const g of gradsA) {
+    assert.ok(g.querySelectorAll("stop").length >= 2, "Each SoC gradient must define at least 2 color stops");
+  }
+
+  const okId = gradsA[0].getAttribute("id");
+  const warnId = gradsA[1].getAttribute("id");
+  const lowId = gradsA[2].getAttribute("id");
+  assert.equal(ringA.getAttribute("stroke"), `url(#${okId})`);
+
+  // Warning range (16..30% when not charging)
+  cardA.hass = makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "Non in ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "0"),
+    "sensor.lepas_battery": makeState("sensor.lepas_battery", "24"),
+  }, "it");
+  assert.equal(ringA.getAttribute("stroke"), `url(#${warnId})`);
+  assert.equal(ringA.classList.contains("is-warn"), true);
+
+  // Low range (<= 15% when not charging)
+  cardA.hass = makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "Non in ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "0"),
+    "sensor.lepas_battery": makeState("sensor.lepas_battery", "12"),
+  }, "it");
+  assert.equal(ringA.getAttribute("stroke"), `url(#${lowId})`);
+  assert.equal(ringA.classList.contains("is-low"), true);
+
+  // Active charging at 12% restores OK gradient
+  cardA.hass = makeFullHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "on"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "In ricarica"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "6.6"),
+    "sensor.lepas_battery": makeState("sensor.lepas_battery", "12"),
+  }, "it");
+  assert.equal(ringA.getAttribute("stroke"), `url(#${okId})`);
+  assert.equal(ringA.classList.contains("is-low"), false);
+});
+
+test("Horizontal 2-column Cockpit places Hero+Overview on left, 3-tab operational switcher on right, hides duplicate quick actions, and toggles schedules without rebuild", () => {
+  const h = LepasCard._helpers;
+  const card = createCard({ layout: "cockpit", default_tab: "overview" }, makeFullHass({
+    "switch.lepas_automatic_updates": null,
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "on", { car_in_use: true }),
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", { car_in_use: true }),
+  }, "it"));
+  const root = card.shadowRoot;
+  const cssText = root.querySelector("style").textContent;
+
+  // Desktop 2-column split (auto >= 680px, cockpit >= 560px) in @container and @supports not fallback, with equal-height stretch
+  const idx680 = cssText.indexOf("@container (min-width: 680px)");
+  const idx340 = cssText.indexOf("@container (max-width: 340px)", idx680);
+  assert.ok(idx680 >= 0 && idx340 > idx680);
+  const block680 = cssText.slice(idx680, idx340);
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .cockpit-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.12fr); align-items: stretch; }'));
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .tabs-bar [data-tab="overview"] { display: none; }'));
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .quick-actions-surface { display: none; }'));
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .cockpit-wake-btn { display: inline-flex; }'));
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .schedule-switcher { display: grid; }'));
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .is-schedule-hidden { display: none; }'));
+  assert.ok(block680.includes('ha-card[data-layout="auto"] .panel[data-panel="charging"] > .surface[data-schedule-panel]:not(.is-schedule-hidden) { flex: 1; }'));
+
+  const idxSupports = cssText.indexOf("@supports not (container-type: inline-size)");
+  const idxMotion = cssText.indexOf("@media (prefers-reduced-motion: no-preference)");
+  assert.ok(idxSupports >= 0 && idxMotion > idxSupports);
+  const blockSupports = cssText.slice(idxSupports, idxMotion);
+  assert.ok(blockSupports.includes("@media (min-width: 560px)"));
+  assert.ok(blockSupports.includes("@media (min-width: 680px)"));
+  assert.ok(blockSupports.includes('ha-card[data-layout="auto"] .cockpit-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.12fr); align-items: stretch; }'));
+  assert.ok(blockSupports.includes('ha-card[data-layout="auto"] .quick-actions-surface { display: none; }'));
+  assert.ok(cssText.includes('ha-card[data-layout="cockpit"] .tabs-bar [data-tab="overview"] { display: none; }'));
+
+  // Ensure bare global rules (shared with compact) do NOT hide .quick-actions-surface or .is-schedule-hidden
+  const beforeContainer = cssText.split("@container")[0];
+  assert.ok(!/^\s*\.quick-actions-surface\s*\{\s*display:\s*none/m.test(beforeContainer));
+  assert.ok(!/^\s*\.is-schedule-hidden\s*\{\s*display:\s*none/m.test(beforeContainer));
+
+  // Structural DOM placement: left col holds hero + overview, right col holds tabs-bar + operational panels
+  const leftCol = root.querySelector(".cockpit-left");
+  const rightCol = root.querySelector(".cockpit-right");
+  assert.ok(leftCol && rightCol);
+  assert.ok(leftCol.querySelector(".hero-region"));
+  assert.ok(leftCol.querySelector('[data-panel="overview"]'));
+  assert.ok(rightCol.querySelector(".tabs-bar"));
+  assert.ok(rightCol.querySelector('[data-panel="climate"]'));
+  assert.ok(rightCol.querySelector('[data-panel="charging"]'));
+  assert.ok(rightCol.querySelector('[data-panel="security"]'));
+
+  // When default_tab is "overview", desktop fallback activates Security on the right without losing overview tab state
+  const secTab = root.querySelector('[data-tab="security"]');
+  const secPanel = root.querySelector('[data-panel="security"]');
+  const cliTab = root.querySelector('[data-tab="climate"]');
+  const cliPanel = root.querySelector('[data-panel="climate"]');
+  const ovTab = root.querySelector('[data-tab="overview"]');
+  assert.equal(secTab.classList.contains("is-desktop-fallback"), true);
+  assert.equal(secPanel.classList.contains("is-desktop-fallback"), true);
+  assert.equal(ovTab.classList.contains("is-active"), true);
+  cliTab.click();
+  assert.equal(secTab.classList.contains("is-desktop-fallback"), false);
+  assert.equal(secPanel.classList.contains("is-desktop-fallback"), false);
+  assert.equal(cliTab.classList.contains("is-active"), true);
+  assert.equal(cliPanel.classList.contains("is-active"), true);
+
+  // Localized schedule switcher toggles without DOM rebuild
+  const itTexts = h.getTexts("it");
+  const chgBtn = root.querySelector('[data-schedule-tab="charge"]');
+  const depBtn = root.querySelector('[data-schedule-tab="departure"]');
+  const chgPanel = root.querySelector('[data-bind="schedChgSurface"]');
+  const depPanel = root.querySelector('[data-bind="depSurface"]');
+  const heroBefore = root.querySelector('[data-bind="heroImg"]');
+  assert.ok(chgBtn && depBtn && chgPanel && depPanel && heroBefore);
+  assert.ok(chgBtn.textContent.includes(itTexts.scheduledCharging));
+  assert.ok(depBtn.textContent.includes(itTexts.departures));
+  depBtn.click();
+  assert.ok(root.querySelector('[data-bind="heroImg"]') === heroBefore, "Schedule tab toggle must not rebuild shadowRoot");
+  assert.equal(chgBtn.getAttribute("aria-pressed"), "false");
+  assert.equal(depBtn.getAttribute("aria-pressed"), "true");
+  assert.equal(chgPanel.classList.contains("is-schedule-hidden"), true);
+  assert.equal(depPanel.classList.contains("is-schedule-hidden"), false);
+
+  // Wake button inside sync surface is gated strictly by wakeBtn and stays exempt from car_in_use gating
+  const cockpitWake = root.querySelector('[data-panel="overview"] .btn-row .cockpit-wake-btn');
+  assert.ok(cockpitWake);
+  assert.equal(cockpitWake.disabled, false);
+  assert.equal(cockpitWake.classList.contains("is-car-in-use"), false);
+  const noWakeCard = createCard({ layout: "cockpit" }, makeFullHass({ "button.lepas_wake_car": null }, "en"));
+  assert.equal(noWakeCard.shadowRoot.querySelector(".cockpit-wake-btn"), null);
+
+  // Single-panel schedule guard
+  const cardChargeOnly = createCard({ layout: "cockpit" }, makeFullHass({
+    "sensor.lepas_next_departure": null,
+    "sensor.lepas_scheduled_departure": null,
+    "switch.lepas_quick_departure": null,
+    "switch.lepas_departure_mon_enabled": null,
+    "switch.lepas_departure_tue_enabled": null,
+    "switch.lepas_departure_wed_enabled": null,
+    "switch.lepas_departure_thu_enabled": null,
+    "switch.lepas_departure_fri_enabled": null,
+    "switch.lepas_departure_sat_enabled": null,
+    "switch.lepas_departure_sun_enabled": null,
+    "time.lepas_departure_mon_time": null,
+    "time.lepas_departure_tue_time": null,
+    "time.lepas_departure_wed_time": null,
+    "time.lepas_departure_thu_time": null,
+    "time.lepas_departure_fri_time": null,
+    "time.lepas_departure_sat_time": null,
+    "time.lepas_departure_sun_time": null,
+    "button.lepas_apply_departure_schedule": null,
+    "switch.lepas_battery_pack_heat": null,
+    "time.lepas_battery_pack_heat_time": null,
+    "switch.lepas_sync_battery_heat_to_departure": null,
+  }, "it"));
+  assert.equal(cardChargeOnly.shadowRoot.querySelector(".schedule-switcher"), null);
+  const chargeOnlyPanel = cardChargeOnly.shadowRoot.querySelector('[data-schedule-panel="charge"]');
+  assert.ok(chargeOnlyPanel);
+  assert.equal(chargeOnlyPanel.classList.contains("is-schedule-hidden"), false);
+
+  // Compact layout preserves quick actions & overview-extras tab isolation
+  const compactCard = createCard({ layout: "compact", show_all: true, default_tab: "climate" }, makeFullHass({}, "it"));
+  const cRoot = compactCard.shadowRoot;
+  assert.ok(cRoot.querySelector('[data-bind="quickActionsSurface"]'));
+  const extras = cRoot.querySelector('[data-bind="overviewExtras"]');
+  assert.ok(extras);
+  assert.equal(extras.closest('[data-panel="overview"]'), null);
+  assert.equal(extras.classList.contains("is-active"), false);
+  cRoot.querySelector('.tab-btn[data-tab="overview"]').click();
+  assert.equal(extras.classList.contains("is-active"), true);
+});
+
+test("warnsRow updates incrementally without shadowRoot rebuild and escapes XSS; editor placeholder tracks CARD_VERSION", () => {
+  const card = createCard({ layout: "cockpit" }, makeFullHass({}, "it"));
+  const root = card.shadowRoot;
+  const heroImgBefore = root.querySelector('[data-bind="heroImg"]');
+  const warnsRow = root.querySelector('[data-bind="warnsRow"]');
+  assert.ok(warnsRow);
+  assert.equal(warnsRow.classList.contains("hidden"), true);
+
+  card.hass = makeFullHass({
+    "binary_sensor.lepas_tire_warning_front_left": makeState("binary_sensor.lepas_tire_warning_front_left", "on", { friendly_name: "Tire <img src=x onerror=alert(1)>" }),
+  }, "it");
+  assert.ok(root.querySelector('[data-bind="heroImg"]') === heroImgBefore, "Warning addition must NOT rebuild shadowRoot");
+  assert.equal(warnsRow.classList.contains("hidden"), false);
+  assert.equal(warnsRow.querySelectorAll(".warn-chip").length, 1);
+  assert.ok(!warnsRow.innerHTML.includes("<img"), "Raw <img tag must not appear in warnsRow");
+  assert.ok(warnsRow.innerHTML.includes("&lt;img"), "Warning text must be HTML-escaped");
+
+  // Amber warning flag updates incrementally too (door open while locked -> ajarLocked amber warning)
+  card.hass = makeFullHass({
+    "binary_sensor.lepas_front_left_door": makeState("binary_sensor.lepas_front_left_door", "on"),
+  }, "it");
+  assert.ok(root.querySelector('[data-bind="heroImg"]') === heroImgBefore, "Amber warning transition must NOT rebuild shadowRoot");
+  const amberChips = warnsRow.querySelectorAll(".warn-chip.is-amber");
+  assert.equal(amberChips.length, 1);
+
+  card.hass = makeFullHass({
+    "binary_sensor.lepas_tire_warning_front_left": makeState("binary_sensor.lepas_tire_warning_front_left", "off"),
+    "binary_sensor.lepas_front_left_door": makeState("binary_sensor.lepas_front_left_door", "off"),
+  }, "it");
+  assert.ok(root.querySelector('[data-bind="heroImg"]') === heroImgBefore, "Warning removal must NOT rebuild shadowRoot");
+  assert.equal(warnsRow.classList.contains("hidden"), true);
+  assert.equal(warnsRow.querySelectorAll(".warn-chip").length, 0);
+
+  const ed = LepasCard.getConfigElement();
+  ed.hass = makeFullHass({}, "it");
+  ed.setConfig({ type: "custom:lepas-card" });
+  const imgInput = ed.shadowRoot.querySelector('input[data-field="image"]');
+  assert.ok(imgInput);
+  assert.ok(imgInput.getAttribute("placeholder").includes(`?v=${LepasCard._helpers.CARD_VERSION}`));
+});
+
 test("LepasCard Overview omits consSection and Live charging omits fastPortBadge while keeping AC/DC detection", () => {
   const hass = makeFullHass({
     "sensor.lepas_fast_charging_port": makeState("sensor.lepas_fast_charging_port", "Collegata (ricarica rapida)"),
@@ -4563,6 +4792,188 @@ test("Offline status appears only in clickable .status-pill and never duplicates
   const activeChips = [...warnCard.shadowRoot.querySelectorAll(".warns-row .warn-chip")];
   assert.equal(activeChips.length, 1);
   assert.equal(activeChips[0].getAttribute("data-e"), "binary_sensor.lepas_low_battery");
+});
+
+test("Cockpit left-column compact Statistics card displays charging KPIs & EV/Hybrid consumption, keeps Sync compact inside Overview, and stays hidden on compact/mobile", () => {
+  const initialHass = makeFullHass({
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "on", { car_in_use: true }),
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", { car_in_use: true }),
+  }, "it");
+  const card = createCard({ layout: "cockpit" }, initialHass);
+  const root = card.shadowRoot;
+  const cssText = root.querySelector("style").textContent;
+
+  // 1. CSS: hidden by default, mobile order/hero/2-col extras unchanged, desktop shows compact stats & balanced rules across all 3 blocks
+  const cockpitRuleIdx = cssText.indexOf('ha-card[data-layout="cockpit"]');
+  assert.ok(cockpitRuleIdx > 0);
+  const beforeDesktop = cssText.slice(0, cockpitRuleIdx);
+  assert.ok(beforeDesktop.includes(".cockpit-stats-surface { display: none; }"));
+  assert.ok(beforeDesktop.includes(".overview-extras { display: none; order: 4; }"));
+  assert.ok(!beforeDesktop.includes(".sync-surface"));
+  assert.ok(!beforeDesktop.includes("aspect-ratio: 16 / 9"));
+  assert.ok(!beforeDesktop.includes(".climate-extras-grid { grid-template-columns: repeat(3, minmax(0, 1fr))"));
+
+  const idx680 = cssText.indexOf("@container (min-width: 680px)");
+  const idx340 = cssText.indexOf("@container (max-width: 340px)", idx680);
+  assert.ok(idx680 > cockpitRuleIdx && idx340 > idx680);
+  const blockCockpit = cssText.slice(cockpitRuleIdx, idx680);
+  const block680 = cssText.slice(idx680, idx340);
+
+  const idxSup = cssText.indexOf("@supports not (container-type: inline-size)");
+  const idxMotion = cssText.indexOf("@media (prefers-reduced-motion: no-preference)", idxSup);
+  assert.ok(idxSup > idx340 && idxMotion > idxSup);
+  const blockSup = cssText.slice(idxSup, idxMotion);
+  const idxSup680 = blockSup.indexOf("@media (min-width: 680px)");
+  assert.ok(idxSup680 > 0);
+  const blockSup680 = blockSup.slice(idxSup680);
+
+  for (const [block, sel] of [
+    [blockCockpit, 'ha-card[data-layout="cockpit"]'],
+    [block680, 'ha-card[data-layout="auto"]'],
+    [blockSup680, 'ha-card[data-layout="auto"]'],
+  ]) {
+    assert.ok(block.includes(`${sel} .cockpit-stats-surface { display: flex; flex-direction: column; gap: 8px; flex: 1; }`));
+    assert.ok(block.includes(`${sel} .cockpit-stats-row { flex: 1; align-items: stretch; max-height: 152px; }`));
+    assert.ok(block.includes(`${sel} .cockpit-stats-slot > .cons-cell { justify-content: center; gap: 4px; }`));
+    assert.ok(block.includes(`${sel} .cockpit-left.has-cockpit-stats .panel[data-panel="overview"] { flex: 0 0 auto; }`));
+    assert.ok(block.includes(`${sel} .cockpit-left.has-cockpit-stats .panel[data-panel="overview"] > .surface:last-of-type { flex: 0 0 auto; }`));
+    assert.ok(block.includes(`${sel} .hero-region, ${sel} .tabs-bar, ${sel} .panel, ${sel} .overview-extras { order: initial; }`));
+    assert.ok(block.includes(`${sel} .hero-stage { aspect-ratio: 16 / 9; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="security"] .bp-stage { grid-template-columns: minmax(80px, 1fr) minmax(136px, 162px) minmax(80px, 1fr); padding: 20px 6px; gap: 12px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="security"] .tpms-col { gap: 26px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="security"] .tpms-box { padding: 11px 12px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="security"] > .surface:last-of-type { gap: 14px; justify-content: space-between; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="security"] .btn-grid { gap: 11px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="security"] .ctrl-btn { min-height: 50px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="climate"] > .surface { padding: 14px 13px; gap: 12px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="climate"] .ctrl-btn { min-height: 48px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="climate"] .seat-btns .ctrl-btn { min-height: 46px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] [data-bind="depSurface"] { gap: 7px; padding: 10px 12px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-btn { min-height: 36px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-input, ${sel} .panel[data-panel="charging"] [data-bind="depSurface"] .ctrl-select { min-height: 36px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] .dep-summary-row { min-height: 38px; padding: 6px 10px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] .day-chip { min-height: 44px; padding: 3px 2px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] .dep-subbox { padding-top: 6px; gap: 5px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] .climate-extras-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }`));
+    assert.ok(block.includes(`${sel} .panel[data-panel="charging"] .climate-extra-chip { min-height: 34px; padding: 4px 6px; font-size: 0.7rem; }`));
+  }
+
+  // 2. DOM placement: syncSurface inside [data-panel=overview] on left, tabsBar first in .cockpit-right, cockpitStatsSurface in left outside overview
+  const leftCol = root.querySelector(".cockpit-left");
+  const rightCol = root.querySelector(".cockpit-right");
+  const syncSurf = root.querySelector('[data-bind="syncSurface"]');
+  const tabsBar = root.querySelector(".tabs-bar");
+  const statsSurf = root.querySelector('[data-bind="cockpitStatsSurface"]');
+  assert.ok(leftCol && rightCol && syncSurf && tabsBar && statsSurf);
+  assert.ok(syncSurf.closest('[data-panel="overview"]') === root.querySelector('[data-panel="overview"]'));
+  assert.ok(rightCol.children[0] === tabsBar, ".tabs-bar must be first child of .cockpit-right");
+  assert.ok(leftCol.classList.contains("has-cockpit-stats"));
+  assert.ok(statsSurf.closest(".cockpit-left") === leftCol, "cockpitStatsSurface must belong to .cockpit-left");
+  assert.ok(statsSurf.closest('[data-panel="overview"]') === null, "cockpitStatsSurface must live outside [data-panel=overview]");
+
+  // 3. Mobile/compact isolation: syncSurface sits inside overview (hidden cleanly on climate) and overview stays free of consSection
+  const compactCard = createCard({ layout: "compact", default_tab: "overview" }, makeFullHass({}, "it"));
+  const cRoot = compactCard.shadowRoot;
+  assert.equal(cRoot.querySelector("ha-card").getAttribute("data-layout"), "compact");
+  assert.ok(cRoot.querySelector('[data-panel="overview"] .cons-section') === null, "overview panel must stay free of .cons-section");
+  assert.ok(cRoot.querySelector('[data-panel="overview"] [data-bind="syncSurface"]'));
+  assert.equal(cRoot.querySelector('[data-panel="overview"]').classList.contains("is-active"), true);
+  cRoot.querySelector('[data-tab="climate"]').click();
+  assert.equal(cRoot.querySelector('[data-panel="overview"]').classList.contains("is-active"), false);
+  cRoot.querySelector('[data-tab="overview"]').click();
+  assert.equal(cRoot.querySelector('[data-panel="overview"]').classList.contains("is-active"), true);
+
+  // 4. Inline 3-KPI summary slots ("all" scope locked on chgToday), data-e clickability, live hass sync
+  assert.equal(statsSurf.querySelectorAll(".cockpit-stats-slot").length, 3);
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="chgMonthVal"]'), null);
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="chgTodayVal"]').textContent, "12.50 kWh");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="chgTodayCell"]').getAttribute("data-e"), "sensor.lepas_charging_energy_today");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="chgTodayCell"]').getAttribute("role"), "button");
+
+  root.querySelector('[data-stats-scope="home"]').click();
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="chgTodayVal"]').textContent, "12.50 kWh");
+  root.querySelector('[data-stats-scope="all"]').click();
+
+  card.hass = {
+    ...initialHass,
+    states: {
+      ...initialHass.states,
+      "sensor.lepas_charging_energy_today": makeState("sensor.lepas_charging_energy_today", "19.75", { unit_of_measurement: "kWh", suggested_display_precision: 2 }),
+      "sensor.lepas_average_energy_consumption": makeState("sensor.lepas_average_energy_consumption", "19.4", { unit_of_measurement: "kWh/100 km" }),
+    },
+  };
+  assert.ok(card.shadowRoot.querySelector('[data-bind="cockpitStatsSurface"]') === statsSurf, "Live hass update must not rebuild skeleton");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="chgTodayVal"]').textContent, "19.75 kWh");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consEv50Val"]').textContent, "19.4 kWh/100 km");
+
+  // 5. EV + Hybrid 50 km consumption inline mirrors + unit toggles with guaranteed cleanup
+  card.hass = initialHass;
+  assert.ok(card.shadowRoot.querySelector('[data-bind="cockpitStatsSurface"]') === statsSurf);
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consEv50Val"]').textContent, "18.2 kWh/100 km");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consHyb50Val"]').textContent, "6.4 L/100 km");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consEv50Cell"]').getAttribute("data-e"), "sensor.lepas_average_energy_consumption");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consEv50Cell"]').getAttribute("role"), "button");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consHyb50Cell"]').getAttribute("data-e"), "sensor.lepas_average_fuel_consumption");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consHyb50Cell"]').getAttribute("role"), "button");
+
+  try {
+    root.querySelector('[data-bind="consEvPerKmBtn"]').click();
+    root.querySelector('[data-bind="consHybPerKmBtn"]').click();
+    assert.equal(statsSurf.querySelector('[data-stats-mirror="consEv50Val"]').textContent, "0.182 kWh/km");
+    assert.equal(statsSurf.querySelector('[data-stats-mirror="consHyb50Val"]').textContent, "15.6 km/L");
+  } finally {
+    root.querySelector('[data-bind="consEvPer100Btn"]').click();
+    root.querySelector('[data-bind="consHybPer100Btn"]').click();
+  }
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consEv50Val"]').textContent, "18.2 kWh/100 km");
+  assert.equal(statsSurf.querySelector('[data-stats-mirror="consHyb50Val"]').textContent, "6.4 L/100 km");
+
+  // 6. open_stats click opens statsDialog under car_in_use=true and true -> false (AB-LEP-014/016)
+  const expandBtn = statsSurf.querySelector('.cockpit-stats-open[data-action-id="open_stats"]');
+  assert.ok(expandBtn && !expandBtn.disabled && !expandBtn.classList.contains("is-car-in-use"));
+  const statsDlg = root.querySelector('[data-bind="statsDialog"]');
+  expandBtn.click();
+  assert.ok(statsDlg.open || statsDlg.hasAttribute("open"));
+  if (typeof statsDlg.close === "function") statsDlg.close();
+  else statsDlg.removeAttribute("open");
+
+  card.hass = makeFullHass({
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "off", { car_in_use: false }),
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", { car_in_use: false }),
+  }, "it");
+  assert.ok(card.shadowRoot.querySelector('[data-bind="cockpitStatsSurface"]'));
+  assert.ok(!expandBtn.disabled && !expandBtn.classList.contains("is-car-in-use"));
+
+  // 7. BEV suppresses Hybrid row inside cockpit stats surface
+  const bevCard = createCard({ layout: "cockpit" }, makeFullHass({
+    "sensor.lepas_average_fuel_consumption": null,
+    "sensor.lepas_hybrid_consumption_100km": null,
+    "sensor.lepas_hybrid_consumption_1000km": null,
+    "sensor.lepas_hybrid_consumption_from_start": null,
+  }, "en"));
+  const bevHybRow = bevCard.shadowRoot.querySelector('[data-stats-mirror="consHybridRow"]');
+  assert.ok(bevHybRow && bevHybRow.classList.contains("hidden") && bevHybRow.hidden);
+  assert.equal(bevCard.shadowRoot.querySelector('[data-stats-mirror="consEv50Val"]').textContent, "18.2 kWh/100 km");
+
+  // 8. Omitted completely when no charging stats and no consumption sensors exist
+  const noStatsCard = createCard({ layout: "cockpit" }, makeFullHass({
+    "sensor.lepas_charging_energy_today": null,
+    "sensor.lepas_charging_energy_month": null,
+    "sensor.lepas_charging_energy_year": null,
+    "sensor.lepas_charging_energy_from_start": null,
+    "button.lepas_reset_charging_energy_stats": null,
+    "sensor.lepas_average_energy_consumption": null,
+    "sensor.lepas_ev_consumption_100km": null,
+    "sensor.lepas_ev_consumption_1000km": null,
+    "sensor.lepas_ev_consumption_from_start": null,
+    "sensor.lepas_average_fuel_consumption": null,
+    "sensor.lepas_hybrid_consumption_100km": null,
+    "sensor.lepas_hybrid_consumption_1000km": null,
+    "sensor.lepas_hybrid_consumption_from_start": null,
+    "button.lepas_reset_consumption_stats": null,
+  }, "it"));
+  assert.ok(noStatsCard.shadowRoot.querySelector('[data-bind="cockpitStatsSurface"]') === null, "cockpitStatsSurface must be omitted when no stats entities exist");
+  assert.equal(noStatsCard.shadowRoot.querySelector(".cockpit-left").classList.contains("has-cockpit-stats"), false);
 });
 
 
