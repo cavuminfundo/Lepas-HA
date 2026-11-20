@@ -54,6 +54,8 @@ from .const import (
     capabilities_from_item, features_from_permissions,
     CLIMA_MIN_DEFAULT, CLIMA_MAX_DEFAULT, CLIMA_STEP_DEFAULT,
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
+    AUTO_CLOSE_ON_LOCK_KEYS, CLOSURE_META_KEYS, CLOSURE_PROBE_COMMANDS,
+    PROBE_MQTT_GRACE_S, CMD_PROBE_DELAYS_S,
 )
 from .charging_stats import ChargingStatsTracker
 from .consumption import ConsumptionTracker, is_degraded_battery_frame
@@ -72,7 +74,7 @@ from .scheduler import (
 )
 from .timers import (
     TimerRegistry, GRUPPO_POLL,
-    KEEPALIVE, POLL, HV_POLL, STARTUP_PROBE, DRIVE_WATCH, AWAKE, DEPARTURE_TICK,
+    KEEPALIVE, POLL, HV_POLL, STARTUP_PROBE, DRIVE_WATCH, AWAKE, DEPARTURE_TICK, CMD_PROBE,
 )
 
 # Cert minimi per il mutual-TLS MQTT (il .cer del server non serve a tls_set, come nel bridge).
@@ -444,8 +446,10 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._note_cmd_at: float | None = None
         self._last_cmd_key: str | None = None
         self._last_cmd_at: float | None = None
+        self._probe_seq: int = 0
         self.position: dict | None = None
         self.data = {"fields": {}, "msg_fields": {}, "position": None,
+                     "probe_seq": 0, "probe_fields": {}, "probe_changed_fields": frozenset(),
                      "awake": False, "car_connected": False,
                      "session_ok": None, "session_detail": "",
                      # — sensori diagnostici (parità col bridge) —
@@ -2180,6 +2184,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         with self._state_lock:
             was_awake = bool(self._last_msg_ts) and (now - self._last_msg_ts) < self.awake_window
             self._last_msg_ts = now
+            prev_door_lock = self._fields.get("doorLock")
             for k, v in data.items():
                 if k != "time" and k not in CMD_CONFIRM_META:
                     self._fields[k] = str(v)
@@ -2204,6 +2209,7 @@ class LepasCoordinator(DataUpdateCoordinator):
 
         rej_fields: frozenset[str] = frozenset()
         rej_other = False
+        res_str = ""
         patch.update({
             "fields": fields_copy,
             "msg_fields": msg_fields,
@@ -2217,7 +2223,7 @@ class LepasCoordinator(DataUpdateCoordinator):
                 self._format_cmd_result(data, is_climate_cmd=is_climate_cmd)
             )
             raw_res = data.get("result")
-            res_str = "" if raw_res is None else str(raw_res)
+            res_str = "" if raw_res is None else str(raw_res).strip()
             rej_fields, rej_other = self._extract_rejected_fields(
                 data.get("reason"), res_str, is_climate_cmd=is_climate_cmd
             )
@@ -2236,6 +2242,24 @@ class LepasCoordinator(DataUpdateCoordinator):
             if self._diag is not None:
                 self._diag.record("cmd_ack", svc=svc or "?", result=str(data.get("result", "")),
                                   reason=data.get("reason"), data=data)
+        lock_cmd_ok = (
+            is_confirmation
+            and self._is_named_cmd_active("blocca")
+            and not rej_other
+            and not rej_fields
+            and res_str != "0"
+        )
+        with self._state_lock:
+            auto_changed = self._apply_lock_auto_close(
+                self._fields,
+                data,
+                force_on_cmd=lock_cmd_ok,
+                prev_door_lock=prev_door_lock,
+                extra_target=msg_fields,
+            )
+            if auto_changed:
+                fields_copy = dict(self._fields)
+                patch["fields"] = fields_copy
         rt_cur = self.data.get("realtime") if isinstance(self.data, dict) else None
         patch["car_in_use"] = self._evaluate_car_in_use(
             rt_cur if isinstance(rt_cur, dict) else None,
@@ -2292,6 +2316,46 @@ class LepasCoordinator(DataUpdateCoordinator):
         from .core.commands import CMD_MAP
 
         return CMD_MAP.get(key, {}).get("group") == "Clima"
+
+    def _is_named_cmd_active(self, cmd_key: str) -> bool:
+        """True if `cmd_key` is the most recent tracked command within NOTE_COMANDO_S."""
+        with self._state_lock:
+            key = self._last_cmd_key
+            at = self._last_cmd_at
+        if key != cmd_key or at is None:
+            return False
+        return (time.monotonic() - at) <= NOTE_COMANDO_S
+
+    @staticmethod
+    def _apply_lock_auto_close(
+        fields_dict: dict[str, str],
+        incoming: Mapping[str, object],
+        *,
+        force_on_cmd: bool,
+        prev_door_lock: object,
+        extra_target: dict[str, str] | None = None,
+    ) -> set[str]:
+        """Close sunroof/sunshade/windows omitted from a lock confirm or lock transition."""
+        from .entity import field_on
+
+        if incoming.get("doorLock") is not None:
+            new_locked = field_on(incoming.get("doorLock")) is False
+        else:
+            new_locked = force_on_cmd
+        transitioned = (field_on(prev_door_lock) is True) and new_locked
+        if not (new_locked and (force_on_cmd or transitioned)):
+            return set()
+        changed: set[str] = set()
+        for key in AUTO_CLOSE_ON_LOCK_KEYS:
+            if incoming.get(key) is not None:
+                continue
+            prev_val = fields_dict.get(key)
+            fields_dict[key] = "0"
+            if extra_target is not None:
+                extra_target[key] = "0"
+            if prev_val is None or field_on(prev_val) is not False:
+                changed.add(key)
+        return changed
 
     @staticmethod
     def _solo_clima(reason) -> bool:
@@ -2709,6 +2773,8 @@ class LepasCoordinator(DataUpdateCoordinator):
                               duration_ms=int((time.monotonic() - t0) * 1000), result=res)
         # comando riuscito → un eventuale avviso "PIN errato" non ha più ragione d'essere
         self._clear_pin_issue()
+        if key in CLOSURE_PROBE_COMMANDS:
+            self._schedule_cmd_probe_sequence(0)
 
         async def _hold_then_release() -> None:
             try:
@@ -3033,6 +3099,43 @@ class LepasCoordinator(DataUpdateCoordinator):
         finally:
             self._poll_busy = False
 
+    @callback
+    def _schedule_cmd_probe_sequence(self, stage: int = 0) -> None:
+        """Schedule passive post-command realtime probe stages via TimerRegistry."""
+        if (
+            self._timers.closing
+            or not self.poll_enabled
+            or stage < 0
+            or stage >= len(CMD_PROBE_DELAYS_S)
+        ):
+            return
+        delay = CMD_PROBE_DELAYS_S[stage]
+        self._timers.arm(
+            CMD_PROBE,
+            lambda: async_call_later(
+                self.hass,
+                delay,
+                functools.partial(self._cmd_probe_cb, stage),
+            ),
+        )
+
+    async def _cmd_probe_cb(self, stage: int, _now) -> None:
+        self._timers.cancel(CMD_PROBE)
+        if self._timers.closing or not self.poll_enabled:
+            return
+        if self._poll_busy:
+            self._schedule_cmd_probe_sequence(stage + 1)
+            return
+        self._poll_busy = True
+        try:
+            await self.async_probe(force=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("[cmd-probe] lettura realtime non riuscita: %s", err)
+        finally:
+            self._poll_busy = False
+        if not self._timers.is_armed(CMD_PROBE):
+            self._schedule_cmd_probe_sequence(stage + 1)
+
     async def _hv_followup_cb(self, _now) -> None:
         self._timers.cancel(HV_POLL)
         if self._timers.closing or not self.poll_enabled:
@@ -3111,26 +3214,61 @@ class LepasCoordinator(DataUpdateCoordinator):
             patch["car_data_ts"] = dt_util.utcnow()
         self._impronta_dati = impronta
 
+        from .entity import field_on
+
         has_geo = "lat" in data and "lon" in data
         geo = {k: data[k] for k in GEO_KEYS if k in data} if has_geo else None
-        # _state_lock non è rientrante: calcola awake inline senza chiamare _auto_e_sveglia().
+        probe_fields: dict[str, str] = {}
+        changed_fields: set[str] = set()
+        now = time.time()
+        # _state_lock non è rientrante: calcola awake/mqtt_recent inline senza chiamare _auto_e_sveglia().
         with self._state_lock:
-            awake = bool(self._last_msg_ts) and (time.time() - self._last_msg_ts) < self.awake_window
+            awake = bool(self._last_msg_ts) and (now - self._last_msg_ts) < self.awake_window
+            mqtt_recent = (
+                bool(self._last_msg_ts)
+                and (now - self._last_msg_ts) < PROBE_MQTT_GRACE_S
+            )
+            prev_door_lock = self._fields.get("doorLock")
             for k, v in data.items():
                 if (
-                    v is not None
-                    and k in META
-                    and k not in CMD_CONFIRM_META
-                    and k != "time"
-                    and k not in GEO_KEYS
-                    and (not awake or k not in self._fields)
+                    v is None
+                    or k not in META
+                    or k in CMD_CONFIRM_META
+                    or k == "time"
+                    or k in GEO_KEYS
                 ):
-                    self._fields[k] = str(v)
+                    continue
+                blocked = mqtt_recent if k in CLOSURE_META_KEYS else awake
+                if blocked and k in self._fields:
+                    continue
+                prev_val = self._fields.get(k)
+                new_str = str(v)
+                self._fields[k] = new_str
+                probe_fields[k] = new_str
+                if k in CLOSURE_META_KEYS:
+                    if prev_val is None or field_on(prev_val) != field_on(new_str):
+                        changed_fields.add(k)
+                elif prev_val != new_str:
+                    changed_fields.add(k)
+            if "doorLock" in probe_fields:
+                auto_changed = self._apply_lock_auto_close(
+                    self._fields,
+                    data,
+                    force_on_cmd=False,
+                    prev_door_lock=prev_door_lock,
+                    extra_target=probe_fields,
+                )
+                changed_fields.update(auto_changed)
+            self._probe_seq += 1
+            probe_seq = self._probe_seq
             fields_copy = dict(self._fields)
             if geo is not None:
                 self.position = {**(self.position or {}), **geo}
                 pos_copy = dict(self.position)
         patch["fields"] = fields_copy
+        patch["probe_seq"] = probe_seq
+        patch["probe_fields"] = probe_fields
+        patch["probe_changed_fields"] = frozenset(changed_fields)
         if geo is not None:
             patch["position"] = pos_copy
             patch["last_pos_fix"] = dt_util.utcnow()

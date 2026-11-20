@@ -646,6 +646,42 @@ OPT_MAX_S = 15 * 60
 # canale di push) e appiccicarle i nostri avvisi direbbe una cosa falsa su un'azione altrui.
 NOTE_COMANDO_S = 120
 
+# Sunroof/sunshade/windows close automatically on lock; trunkDoor and hood stay independent.
+AUTO_CLOSE_ON_LOCK_KEYS = (
+    "sunroofState",
+    "sunshadeState",
+    "frontLeftWindowState",
+    "frontRightWindowState",
+    "backLeftWindowState",
+    "backRightWindowState",
+)
+CLOSURE_META_KEYS = frozenset({
+    "frontLeftDoor",
+    "frontRightDoor",
+    "backLeftDoor",
+    "backRightDoor",
+    "trunkDoor",
+    "hood",
+    "doorLock",
+    *AUTO_CLOSE_ON_LOCK_KEYS,
+})
+CLOSURE_PROBE_COMMANDS = frozenset({
+    "blocca",
+    "sblocca",
+    "baule_apri",
+    "baule_chiudi",
+    "finestrini_apri",
+    "finestrini_chiudi",
+    "finestrini_ventila",
+    "tetto_apri",
+    "tetto_chiudi",
+    "tetto_ventila",
+})
+# Short MQTT grace on /asr/manager/realtime so manual closures propagate without 300s stall.
+PROBE_MQTT_GRACE_S = 15
+PROBE_OPT_SETTLE_S = 60
+CMD_PROBE_DELAYS_S = (25, 65)
+
 # Coda comandi: l'auto esegue UN comando alla volta (A00082 = "veicolo occupato"), quindi i
 # comandi si serializzano. Un secondo comando (o un doppio-tap) ASPETTA il suo turno invece di
 # essere rifiutato. Dopo un invio si lascia respirare l'auto fino alla sua conferma MQTT o al

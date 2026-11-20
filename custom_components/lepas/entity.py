@@ -17,7 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .naming import ENGLISH_KEYS, ID_PREFIX
-from .const import DEFAULT_VEHICLE_NAME, DOMAIN, OPT_MAX_S
+from .const import DEFAULT_VEHICLE_NAME, DOMAIN, OPT_MAX_S, PROBE_OPT_SETTLE_S
 from .coordinator import LepasCoordinator
 
 
@@ -189,6 +189,7 @@ class LepasOptimisticMixin:
 
     _opt_value = None
     _opt_anchor = None
+    _opt_probe_seq: int | None = None
     _opt_at: float | None = None
     # Campi di telemetria che questa entità legge come stato reale. Vuoto = l'entità non ha
     # uno stato reale da attendere (ricarica, antifurto): lì l'ottimismo lo chiude solo il
@@ -196,14 +197,17 @@ class LepasOptimisticMixin:
     _opt_keys: tuple[str, ...] = ()
 
     def _set_optimistic(self, value) -> None:
+        data = self.coordinator.data or {}
         self._opt_value = value
-        self._opt_anchor = self.coordinator.data.get("last_seen")
+        self._opt_anchor = data.get("last_seen")
+        self._opt_probe_seq = data.get("probe_seq", 0)
         self._opt_at = time.monotonic()
         self.async_write_ha_state()
 
     def _clear_optimistic(self) -> None:
         self._opt_value = None
         self._opt_anchor = None
+        self._opt_probe_seq = None
         self._opt_at = None
 
     async def _run_command(self, key: str, target, params: dict | None = None) -> None:
@@ -247,17 +251,27 @@ class LepasOptimisticMixin:
         return any(k in rejected for k in self._opt_keys)
 
     def _verita_arrivata(self) -> bool:
-        """Vero se il messaggio appena arrivato porta un valore per il MIO campo.
-
-        Si guarda `msg_fields` (solo questo messaggio) e non `fields`, che è cumulativo:
-        lì il campo c'è sempre, anche se l'ultima volta che l'auto l'ha detto era ieri."""
+        """Vero se l'ultimo messaggio MQTT o una probe porta verità sul MIO campo."""
         if not self._opt_keys:
             return False
         data = self.coordinator.data or {}
-        if data.get("last_seen") == self._opt_anchor:
-            return False                    # nessun messaggio nuovo da quando ho comandato
-        msg = data.get("msg_fields") or {}
-        return any(k in msg for k in self._opt_keys) or self._rifiuto_arrivato()
+        if data.get("last_seen") != self._opt_anchor:
+            msg = data.get("msg_fields") or {}
+            if any(k in msg for k in self._opt_keys) or self._rifiuto_arrivato():
+                return True
+        probe_seq = data.get("probe_seq", 0)
+        if self._opt_probe_seq is not None and probe_seq != self._opt_probe_seq:
+            probe_changed = data.get("probe_changed_fields") or ()
+            if any(k in probe_changed for k in self._opt_keys):
+                return True
+            probe_fields = data.get("probe_fields") or {}
+            if (
+                self._opt_at is not None
+                and (time.monotonic() - self._opt_at) >= PROBE_OPT_SETTLE_S
+                and any(k in probe_fields for k in self._opt_keys)
+            ):
+                return True
+        return False
 
     def _ottimismo_scaduto(self) -> bool:
         """Vero se l'ottimismo dura da troppo: la verità non è mai arrivata."""

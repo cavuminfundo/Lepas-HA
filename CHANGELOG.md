@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.31.1 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Automatic Closure Sync on Vehicle Lock (`const.py`, `coordinator.py`, `entity.py`)**: Added shared `_apply_lock_auto_close` logic across `_on_car_message` and `_on_probe_data` so that a confirmed `blocca` command or an external `doorLock` transition (`unlocked → locked`, e.g. physical key fob or official app) automatically sets `sunroofState`, `sunshadeState`, and all four window states (`frontLeftWindowState`, `frontRightWindowState`, `backLeftWindowState`, `backRightWindowState`) to closed (`"0"`) when omitted from the payload, clearing pending optimistic cover states while explicitly excluding `trunkDoor` and `hood` and preserving any explicitly open fields or rejected lock commands.
+- **Fast Realtime Closure Settlement & Post-Command Verification (`const.py`, `timers.py`, `coordinator.py`, `entity.py`)**: Replaced the 300 s `awake_window` block on `CLOSURE_META_KEYS` in `_on_probe_data` with a 15 s `PROBE_MQTT_GRACE_S` window (preserving `awake_window` protection for non-closure telemetry and keeping `msg_fields` untouched), updated `LepasOptimisticMixin._verita_arrivata` to settle immediately on semantic `probe_changed_fields` or within `PROBE_OPT_SETTLE_S` (60 s) instead of waiting 15 minutes (`OPT_MAX_S`), and added a read-only `TimerRegistry`-managed two-step `CMD_PROBE` (`+25 s`, `+90 s`) after closure commands when `poll_enabled` is active (no `vehicleLocation` wakes, clean cancellation on `set_poll_enabled(False)` and `async_stop()`). Also bumped card assets in `lepas-card.js` to `?v=1.31.1`.
+
+### 🇮🇹 Italiano
+
+- **Sincronizzazione Automatica Chiusure al Blocco Veicolo (`const.py`, `coordinator.py`, `entity.py`)**: Introdotta la logica condivisa `_apply_lock_auto_close` tra `_on_car_message` e `_on_probe_data` in modo che la conferma positiva di `blocca` o una transizione esterna di `doorLock` (`sbloccata → bloccata`, es. telecomando/chiave fisica o app ufficiale) porti subito a chiuso (`"0"`) `sunroofState`, `sunshadeState` e tutti e quattro i finestrini (`frontLeftWindowState`, `frontRightWindowState`, `backLeftWindowState`, `backRightWindowState`) quando omessi dal payload, chiudendo l'eventuale ottimismo pendente delle cover ed escludendo esplicitamente `trunkDoor` (baule) e `hood` (cofano), senza mai agire su comandi rifiutati o campi esplicitamente aperti.
+- **Riallineamento Rapido Chiusure Manuali & Verifica Post-Comando (`const.py`, `timers.py`, `coordinator.py`, `entity.py`)**: Sostituito il blocco di 300 s (`awake_window`) sui campi `CLOSURE_META_KEYS` in `_on_probe_data` con una finestra breve `PROBE_MQTT_GRACE_S` di 15 s (mantenendo invariata la protezione `awake_window` sulle altre telemetrie e senza popolare `msg_fields`), aggiornato `LepasOptimisticMixin._verita_arrivata` per chiudere l'ottimismo subito su `probe_changed_fields` o entro `PROBE_OPT_SETTLE_S` (60 s) anziché attendere 15 minuti (`OPT_MAX_S`), e aggiunta la doppia lettura passiva `CMD_PROBE` (`+25 s`, `+90 s`) gestita da `TimerRegistry` dopo i comandi sulle chiusure con aggiornamento automatico attivo (zero sveglie `vehicleLocation`, cancellazione pulita su `set_poll_enabled(False)` e `async_stop()`). Aggiornati anche gli asset della card in `lepas-card.js` a `?v=1.31.1`.
+
 ## v1.31.0 — 2026-11-20
 
 ### 🇬🇧 English
