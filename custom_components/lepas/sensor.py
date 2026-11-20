@@ -42,6 +42,9 @@ from homeassistant.util import dt as dt_util
 from .charging_stats import compute_charge_delta_kwh
 from .const import (
     CHARGE_ENERGY_MAX_GAP,
+    DATA_VEHICLE_COLOR,
+    DATA_VEHICLE_COLOR_CODE,
+    DATA_VEHICLE_COLOR_NAME,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DOMAIN,
     FIELDS_AS_RICH_ENTITY,
@@ -860,6 +863,20 @@ class LepasSessionStatus(_LepasRestoreSensor):
 
     def _live_value(self):
         return self.coordinator.data.get("session_detail") or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        base = super().extra_state_attributes
+        attrs: dict[str, str] = dict(base) if isinstance(base, Mapping) else {}
+        for key, attr in (
+            (DATA_VEHICLE_COLOR, "vehicle_color"),
+            (DATA_VEHICLE_COLOR_CODE, "vehicle_color_code"),
+            (DATA_VEHICLE_COLOR_NAME, "vehicle_color_name"),
+        ):
+            val = getattr(self.coordinator, attr, None)
+            if isinstance(val, str) and val.strip():
+                attrs[key] = val.strip()
+        return attrs or None
 
 
 class LepasTextSensor(_LepasRestoreSensor):

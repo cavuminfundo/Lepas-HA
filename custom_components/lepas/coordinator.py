@@ -46,10 +46,11 @@ from .const import (
     HV_ON_POLL_EVERY, HV_ON_POLL_MAX,
     CHARGING_POLL_EVERY, CHARGING_POLL_MAX, DRIVE_WATCH_EVERY,
     CONF_VEHICLE_NAME, DATA_VEHICLE_MODEL, DATA_VEHICLE_BRAND,
+    DATA_VEHICLE_COLOR, DATA_VEHICLE_COLOR_CODE, DATA_VEHICLE_COLOR_NAME,
     DATA_POWER_TYPE, DATA_CLIMATE_MIN, DATA_CLIMATE_MAX, DATA_CLIMATE_STEP,
     DATA_CLIMATE_LO, DATA_CLIMATE_HI, DATA_AIR_DURATIONS,
     DATA_CAPS_PROBED, DATA_CAPS_PROBED_V2, DATA_CAPS_PROBED_V3, DATA_CAPS_PROBED_V4,
-    DATA_CAPS_PROBED_V5, DATA_VEHICLE_FEATURES,
+    DATA_CAPS_PROBED_V5, DATA_CAPS_PROBED_V6, DATA_VEHICLE_FEATURES,
     capabilities_from_item, features_from_permissions,
     CLIMA_MIN_DEFAULT, CLIMA_MAX_DEFAULT, CLIMA_STEP_DEFAULT,
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
@@ -377,6 +378,9 @@ class LepasCoordinator(DataUpdateCoordinator):
         self.vehicle_name = override or cfg.get(CONF_VEHICLE_NAME) or None
         self.vehicle_model = cfg.get(DATA_VEHICLE_MODEL) or None
         self.vehicle_brand = cfg.get(DATA_VEHICLE_BRAND) or None
+        self.vehicle_color = cfg.get(DATA_VEHICLE_COLOR) or None
+        self.vehicle_color_code = cfg.get(DATA_VEHICLE_COLOR_CODE) or None
+        self.vehicle_color_name = cfg.get(DATA_VEHICLE_COLOR_NAME) or None
 
         # P2-6: qui la configurazione veniva copiata in `os.environ` perché i moduli
         # core/ la leggevano da lì. Non più: la trasporta il `CoreCtx` (vedi `_build_ctx`),
@@ -3281,9 +3285,9 @@ class LepasCoordinator(DataUpdateCoordinator):
             return
         override = bool(str((self.entry.options or {}).get(CONF_VEHICLE_NAME) or "").strip())
         nome_in_cache = bool(self.entry.data.get(CONF_VEHICLE_NAME))
-        # Il marcatore è VERSIONATO: chi ha già `caps_probed`..`_v4` deve rileggere una
-        # volta sola per le capability V5 (permessi 212/2121/216), poi si ferma di nuovo.
-        caps_da_leggere = not self.entry.data.get(DATA_CAPS_PROBED_V5)
+        # Il marcatore è VERSIONATO: chi ha già `caps_probed`..`_v5` deve rileggere una
+        # volta sola per le capability V6 (colore veicolo), poi si ferma di nuovo.
+        caps_da_leggere = not self.entry.data.get(DATA_CAPS_PROBED_V6)
         if (override or nome_in_cache) and not caps_da_leggere:
             return  # nulla da chiedere: nome deciso e capability già interrogate
         info = await self.hass.async_add_executor_job(self._fetch_vehicle_identity)
@@ -3300,6 +3304,15 @@ class LepasCoordinator(DataUpdateCoordinator):
             self.vehicle_name = info.get(CONF_VEHICLE_NAME)
             self.vehicle_model = info.get(DATA_VEHICLE_MODEL)
             self.vehicle_brand = info.get(DATA_VEHICLE_BRAND)
+        color_changed = False
+        for key, attr in (
+            (DATA_VEHICLE_COLOR, "vehicle_color"),
+            (DATA_VEHICLE_COLOR_CODE, "vehicle_color_code"),
+            (DATA_VEHICLE_COLOR_NAME, "vehicle_color_name"),
+        ):
+            if key in info and info[key] and info[key] != getattr(self, attr):
+                setattr(self, attr, info[key])
+                color_changed = True
         if not info:
             return  # niente di nuovo da persistere
         self.hass.config_entries.async_update_entry(
@@ -3322,6 +3335,12 @@ class LepasCoordinator(DataUpdateCoordinator):
             from . import async_cleanup_disabled_entities
             await async_cleanup_disabled_entities(self.hass, self.entry)
             self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
+        if (
+            color_changed
+            and not self._timers.closing
+            and self.entry.entry_id in self.hass.data.get(DOMAIN, {})
+        ):
+            self.async_update_listeners()
 
     def _fetch_vehicle_identity(self) -> dict | None:
         """queryList (sola lettura) → {vehicle_name, vehicle_model, vehicle_brand} per il VIN."""
@@ -3360,6 +3379,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             # dichiara: «chiesto e non c'è» ≠ «mai chiesto» (altrimenti si richiede a ogni avvio).
             caps: dict = {DATA_CAPS_PROBED: True, DATA_CAPS_PROBED_V2: True,
                           DATA_CAPS_PROBED_V4: True, DATA_CAPS_PROBED_V5: True,
+                          DATA_CAPS_PROBED_V6: True,
                           **capabilities_from_item(item)}
             try:
                 tuid = (

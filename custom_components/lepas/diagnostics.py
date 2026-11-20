@@ -210,6 +210,9 @@ async def async_get_config_entry_diagnostics(
     diag["vehicle"] = {
         "brand": coordinator.vehicle_brand,
         "model": coordinator.vehicle_model,
+        "color": getattr(coordinator, "vehicle_color", None),
+        "color_code": getattr(coordinator, "vehicle_color_code", None),
+        "color_name": getattr(coordinator, "vehicle_color_name", None),
         "power_type": entry.data.get(DATA_POWER_TYPE),
         "vehicle_features": entry.data.get(DATA_VEHICLE_FEATURES),
         "entity_count": len(entita),

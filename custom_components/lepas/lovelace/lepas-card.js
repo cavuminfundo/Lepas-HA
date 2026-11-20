@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.30.3).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.31.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.30.3";
+  var CARD_VERSION = "1.31.0";
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
   var VALID_TABS = ["overview", "climate", "charging", "security"];
@@ -75,6 +75,17 @@
     bianco: "white",
   };
 
+  var EXTRA_COLOR_TOKENS = {
+    silver: "grey",
+    cyan: "teal",
+    emerald: "teal",
+    zwart: "black",
+    wit: "white",
+    grijs: "grey",
+    zeegroen: "teal",
+  };
+  var VEHICLE_COLOR_CODE_MAP = { KME8: "black" };
+
   var COLOR_SWATCHES = {
     grey: "#6B7280",
     teal: "#1B6B6B",
@@ -84,13 +95,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.30.3",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.30.3",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.30.3",
-    black: "/lepas_card/lepas-hero-black.png?v=1.30.3",
-    white: "/lepas_card/lepas-hero-white.png?v=1.30.3",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.31.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.31.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.31.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.31.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.31.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.30.3";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.31.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -136,7 +147,7 @@
       weekdays: ["L", "M", "M", "G", "V", "S", "D"],
       monthsShort: ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"],
       dayNames: { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Gio", fri: "Ven", sat: "Sab", sun: "Dom" },
-      colors: { grey: "Grigio", teal: "Ottanio", violet: "Viola", black: "Nero", white: "Bianco" },
+      colors: { auto: "Auto", grey: "Grigio", teal: "Ottanio", violet: "Viola", black: "Nero", white: "Bianco" },
       layouts: { auto: "Auto", compact: "Compatto 4-Tab", cockpit: "Cockpit Desktop" },
       online: "Online",
       offline: "Offline",
@@ -347,7 +358,7 @@
       weekdays: ["M", "T", "W", "T", "F", "S", "S"],
       monthsShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
       dayNames: { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" },
-      colors: { grey: "Grey", teal: "Teal", violet: "Violet", black: "Black", white: "White" },
+      colors: { auto: "Auto", grey: "Grey", teal: "Teal", violet: "Violet", black: "Black", white: "White" },
       layouts: { auto: "Auto", compact: "Compact 4-Tab", cockpit: "Desktop Cockpit" },
       online: "Online",
       offline: "Offline",
@@ -558,7 +569,7 @@
       weekdays: ["M", "D", "W", "D", "V", "Z", "Z"],
       monthsShort: ["Jan", "Feb", "Mrt", "Apr", "Mei", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"],
       dayNames: { mon: "Ma", tue: "Di", wed: "Wo", thu: "Do", fri: "Vr", sat: "Za", sun: "Zo" },
-      colors: { grey: "Grijs", teal: "Zeegroen", violet: "Violet", black: "Zwart", white: "Wit" },
+      colors: { auto: "Auto", grey: "Grijs", teal: "Zeegroen", violet: "Violet", black: "Zwart", white: "Wit" },
       layouts: { auto: "Auto", compact: "Compact 4-Tab", cockpit: "Desktop Cockpit" },
       online: "Online",
       offline: "Offline",
@@ -807,6 +818,57 @@
     return COLOR_ALIASES[norm] || "grey";
   }
 
+  function getItemAttrs(item) {
+    var attrs = item ? ((item.s && item.s.attributes) || item.attributes) : null;
+    return (attrs && typeof attrs === "object") ? attrs : null;
+  }
+
+  function resolveColorFromText(raw) {
+    if (typeof raw !== "string") return null;
+    var text = raw.trim().toLowerCase();
+    if (!text) return null;
+    var tokens = text.match(/[a-z]+/g);
+    if (!tokens) return null;
+    for (var i = 0; i < tokens.length; i += 1) {
+      var tok = tokens[i];
+      if (Object.prototype.hasOwnProperty.call(COLOR_ALIASES, tok)) return COLOR_ALIASES[tok];
+      if (Object.prototype.hasOwnProperty.call(EXTRA_COLOR_TOKENS, tok)) return EXTRA_COLOR_TOKENS[tok];
+    }
+    return null;
+  }
+
+  function resolveCardColor(config, items) {
+    var cfg = config || {};
+    var rawCfg = cfg.color == null ? "" : String(cfg.color).trim().toLowerCase();
+    if (rawCfg && rawCfg !== "auto") return resolveColor(cfg.color);
+    if (!Array.isArray(items)) return "grey";
+    var i;
+    for (i = 0; i < items.length; i += 1) {
+      var a1 = getItemAttrs(items[i]);
+      if (a1 && typeof a1.vehicle_color === "string") {
+        var vc = a1.vehicle_color.trim().toLowerCase();
+        if (VALID_COLORS.indexOf(vc) >= 0) return vc;
+      }
+    }
+    for (i = 0; i < items.length; i += 1) {
+      var a2 = getItemAttrs(items[i]);
+      if (a2) {
+        var fromName = resolveColorFromText(a2.vehicle_color_name);
+        if (fromName) return fromName;
+      }
+    }
+    for (i = 0; i < items.length; i += 1) {
+      var a3 = getItemAttrs(items[i]);
+      if (a3 && typeof a3.vehicle_color_code === "string") {
+        var code = a3.vehicle_color_code.trim().toUpperCase();
+        if (Object.prototype.hasOwnProperty.call(VEHICLE_COLOR_CODE_MAP, code)) {
+          return VEHICLE_COLOR_CODE_MAP[code];
+        }
+      }
+    }
+    return "grey";
+  }
+
   function resolveHeroImage(config, items) {
     var cfg = config || {};
     if (cfg.image) {
@@ -823,7 +885,7 @@
         }
       }
     }
-    var color = resolveColor(cfg.color);
+    var color = resolveCardColor(cfg, items);
     return HERO_IMAGES[color] || DEFAULT_HERO;
   }
 
@@ -2234,10 +2296,12 @@
       ".ed-field { display: flex; flex-direction: column; gap: 6px; }",
       ".ed-lbl { font-size: 0.8rem; font-weight: 600; color: #9CA3AF; }",
       ".ed-input, .ed-select { min-height: 44px; padding: 8px 10px; border-radius: 9px; background: #21252C; border: 1px solid rgba(255, 255, 255, 0.12); color: #F3F4F6; width: 100%; }",
-      ".ed-swatches { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }",
+      ".ed-swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }",
+      "@media (max-width: 420px) { .ed-swatches { grid-template-columns: repeat(3, minmax(0, 1fr)); } }",
       ".ed-swatch { min-height: 44px; padding: 6px 4px; border-radius: 9px; background: #21252C; border: 1px solid rgba(255, 255, 255, 0.1); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 0.72rem; color: #9CA3AF; }",
       ".ed-swatch.is-selected { border-color: #F3F4F6; background: #262B34; color: #F3F4F6; font-weight: 700; }",
       ".ed-dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.28); }",
+      ".ed-dot.is-auto { background: linear-gradient(135deg, #E5E7EB 0%, #E5E7EB 50%, #1A1D24 50%, #1A1D24 100%); border-style: dashed; border-color: rgba(243, 244, 246, 0.75); }",
       ".ed-check-row { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 6px 10px; border-radius: 9px; background: #21252C; border: 1px solid rgba(255, 255, 255, 0.08); cursor: pointer; }",
       "button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #F3F4F6; outline-offset: 2px; }",
     ].join("\n");
@@ -2270,7 +2334,7 @@
     }
 
     _emitConfig(patch) {
-      emitEditorConfig(this, patch, ["title", "image"]);
+      emitEditorConfig(this, patch, ["title", "image", "color"]);
     }
 
     _handleFieldChange(ev) {
@@ -2278,7 +2342,8 @@
       if (!target) return;
       var colorBtn = target.closest ? target.closest("[data-color]") : null;
       if (ev.type === "click" && colorBtn) {
-        this._emitConfig({ color: colorBtn.getAttribute("data-color") });
+        var chosen = colorBtn.getAttribute("data-color");
+        this._emitConfig({ color: chosen === "auto" ? "" : chosen });
         this._syncValues();
         return;
       }
@@ -2299,7 +2364,8 @@
     _syncValues() {
       if (!this.shadowRoot) return;
       var cfg = this._config || {};
-      var color = resolveColor(cfg.color);
+      var rawColor = cfg.color == null ? "" : String(cfg.color).trim().toLowerCase();
+      var color = (!rawColor || rawColor === "auto") ? "auto" : resolveColor(cfg.color);
       var swatches = this.shadowRoot.querySelectorAll("[data-color]");
       for (var i = 0; i < swatches.length; i += 1) {
         swatches[i].classList.toggle("is-selected", swatches[i].getAttribute("data-color") === color);
@@ -2322,7 +2388,11 @@
       this._lang = lang;
       var t = getTexts(lang);
       if (!this._rendered) {
-        var swatchesHtml = VALID_COLORS.map(function (c) {
+        var autoSwatchHtml =
+          '<button type="button" class="ed-swatch" data-color="auto">' +
+            '<span class="ed-dot is-auto"></span>' +
+            '<span>' + escapeHtml(t.colors.auto || "Auto") + "</span></button>";
+        var swatchesHtml = autoSwatchHtml + VALID_COLORS.map(function (c) {
           return '<button type="button" class="ed-swatch" data-color="' + c + '">' +
             '<span class="ed-dot" style="background:' + COLOR_SWATCHES[c] + '"></span>' +
             '<span>' + escapeHtml(t.colors[c] || c) + "</span></button>";
@@ -2382,7 +2452,7 @@
         integration: "lepas",
         prefix: "lepas_",
         show_all: false,
-        color: "grey",
+        color: "auto",
         layout: "auto",
         default_tab: "overview",
       };
@@ -2467,7 +2537,7 @@
           integration: "lepas",
           prefix: "lepas_",
           show_all: false,
-          color: "grey",
+          color: "auto",
           layout: "auto",
           default_tab: "overview",
         },
@@ -4237,7 +4307,7 @@
       };
 
       var blueprintSvg = renderCarTopViewSvg(t);
-      var carColor = resolveColor(self.config && self.config.color);
+      var carColor = resolveCardColor(cfg, ctx.items);
       var blueprintHtml =
         '<div class="surface">' +
           '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("tire", "sec-ico") + "<span>" + self._h(t.blueprintTitle) + "</span></span></div>" +
@@ -5333,7 +5403,7 @@
 
       // Blueprint SVG & TPMS
       var bpStage = root.querySelector(".bp-stage");
-      if (bpStage) bpStage.setAttribute("data-car-color", resolveColor(this.config && this.config.color));
+      if (bpStage) bpStage.setAttribute("data-car-color", resolveCardColor(vm.cfg, vm.items));
       var setBp = function (part, cls, active) {
         var el = root.querySelector('[data-bp-part="' + part + '"]');
         if (el) el.classList.toggle(cls, Boolean(active));
@@ -5534,6 +5604,7 @@
     VALID_STATS_CHARTS: VALID_STATS_CHARTS.slice(),
     CONFIRM_ACTIONS: CONFIRM_ACTIONS,
     resolveColor: resolveColor,
+    resolveCardColor: resolveCardColor,
     resolveHeroImage: resolveHeroImage,
     sanitizeUrl: sanitizeUrl,
     escapeHtml: escapeHtml,

@@ -16,6 +16,18 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.31.0 — 2026-11-20
+
+### 🇬🇧 English
+
+- **Automatic Vehicle Color Detection (`const.py`, `coordinator.py`, `sensor.py`, `diagnostics.py`)**: Extracted the vehicle paint code and localized/English color name (`colorCode`, `colorNameEn`, `colorName`) from `vmc/queryList` via `normalize_vehicle_color()` and `capabilities_from_item()`, persisted them in `entry.data` with a one-time `DATA_CAPS_PROBED_V6` backfill for existing installs, exposed non-PII `vehicle_color` / `vehicle_color_code` / `vehicle_color_name` attributes on `LepasSessionStatus` (`sensor.lepas_session_status`), and added them under `diag["vehicle"]` in diagnostics.
+- **Automatic Card Color & `"Auto"` Editor Swatch (`lepas-card.js`)**: Added `resolveCardColor` / `resolveHeroImage` automatic vehicle color resolution (used whenever `config.color` is unset or `"auto"` while keeping explicit manual `config.color` overrides and `vehicle_image` precedence intact), updated both the hero image and Blueprint SVG (`.bp-stage[data-car-color]`) reactively, added the `"Auto"` swatch in `LepasCardEditor`, and bumped card assets to `?v=1.31.0`.
+
+### 🇮🇹 Italiano
+
+- **Auto-rilevamento Colore Veicolo (`const.py`, `coordinator.py`, `sensor.py`, `diagnostics.py`)**: Estratti codice vernice e nome colore (`colorCode`, `colorNameEn`, `colorName`) da `vmc/queryList` tramite `normalize_vehicle_color()` e `capabilities_from_item()`, salvati in `entry.data` con backfill una-tantum `DATA_CAPS_PROBED_V6` per le installazioni esistenti, esposti come attributi non-PII `vehicle_color` / `vehicle_color_code` / `vehicle_color_name` su `LepasSessionStatus` (`sensor.lepas_session_status`), e aggiunti nella sezione `vehicle` della diagnostica.
+- **Colore Automatico nella Card e Opzione `"Auto"` nell'Editor (`lepas-card.js`)**: Aggiunta la risoluzione automatica del colore tramite `resolveCardColor` / `resolveHeroImage` (attiva quando `config.color` è vuoto o `"auto"`, preservando la precedenza di eventuali override manuali `config.color` e `vehicle_image`), aggiornati reattivamente sia l'immagine hero sia il Blueprint SVG (`.bp-stage[data-car-color]`), aggiunto il selettore `"Auto"` in `LepasCardEditor`, e aggiornati gli asset della card a `?v=1.31.0`.
+
 ## v1.30.3 — 2026-11-20
 
 ### 🇬🇧 English

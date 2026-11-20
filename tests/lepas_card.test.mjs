@@ -1040,6 +1040,126 @@ test("Color and hero image resolution, aliases, and precedence", () => {
   );
 });
 
+test("Auto vehicle color resolution, AB-HA-001 word-boundary safety, and 3-pass precedence", () => {
+  const h = LepasCard._helpers;
+  const expectedVer = JSON.parse(
+    readFileSync(new URL("../custom_components/lepas/manifest.json", import.meta.url), "utf8")
+  ).version;
+
+  assert.deepEqual(h.COLORS, ["grey", "teal", "violet", "black", "white"]);
+  assert.deepEqual(LepasCard.getStubConfig(), { type: "custom:lepas-card" });
+  assert.equal(typeof h.resolveCardColor, "function", "resolveCardColor must be exported in _helpers");
+
+  const itemsWithBlackAttr = [
+    {
+      id: "sensor.lepas_session_status",
+      s: makeState("sensor.lepas_session_status", "idle", { vehicle_color: "black" }),
+    },
+  ];
+  assert.equal(
+    h.resolveHeroImage({}, itemsWithBlackAttr),
+    `/lepas_card/lepas-hero-black.png?v=${expectedVer}`
+  );
+
+  const itemsWithNameOnly = [
+    {
+      id: "sensor.lepas_session_status",
+      s: makeState("sensor.lepas_session_status", "idle", { vehicle_color_name: "New Carbon Black" }),
+    },
+  ];
+  assert.equal(
+    h.resolveHeroImage({ color: "auto" }, itemsWithNameOnly),
+    `/lepas_card/lepas-hero-black.png?v=${expectedVer}`
+  );
+
+  const itemsWithCodeOnly = [
+    {
+      id: "sensor.lepas_session_status",
+      s: makeState("sensor.lepas_session_status", "idle", { vehicle_color_code: "KME8" }),
+    },
+  ];
+  assert.equal(
+    h.resolveHeroImage({ color: "auto" }, itemsWithCodeOnly),
+    `/lepas_card/lepas-hero-black.png?v=${expectedVer}`
+  );
+  assert.equal(
+    h.resolveCardColor({ color: " AUTO " }, [{ attributes: { vehicle_color_code: "kme8" } }]),
+    "black"
+  );
+
+  // Direct item.attributes support & extra tokens
+  assert.equal(h.resolveCardColor({}, [{ attributes: { vehicle_color: "violet" } }]), "violet");
+  for (const [rawName, expectedColor] of [
+    ["Silver Metallic", "grey"],
+    ["Cyan Mist", "teal"],
+    ["Emerald Green", "teal"],
+    ["Zwart", "black"],
+    ["Wit", "white"],
+    ["Grijs", "grey"],
+    ["Zeegroen", "teal"],
+  ]) {
+    assert.equal(
+      h.resolveCardColor({}, [{ attributes: { vehicle_color_name: rawName } }]),
+      expectedColor,
+      `Expected ${rawName} -> ${expectedColor}`
+    );
+  }
+
+  // Anti-AB-HA-001 word-boundary safety, deterministic token order, and fail-open fallbacks
+  assert.equal(
+    h.resolveCardColor({}, [{ attributes: { vehicle_color_name: "whiten" } }]),
+    "grey",
+    "Must NOT substring-match 'white' inside 'whiten'"
+  );
+  assert.equal(
+    h.resolveHeroImage({}, [{ attributes: { vehicle_color_name: "whiten" } }]),
+    `/lepas_card/lepas-hero-grey.png?v=${expectedVer}`
+  );
+  assert.equal(
+    h.resolveCardColor({}, [{ attributes: { vehicle_color_name: "Silver Black" } }]),
+    "grey",
+    "Must match first token in text order ('Silver' -> 'grey')"
+  );
+  assert.equal(
+    h.resolveCardColor({}, [{ attributes: { vehicle_color: "magenta", vehicle_color_name: "Unknown Hue", vehicle_color_code: "ZZ99" } }]),
+    "grey"
+  );
+  assert.equal(
+    h.resolveCardColor({}, [{ attributes: { vehicle_color_name: "constructor", vehicle_color_code: "toString" } }]),
+    "grey"
+  );
+  for (const badItems of [null, undefined, {}, "sensor.lepas_session_status"]) {
+    assert.equal(h.resolveCardColor({}, badItems), "grey");
+    assert.equal(h.resolveHeroImage({}, badItems), `/lepas_card/lepas-hero-grey.png?v=${expectedVer}`);
+  }
+
+  // 3-pass multi-entity precedence: vehicle_color > vehicle_color_name > vehicle_color_code
+  const multiEntityItems = [
+    { id: "sensor.lepas_battery", s: makeState("sensor.lepas_battery", "80", { vehicle_color_name: "Silver" }) },
+    { id: "sensor.lepas_session_status", s: makeState("sensor.lepas_session_status", "idle", { vehicle_color: "teal" }) },
+  ];
+  assert.equal(h.resolveCardColor({}, multiEntityItems), "teal");
+  assert.equal(h.resolveHeroImage({}, multiEntityItems), `/lepas_card/lepas-hero-teal.png?v=${expectedVer}`);
+
+  const nameBeatsCodeItems = [
+    { id: "sensor.lepas_battery", s: makeState("sensor.lepas_battery", "80", { vehicle_color_code: "KME8" }) },
+    { id: "sensor.lepas_session_status", s: makeState("sensor.lepas_session_status", "idle", { vehicle_color_name: "Pearl White" }) },
+  ];
+  assert.equal(h.resolveCardColor({ color: "auto" }, nameBeatsCodeItems), "white");
+
+  // Manual override beats detected attribute, and image overrides beat color
+  assert.equal(h.resolveCardColor({ color: "teal" }, itemsWithBlackAttr), "teal");
+  assert.equal(h.resolveHeroImage({ color: "teal" }, itemsWithBlackAttr), `/lepas_card/lepas-hero-teal.png?v=${expectedVer}`);
+  assert.equal(h.resolveCardColor({ color: "invalid-color" }, itemsWithBlackAttr), "grey");
+  assert.equal(
+    h.resolveHeroImage(
+      { color: "auto" },
+      [{ id: "sensor.lepas_session_status", s: makeState("sensor.lepas_session_status", "idle", { vehicle_color: "black", vehicle_image: "/local/custom.png" }) }]
+    ),
+    "/local/custom.png"
+  );
+});
+
 test("URL sanitization rejects dangerous schemes and accepts safe image URLs", () => {
   const h = LepasCard._helpers;
   const card = createCard({});
@@ -1116,6 +1236,54 @@ test("LepasCardEditor renders controls and preserves extra YAML keys on config-c
   showAll.dispatchEvent(new Event("change", { bubbles: true }));
   assert.equal(events[3].show_all, true);
   assert.equal(events[3].prefix, "mycar_");
+});
+
+test("LepasCardEditor supports Auto swatch selection, sync, and deleting color key", () => {
+  for (const lang of ["it", "en", "nl"]) {
+    const editor = LepasCard.getConfigElement();
+    editor.hass = makeFullHass({}, lang);
+    editor.setConfig({ type: "custom:lepas-card", prefix: "mycar_" });
+
+    const swatches = Array.from(editor.shadowRoot.querySelectorAll("[data-color]"));
+    assert.equal(swatches.length, 6, "Editor must render Auto + 5 paint swatches");
+    assert.equal(swatches[0].getAttribute("data-color"), "auto");
+    assert.equal(swatches[0].textContent.trim(), "Auto");
+  }
+
+  const editor = LepasCard.getConfigElement();
+  editor.hass = makeFullHass({}, "en");
+  const events = [];
+  editor.addEventListener("config-changed", (ev) => events.push(ev.detail.config));
+
+  for (const autoCfg of [
+    { type: "custom:lepas-card" },
+    { type: "custom:lepas-card", color: "" },
+    { type: "custom:lepas-card", color: "auto" },
+    { type: "custom:lepas-card", color: " AUTO " },
+  ]) {
+    editor.setConfig(autoCfg);
+    editor._syncValues();
+    const autoBtn = editor.shadowRoot.querySelector('[data-color="auto"]');
+    const greyBtn = editor.shadowRoot.querySelector('[data-color="grey"]');
+    assert.equal(autoBtn.classList.contains("is-selected"), true, `Auto swatch must be selected for ${JSON.stringify(autoCfg)}`);
+    assert.equal(greyBtn.classList.contains("is-selected"), false, `Grey swatch must NOT be selected for ${JSON.stringify(autoCfg)}`);
+  }
+
+  editor.setConfig({ type: "custom:lepas-card", color: "invalid-color", prefix: "mycar_" });
+  editor._syncValues();
+  assert.equal(editor.shadowRoot.querySelector('[data-color="grey"]').classList.contains("is-selected"), true);
+  assert.equal(editor.shadowRoot.querySelector('[data-color="auto"]').classList.contains("is-selected"), false);
+
+  editor.shadowRoot.querySelector('[data-color="teal"]').click();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].color, "teal");
+
+  editor.shadowRoot.querySelector('[data-color="auto"]').click();
+  assert.equal(events.length, 2);
+  assert.equal(Object.prototype.hasOwnProperty.call(events[1], "color"), false, "Clicking Auto must delete color key from detail.config");
+  assert.equal(events[1].prefix, "mycar_");
+  assert.equal(editor.shadowRoot.querySelector('[data-color="auto"]').classList.contains("is-selected"), true);
+  assert.equal(editor.shadowRoot.querySelector('[data-color="grey"]').classList.contains("is-selected"), false);
 });
 
 test("Layout modes and default_tab switching", () => {
@@ -1530,6 +1698,62 @@ test("OEM top-down SVG: proportions, dynamic car color, TPMS wheels, and sunroof
     const colCard = createCard({ color: col }, closedHass);
     assert.equal(colCard.shadowRoot.querySelector(".bp-stage").getAttribute("data-car-color"), col);
   }
+});
+
+test("Rendered card auto-detects vehicle_color for heroImg and .bp-stage, updates live, and obeys manual override + zero XSS", () => {
+  const expectedVer = JSON.parse(
+    readFileSync(new URL("../custom_components/lepas/manifest.json", import.meta.url), "utf8")
+  ).version;
+
+  const blackHass = makeFullHass({
+    "sensor.lepas_session_status": makeState("sensor.lepas_session_status", "idle", {
+      vehicle_color: "black",
+      vehicle_color_name: '<img src=x onerror=alert(1)>New Carbon Black',
+      vehicle_color_code: 'KME8"<script>alert(1)</script>',
+    }),
+  }, "it");
+
+  const card = createCard({ show_all: true }, blackHass);
+  const heroImg = card.shadowRoot.querySelector('[data-bind="heroImg"]');
+  const bpStage = card.shadowRoot.querySelector(".bp-stage");
+  assert.equal(heroImg.getAttribute("src"), `/lepas_card/lepas-hero-black.png?v=${expectedVer}`);
+  assert.equal(bpStage.getAttribute("data-car-color"), "black");
+
+  const html = card.shadowRoot.innerHTML;
+  assert.ok(!html.includes("onerror=alert"), "Raw vehicle_color_name must NEVER be interpolated into DOM");
+  assert.ok(!html.includes("<script>"), "Raw vehicle_color_code must NEVER be interpolated into DOM");
+
+  // Live update via card.hass propagates to both heroImg and .bp-stage
+  card.hass = makeFullHass({
+    "sensor.lepas_session_status": makeState("sensor.lepas_session_status", "idle", {
+      vehicle_color: "teal",
+    }),
+  }, "it");
+  assert.equal(
+    card.shadowRoot.querySelector('[data-bind="heroImg"]').getAttribute("src"),
+    `/lepas_card/lepas-hero-teal.png?v=${expectedVer}`
+  );
+  assert.equal(card.shadowRoot.querySelector(".bp-stage").getAttribute("data-car-color"), "teal");
+
+  // Live fallback to vehicle_color_name when vehicle_color is absent
+  card.hass = makeFullHass({
+    "sensor.lepas_session_status": makeState("sensor.lepas_session_status", "idle", {
+      vehicle_color_name: "Pearl White",
+    }),
+  }, "it");
+  assert.equal(
+    card.shadowRoot.querySelector('[data-bind="heroImg"]').getAttribute("src"),
+    `/lepas_card/lepas-hero-white.png?v=${expectedVer}`
+  );
+  assert.equal(card.shadowRoot.querySelector(".bp-stage").getAttribute("data-car-color"), "white");
+
+  // Manual override config.color: "teal" beats vehicle_color: "black" on both heroImg and .bp-stage
+  const overrideCard = createCard({ color: "teal" }, blackHass);
+  assert.equal(
+    overrideCard.shadowRoot.querySelector('[data-bind="heroImg"]').getAttribute("src"),
+    `/lepas_card/lepas-hero-teal.png?v=${expectedVer}`
+  );
+  assert.equal(overrideCard.shadowRoot.querySelector(".bp-stage").getAttribute("data-car-color"), "teal");
 });
 
 test("Security & Privacy: XSS escaping and ZERO VIN or raw GPS coordinates in DOM", () => {

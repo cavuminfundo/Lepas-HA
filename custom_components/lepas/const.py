@@ -1,5 +1,7 @@
 """Costanti del custom component Lepas Connect."""
 
+import re
+
 DOMAIN = "lepas"
 PLATFORMS = ["sensor", "binary_sensor", "button", "lock", "switch", "climate",
              "number", "time", "select", "cover", "device_tracker"]
@@ -81,6 +83,9 @@ LANGUAGES = {"en-GB": "English", "it-IT": "Italiano"}   # valore-header → etic
 CONF_VEHICLE_NAME = "vehicle_name"
 DATA_VEHICLE_MODEL = "vehicle_model"
 DATA_VEHICLE_BRAND = "vehicle_brand"
+DATA_VEHICLE_COLOR = "vehicle_color"
+DATA_VEHICLE_COLOR_CODE = "vehicle_color_code"
+DATA_VEHICLE_COLOR_NAME = "vehicle_color_name"
 # fallback quando il modello non è (ancora) noto
 # Ripiego del nome del DISPOSITIVO, cioe' dell'AUTO - non dell'integrazione. Di norma
 # arriva il nome vero dal backend (Lepas L8, Chery Tiggo...) e questo non si vede mai. Resta
@@ -125,6 +130,7 @@ DATA_CAPS_PROBED_V2 = "caps_probed_v2"    # v1.13.0: estremi LO/HI + durate amme
 DATA_CAPS_PROBED_V3 = "caps_probed_v3"    # v1.17.0: optional/permessi da queryVehicleAuthority
 DATA_CAPS_PROBED_V4 = "caps_probed_v4"    # v1.18.0: permesso 2131 (ciclo ricarica personalizzato)
 DATA_CAPS_PROBED_V5 = "caps_probed_v5"    # v1.21.0: permessi 212/2121/216 (partenza nativa e batteria)
+DATA_CAPS_PROBED_V6 = "caps_probed_v6"    # colore veicolo da vmc/queryList
 DATA_VEHICLE_FEATURES = "vehicle_features"
 
 # Regole di derivazione feature da permessi (vmc/queryVehicleAuthority).
@@ -297,6 +303,62 @@ _ESTREMO_MAX_PLAUSIBILE = 36.0
 _DURATA_MAX_PLAUSIBILE = 60
 
 
+VEHICLE_COLOR_CODE_MAP: dict[str, str] = {"KME8": "black"}
+
+_VEHICLE_COLOR_TOKENS: dict[str, str] = {
+    "black": "black",
+    "nero": "black",
+    "zwart": "black",
+    "white": "white",
+    "bianco": "white",
+    "wit": "white",
+    "grey": "grey",
+    "gray": "grey",
+    "grigio": "grey",
+    "grijs": "grey",
+    "silver": "grey",
+    "teal": "teal",
+    "ottanio": "teal",
+    "petrolio": "teal",
+    "green": "teal",
+    "verde": "teal",
+    "zeegroen": "teal",
+    "cyan": "teal",
+    "emerald": "teal",
+    "violet": "violet",
+    "viola": "violet",
+    "purple": "violet",
+    "ametista": "violet",
+}
+
+_COLOR_META_MAX_LEN = 64
+
+
+def _clean_color_text(v: object) -> str | None:
+    if not isinstance(v, str):
+        return None
+    s = v.strip()[:_COLOR_META_MAX_LEN].strip()
+    return s or None
+
+
+def normalize_vehicle_color(
+    code: object, name_en: object, name_local: object = None
+) -> str | None:
+    """Mappa codice/nome vernice in uno dei 5 colori card canonici o None."""
+    if isinstance(code, str):
+        norm_code = code.strip().upper()
+        if norm_code in VEHICLE_COLOR_CODE_MAP:
+            return VEHICLE_COLOR_CODE_MAP[norm_code]
+    for text in (name_en, name_local):
+        if not isinstance(text, str):
+            continue
+        # Match solo su token alfabetici completi in ordine di apparizione (AB-HA-001).
+        for token in re.findall(r"[a-z]+", text.lower()):
+            if token in _VEHICLE_COLOR_TOKENS:
+                return _VEHICLE_COLOR_TOKENS[token]
+    return None
+
+
 def _vero(v) -> bool:
     """Un flag del backend può arrivare come 1, "1", True o "true"."""
     return str(v).strip().lower() in ("1", "true", "yes")
@@ -363,6 +425,17 @@ def capabilities_from_item(item: dict) -> dict:
     # chiamante ha un except cieco) e il marcatore non veniva scritto → riletture a ogni avvio.
     except (TypeError, ValueError, KeyError, ArithmeticError):
         pass
+    color_code = _clean_color_text(item.get("colorCode"))
+    color_name_en = _clean_color_text(item.get("colorNameEn"))
+    color_name_local = _clean_color_text(item.get("colorName"))
+    color_name = color_name_en or color_name_local
+    if color_code:
+        out[DATA_VEHICLE_COLOR_CODE] = color_code
+    if color_name:
+        out[DATA_VEHICLE_COLOR_NAME] = color_name
+    norm_color = normalize_vehicle_color(color_code, color_name_en, color_name_local)
+    if norm_color:
+        out[DATA_VEHICLE_COLOR] = norm_color
     return out
 
 # Parametri di REGIONE (default = Europa). Esposti come options per supportare altre regioni.
