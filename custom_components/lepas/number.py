@@ -29,6 +29,8 @@ from .const import DOMAIN, entity_allowed
 from .core.commands import durata_ammessa
 from .entity import LepasEntity
 
+_SYNCED_CLIMATE_DURATION_ATTRS = ("clima_duration", "departure_preclimate_duration")
+
 # (nome, suffix, attributo sul coordinator, min, max, step, default, unità, icona)
 NUMBERS = [
     ("Lepas Durata clima", "clima_durata", "clima_duration",
@@ -85,11 +87,17 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
         self._push()
 
     def _snap_value(self, value: float) -> float:
-        fallback = (
-            self._value
-            if hasattr(self, "_value")
-            else (float(self._allowed_durations[0]) if self._allowed_durations else 0.0)
+        coord_val = (
+            getattr(self.coordinator, self._attr, None)
+            if self._attr in _SYNCED_CLIMATE_DURATION_ATTRS
+            else None
         )
+        if isinstance(coord_val, (int, float)) and not isinstance(coord_val, bool) and math.isfinite(float(coord_val)):
+            fallback = float(coord_val)
+        elif hasattr(self, "_value"):
+            fallback = self._value
+        else:
+            fallback = float(self._allowed_durations[0]) if self._allowed_durations else 0.0
         try:
             num = float(value)
         except (TypeError, ValueError):
@@ -110,11 +118,12 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last = await self.async_get_last_number_data()
+        last_state = await self.async_get_last_state()
         raw_val = last.native_value if last is not None else None
-        if raw_val is None:
-            last_state = await self.async_get_last_state()
-            if last_state is not None:
-                raw_val = last_state.state
+        if raw_val is None and last_state is not None:
+            raw_val = last_state.state
+        state_dt = (last_state.last_updated or last_state.last_changed) if last_state is not None else None
+        ts = state_dt.timestamp() if state_dt is not None else 0.0
         restored = False
         if raw_val is not None:
             try:
@@ -124,19 +133,52 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
             if math.isfinite(parsed):
                 self._value = self._snap_value(parsed)
                 restored = True
-        self._push()
+        restored_attrs = getattr(self.coordinator, "_restored_number_attrs", None)
+        if not isinstance(restored_attrs, dict):
+            restored_attrs = {}
+            setattr(self.coordinator, "_restored_number_attrs", restored_attrs)
+        synced_from_twin = False
+        if restored:
+            twin_wins = False
+            if self._attr in _SYNCED_CLIMATE_DURATION_ATTRS:
+                for attr in _SYNCED_CLIMATE_DURATION_ATTRS:
+                    if attr != self._attr and attr in restored_attrs:
+                        other_ts = restored_attrs[attr]
+                        if other_ts > ts or (other_ts == ts and attr == "clima_duration"):
+                            twin_wins = True
+            restored_attrs[self._attr] = ts
+            if twin_wins:
+                coord_val = getattr(self.coordinator, self._attr, None)
+                if coord_val is not None:
+                    self._value = self._snap_value(coord_val)
+                synced_from_twin = True
+            else:
+                self._push(sync_twin=True)
+        elif (
+            self._attr in _SYNCED_CLIMATE_DURATION_ATTRS
+            and any(attr in restored_attrs for attr in _SYNCED_CLIMATE_DURATION_ATTRS)
+        ):
+            coord_val = getattr(self.coordinator, self._attr, None)
+            if coord_val is not None:
+                self._value = self._snap_value(coord_val)
+                synced_from_twin = True
+        else:
+            self._push()
         if (
-            restored
-            and self._attr in ("charge_duration_hours", "departure_preclimate_duration")
+            (restored or synced_from_twin)
+            and self._attr in ("charge_duration_hours", *_SYNCED_CLIMATE_DURATION_ATTRS)
             and hasattr(self.coordinator, "notify_schedule_changed")
         ):
             self.coordinator.notify_schedule_changed()
 
-    def _push(self) -> None:
+    def _push(self, *, sync_twin: bool = False) -> None:
         # mantieni il valore come int quando è intero (orari/giorni), così i body comando
         # non finiscono con "8.0" dove l'app usa interi.
         v = int(self._value) if float(self._value).is_integer() else self._value
         setattr(self.coordinator, self._attr, v)
+        if sync_twin and self._attr in _SYNCED_CLIMATE_DURATION_ATTRS:
+            for attr in _SYNCED_CLIMATE_DURATION_ATTRS:
+                setattr(self.coordinator, attr, v)
 
     @property
     def native_value(self) -> float:
@@ -150,9 +192,9 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
 
     async def async_set_native_value(self, value: float) -> None:
         self._value = self._snap_value(value)
-        self._push()
+        self._push(sync_twin=True)
         if (
-            self._attr in ("charge_duration_hours", "departure_preclimate_duration")
+            self._attr in ("charge_duration_hours", *_SYNCED_CLIMATE_DURATION_ATTRS)
             and hasattr(self.coordinator, "notify_schedule_changed")
         ):
             self.coordinator.notify_schedule_changed(

@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.33.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.33.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.33.0";
+  var CARD_VERSION = "1.33.1";
   var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -96,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.33.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.33.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.33.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.33.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.33.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.33.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.33.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.33.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.33.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.33.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.33.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.33.1";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -297,7 +297,7 @@
       onCar: "Su auto",
       syncedDep: "Sincronizzata",
       toApplyCarPrefix: "Da applicare",
-      carWord: "auto",
+      carWord: "sull'auto ora",
       carOff: "spenta",
       depDisabled: "Disattivata",
       depClimateExtras: "Extra clima alla partenza",
@@ -510,7 +510,7 @@
       onCar: "On car",
       syncedDep: "Synced",
       toApplyCarPrefix: "To apply",
-      carWord: "car",
+      carWord: "on car now",
       carOff: "off",
       depDisabled: "Disabled",
       depClimateExtras: "Departure climate extras",
@@ -723,7 +723,7 @@
       onCar: "In auto",
       syncedDep: "Gesynchroniseerd",
       toApplyCarPrefix: "Toepassen",
-      carWord: "auto",
+      carWord: "nu in auto",
       carOff: "uit",
       depDisabled: "Uitgeschakeld",
       depClimateExtras: "Extra vertrekklimaat",
@@ -5586,7 +5586,10 @@
             : (typeof vm.schedDep.s.state === "string" && /^\d{1,2}:\d{2}$/.test(vm.schedDep.s.state.trim())
               ? vm.schedDep.s.state.trim()
               : "");
-          var carStatusVal = carActive ? (rawCarTime || t.departureActive) : t.carOff;
+          var carNextStr = rawCarTime
+            ? formatCarNextDeparture(rawCarTime, sdRawAttrs.giorni, new Date(), t)
+            : t.departureActive;
+          var carStatusVal = carActive ? carNextStr : t.carOff;
           schedDepTxt.classList.add("is-amber");
           schedDepTxt.textContent = t.toApplyCarPrefix + " (" + t.carWord + ": " + carStatusVal + ")";
         } else if (hasPending === null && carActive) {

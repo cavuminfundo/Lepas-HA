@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.33.1 — 2026-11-21
+
+### 🇬🇧 English
+
+- **Clearer Pending Departure Readout & Synced Climate/Pre-Heating Duration (`lepas-card.js`, `number.py`)**:
+  - **Pending Car Departure Label (`lepas-card.js`)**: Updated the `On car` pending summary when Home Assistant changes have not yet been applied to the vehicle so it displays both the next scheduled day and time currently active on the car using `formatCarNextDeparture` (e.g. `To apply (on car now: Thu 13:25)` / `To apply (on car now: off)` in EN, `Da applicare (sull'auto ora: Gio 13:25)` / `spenta` in IT, and `Toepassen (nu in auto: Do 13:25)` / `uit` in NL), removing the ambiguous `auto:` prefix, and bumped card assets to `?v=1.33.1`.
+  - **Bidirectional Climate & Departure Duration Sync (`number.py`)**: Synchronized `number.lepas_climate_duration` and `number.lepas_departure_preclimate_duration` bidirectionally on `set_value` and boot restore (resolving restore cache conflicts deterministically by `last_updated` with `clima_duration` tie-breaker, without triggering spurious charging syncs), keeping both selectors visible across the Climate and Departures panels.
+
+### 🇮🇹 Italiano
+
+- **Dicitura Chiara Partenza da Applicare & Sincronizzazione Durata Clima/Pre-Partenza (`lepas-card.js`, `number.py`)**:
+  - **Riepilogo Stato Sull'Auto (`lepas-card.js`)**: Aggiornata la riga *Su auto* nello stato pendente in attesa di *Applica su auto* per mostrare sia il giorno sia l'orario attualmente attivi sul veicolo tramite `formatCarNextDeparture` (es. `Da applicare (sull'auto ora: Gio 13:25)` oppure `Da applicare (sull'auto ora: spenta)` in IT, e corrispondenti EN/NL), eliminando la dicitura ambigua `auto:` e aggiornando gli asset della card a `?v=1.33.1`.
+  - **Sincronizzazione Bidirezionale Durata Clima & Pre-Partenza (`number.py`)**: Sincronizzati in modo bidirezionale `number.lepas_climate_duration` e `number.lepas_departure_preclimate_duration` al cambio valore e al ripristino all'avvio di Home Assistant (con precedenza deterministica per `last_updated` e tie-breaker su `clima_duration`, senza attivare sync di ricarica indesiderati), mantenendo visibili entrambi i selettori nelle schede Clima e Partenze.
+
 ## v1.33.0 — 2026-11-21
 
 ### 🇬🇧 English

@@ -353,20 +353,23 @@ async def test_number_notify_schedule_and_climate_target_temp_sync(
             blocking=True,
         )
         assert coord.clima_duration == 20
-        assert coord.departure_preclimate_duration == 15
+        assert coord.departure_preclimate_duration == 20
+        assert float(hass.states.get("number.lepas_departure_preclimate_duration").state) == 20.0
         assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
-            "06:45:00+00:00"
+            "06:40:00+00:00"
         )
 
         await hass.services.async_call(
             "number",
             "set_value",
-            {"entity_id": "number.lepas_departure_preclimate_duration", "value": 20},
+            {"entity_id": "number.lepas_departure_preclimate_duration", "value": 10},
             blocking=True,
         )
-        assert coord.departure_preclimate_duration == 20
+        assert coord.departure_preclimate_duration == 10
+        assert coord.clima_duration == 10
+        assert float(hass.states.get("number.lepas_climate_duration").state) == 10.0
         assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
-            "06:40:00+00:00"
+            "06:50:00+00:00"
         )
     finally:
         await hass.config_entries.async_unload(entry.entry_id)
@@ -417,10 +420,10 @@ async def test_climate_duration_aligned_to_air_durations_and_clamps(
         )
         assert coord.clima_duration == 10
         assert float(hass.states.get("number.lepas_climate_duration").state) == 10.0
-        # Climate duration no longer shifts departure pre-heating lead time
-        assert coord.departure_preclimate_duration == 15
+        assert coord.departure_preclimate_duration == 10
+        assert float(hass.states.get("number.lepas_departure_preclimate_duration").state) == 10.0
         assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
-            "06:45:00+00:00"
+            "06:50:00+00:00"
         )
 
         num_entity = next(
@@ -452,6 +455,8 @@ async def test_climate_duration_aligned_to_air_durations_and_clamps(
         assert st_gap.attributes["step"] == 10
         assert st_gap.attributes["allowed_durations"] == [5, 15]
         assert coord_gap.clima_duration == 5
+        assert coord_gap.departure_preclimate_duration == 5
+        assert float(hass.states.get("number.lepas_departure_preclimate_duration").state) == 5.0
 
         await hass.services.async_call(
             "number",
@@ -468,6 +473,8 @@ async def test_climate_duration_aligned_to_air_durations_and_clamps(
             blocking=True,
         )
         assert coord_gap.clima_duration == 5
+        assert coord_gap.departure_preclimate_duration == 5
+        assert float(hass.states.get("number.lepas_departure_preclimate_duration").state) == 5.0
         assert float(hass.states.get("number.lepas_climate_duration").state) == 5.0
     finally:
         await hass.config_entries.async_remove(entry_gap.entry_id)
@@ -532,8 +539,9 @@ async def test_departure_preclimate_duration_restore_snapping_and_feature_gating
         )
         await hass.async_block_till_done(wait_background_tasks=True)
         assert coord.departure_preclimate_duration == 10
-        assert coord.clima_duration == 15
+        assert coord.clima_duration == 10
         assert float(hass.states.get("number.lepas_departure_preclimate_duration").state) == 10.0
+        assert float(hass.states.get("number.lepas_climate_duration").state) == 10.0
         assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
             "06:50:00+00:00"
         )
@@ -555,6 +563,51 @@ async def test_departure_preclimate_duration_restore_snapping_and_feature_gating
         assert hass.states.get("number.lepas_departure_preclimate_duration") is None
     finally:
         await hass.config_entries.async_remove(entry_no_climate.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_climate_duration_boot_restore_precedence(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    _patch_io(monkeypatch)
+    tz = timezone.utc
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 21, 9, 30, tzinfo=tz))
+
+    # Only departure_preclimate_duration cached (non-default 10) -> mirrors to clima_duration
+    mock_restore_cache(hass, [State("number.lepas_departure_preclimate_duration", "10")])
+    entry_rev = await _setup_entry(
+        hass, vin="L8DURSYNC00000001", entry_id="ux_dur_rev", air_durations=[5, 10, 15]
+    )
+    coord_rev = hass.data[DOMAIN][entry_rev.entry_id]
+    try:
+        assert coord_rev.departure_preclimate_duration == 10
+        assert coord_rev.clima_duration == 10
+        assert float(hass.states.get("number.lepas_climate_duration").state) == 10.0
+    finally:
+        await hass.config_entries.async_remove(entry_rev.entry_id)
+        await hass.async_block_till_done()
+
+    # Both cached with different values -> newer last_updated wins deterministically
+    older = datetime(2026, 11, 21, 8, 0, tzinfo=tz)
+    newer = datetime(2026, 11, 21, 9, 0, tzinfo=tz)
+    mock_restore_cache(
+        hass,
+        [
+            State("number.lepas_climate_duration", "10", last_updated=newer),
+            State("number.lepas_departure_preclimate_duration", "5", last_updated=older),
+        ],
+    )
+    entry_both = await _setup_entry(
+        hass, vin="L8DURSYNC00000002", entry_id="ux_dur_both", air_durations=[5, 10, 15]
+    )
+    coord_both = hass.data[DOMAIN][entry_both.entry_id]
+    try:
+        assert coord_both.clima_duration == 10
+        assert coord_both.departure_preclimate_duration == 10
+        assert float(hass.states.get("number.lepas_climate_duration").state) == 10.0
+        assert float(hass.states.get("number.lepas_departure_preclimate_duration").state) == 10.0
+    finally:
+        await hass.config_entries.async_remove(entry_both.entry_id)
         await hass.async_block_till_done()
 
 

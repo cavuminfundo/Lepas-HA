@@ -2170,7 +2170,9 @@ test("v1.21.2 Scheduled car departure readout & adaptive Apply/Disable on car bu
   assert.ok(nextTxt && schedTxt && applyBtn);
   assert.equal(nextTxt.textContent, "Disattivata", "Prossima partenza must preserve sensor.lepas_next_departure state without overriding to 'Attiva'");
   assert.equal(applyBtn.classList.contains("hidden"), false);
-  assert.equal(schedTxt.textContent, "Da applicare (auto: 06:35)", `Expected Option 1 pending car time readout, got: ${schedTxt.textContent}`);
+  const expectedCarNext = LepasCard._helpers.formatCarNextDeparture("06:35", [1, 2, 3, 4, 5, 6, 7], new Date(), LepasCard._helpers.getTexts("it"));
+  assert.ok(/^(Oggi|Domani) 06:35$/.test(expectedCarNext), `Expected Oggi/Domani + 06:35, got: ${expectedCarNext}`);
+  assert.equal(schedTxt.textContent, `Da applicare (sull'auto ora: ${expectedCarNext})`, `Expected Option 1 pending car day+time readout, got: ${schedTxt.textContent}`);
   assert.equal(schedTxt.classList.contains("is-amber"), true);
   assert.equal(schedTxt.textContent.includes("lun, mar"), false, `Car departure readout must not render full weekday list, got: ${schedTxt.textContent}`);
   assert.ok(applyBtn.textContent.includes("Disattiva su auto"), `Expected 'Disattiva su auto' when HA has no active departures, got: ${applyBtn.textContent}`);
@@ -3257,7 +3259,10 @@ test("v1.25.0 Departure UX Option 1: Prossima partenza + Su auto states (Sincron
   assert.equal(schedEl.classList.contains("is-emerald"), true);
   assert.equal(schedEl.classList.contains("is-amber"), false);
 
-  // 2. Pending with car active -> amber "Da applicare (auto: 06:35)" and .is-emerald reset
+  // 2. Pending with car active -> amber "Da applicare (sull'auto ora: <Giorno> 06:35)" and .is-emerald reset
+  const isoToday = new Date().getDay() === 0 ? 7 : new Date().getDay();
+  const farWeekday = ((isoToday - 1 + 3) % 7) + 1;
+  const farDayLabel = LepasCard._helpers.getTexts("it").dayNames[["mon", "tue", "wed", "thu", "fri", "sat", "sun"][farWeekday - 1]];
   card.hass = makeFullHass({
     "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Oggi 13:25 (clima 13:10)", {
       departure_at: "2026-11-19T13:25:00+01:00",
@@ -3265,16 +3270,16 @@ test("v1.25.0 Departure UX Option 1: Prossima partenza + Su auto states (Sincron
     "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
       attiva: true,
       orario: "06:35",
-      giorni: [4],
+      giorni: [farWeekday],
       has_pending_changes: true,
       synced_with_ha: false,
     }),
   }, "it");
-  assert.equal(schedEl.textContent, "Da applicare (auto: 06:35)");
+  assert.equal(schedEl.textContent, `Da applicare (sull'auto ora: ${farDayLabel} 06:35)`);
   assert.equal(schedEl.classList.contains("is-amber"), true);
   assert.equal(schedEl.classList.contains("is-emerald"), false);
 
-  // 3. Pending with car off -> amber "Da applicare (auto: spenta)"
+  // 3. Pending with car off -> amber "Da applicare (sull'auto ora: spenta)"
   card.hass = makeFullHass({
     "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Oggi 13:25 (clima 13:10)", {
       departure_at: "2026-11-19T13:25:00+01:00",
@@ -3285,7 +3290,7 @@ test("v1.25.0 Departure UX Option 1: Prossima partenza + Su auto states (Sincron
       synced_with_ha: false,
     }),
   }, "it");
-  assert.equal(schedEl.textContent, "Da applicare (auto: spenta)");
+  assert.equal(schedEl.textContent, "Da applicare (sull'auto ora: spenta)");
   assert.equal(schedEl.classList.contains("is-amber"), true);
   assert.equal(schedEl.classList.contains("is-emerald"), false);
 
@@ -3333,7 +3338,22 @@ test("v1.25.0 Departure UX Option 1: Prossima partenza + Su auto states (Sincron
   const nlRows = nlCard.shadowRoot.querySelectorAll(".dep-summary .dep-summary-row");
   assert.equal(nlRows[0].querySelector(".meta-inline span").textContent, "Volgend vertrek");
   assert.equal(nlRows[1].querySelector(".meta-inline span").textContent, "In auto");
-  assert.equal(nlCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Toepassen (auto: uit)");
+  assert.equal(nlCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent, "Toepassen (nu in auto: uit)");
+
+  const enFarDayLabel = LepasCard._helpers.getTexts("en").dayNames[["mon", "tue", "wed", "thu", "fri", "sat", "sun"][farWeekday - 1]];
+  const enPendingCard = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "sensor.lepas_scheduled_departure": makeState("sensor.lepas_scheduled_departure", "06:35", {
+      attiva: true,
+      orario: "06:35",
+      giorni: [farWeekday],
+      has_pending_changes: true,
+      synced_with_ha: false,
+    }),
+  }, "en"));
+  assert.equal(
+    enPendingCard.shadowRoot.querySelector('[data-bind="schedDepText"]').textContent,
+    `To apply (on car now: ${enFarDayLabel} 06:35)`,
+  );
 });
 
 test("resolveSocChargingState distinguishes active AC/DC charging from plugged-in waiting", () => {
