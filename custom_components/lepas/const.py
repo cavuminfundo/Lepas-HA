@@ -265,6 +265,7 @@ ENTITY_FEATURE_MAP: dict[tuple[str, str], str] = {
     # climate
     ("climate", "climate"): "climate",
     ("number", "clima_durata"): "climate",
+    ("number", "partenza_preclima_durata"): "climate",
     ("select", "departure_climate_mode"): "climate",
     # cool_everything
     ("switch", "raffredda_tutto"): "cool_everything",

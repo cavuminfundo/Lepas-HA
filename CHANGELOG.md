@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.33.0 — 2026-11-21
+
+### 🇬🇧 English
+
+- **Independent Pre-Heating Duration (`number.lepas_departure_preclimate_duration`), Comfort Duration Propagation & Departure Seat Optimistic Sync**:
+  - **Decoupled Climate & Departure Selectors (`number.py`, `coordinator.py`, `switch.py`, `core/commands.py`, `lepas-card.js`)**: Added `number.lepas_departure_preclimate_duration` (`5/10/15` min aligned to `maxAirDuration`, default `15`) exclusively for the **Departures** scheduler (`next_departure_occurrence` lead time and `_maybe_trigger_preclimate` duration for both `clima_on` and scheduled comfort extras), while keeping `number.lepas_climate_duration` exclusively for manual **Climate** controls (`climate.lepas_climate`, comfort macros including aligned auto-expiry, and `LepasComfortSwitch` seats/defrosters via shared `duration_params_for_command`). Updated `LepasCard` with separate `Climate & comfort duration` (Climate tab) and `Pre-heating duration` (Departures panel) chip selectors in IT/EN/NL, bringing active entities to `148`, and bumped card assets to `?v=1.33.0`.
+  - **Immediate Departure Seat Visibility & Rejection Logging (`coordinator.py`, `switch.py`)**: Propagated scheduled comfort extra activations to `LepasComfortSwitch` via `coord.data["scheduled_opt"]` (with rollback of both entity and mutually exclusive twin on `Exception`, `asyncio.CancelledError`, or MQTT `reason`), moved comfort `META` telemetry fields (excluding `frontHVACState`) to the `15s` `PROBE_MQTT_GRACE_S` window alongside `CMD_PROBE` (`25s/65s`) passive verification, and added non-PII `WARNING` logging on real ECU command rejections.
+
+### 🇮🇹 Italiano
+
+- **Durata Preriscaldamento Indipendente (`number.lepas_departure_preclimate_duration`), Durata Comfort & Stato Immediato Sedili alla Partenza**:
+  - **Selettori Separati tra Clima e Partenze (`number.py`, `coordinator.py`, `switch.py`, `core/commands.py`, `lepas-card.js`)**: Aggiunta la nuova entità `number.lepas_departure_preclimate_duration` (`5/10/15` min allineati a `maxAirDuration`, default `15`) dedicata esclusivamente al **Programmatore Partenze** (anticipo `next_departure_occurrence` e durata inviata in `_maybe_trigger_preclimate` sia al clima sia agli extra comfort come i sedili), lasciando `number.lepas_climate_duration` dedicata ai soli controlli manuali della scheda **Clima** (`climate.lepas_climate`, macro comfort con scadenza allineata e interruttori sedili/sbrinatori `LepasComfortSwitch` tramite l'helper condiviso `duration_params_for_command`). Aggiornata `LepasCard` con i due selettori indipendenti *Durata clima e comfort* (tab Clima) e *Durata preriscaldamento* (pannello Partenze) in IT/EN/NL (`148` entità attive) e aggiornati gli asset della card a `?v=1.33.0`.
+  - **Visibilità Immediata Sedili alla Partenza & Log Rifiuti (`coordinator.py`, `switch.py`)**: Propagata l'attivazione ottimistica su `LepasComfortSwitch` via `coord.data["scheduled_opt"]` (con rollback dell'entità e del gemello mutuamente esclusivo su `Exception`, `asyncio.CancelledError` o rifiuto MQTT `reason`), sbloccata la telemetria `META` comfort (escluso `frontHVACState`, che resta protetto per `300s`) alla grazia breve di `15s` (`PROBE_MQTT_GRACE_S`) con verifica passiva `CMD_PROBE` (`25s/65s`), e aggiunto log `WARNING` senza PII sui rifiuti reali della centralina.
+
 ## v1.32.2 — 2026-11-20
 
 ### 🇬🇧 English

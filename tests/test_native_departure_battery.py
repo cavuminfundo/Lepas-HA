@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import fixtures as FX
@@ -1355,3 +1358,289 @@ async def test_disable_departure_schedule_service_registered_and_unregistered(ha
         await hass.async_block_till_done()
 
     assert not hass.services.has_service(DOMAIN, "disable_departure_schedule")
+
+
+async def test_manual_comfort_and_macro_duration_propagation(hass, cloud, monkeypatch):
+    from custom_components.lepas import coordinator as coord_mod, switch as switch_mod
+    from custom_components.lepas.core import commands as CMD
+
+    sent: list[tuple[str, dict | None]] = []
+    monkeypatch.setattr(coord_mod, "COMMAND_SETTLE_S", 0)
+    monkeypatch.setattr(switch_mod, "MACRO_WAKE_WAIT", 0)
+    monkeypatch.setattr(switch_mod, "MACRO_WAKE_WAIT_AWAKE", 0)
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs", lambda self: (True, "ok"))
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_keepalive", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_telemetry_poll", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_drive_watch", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_ensure_vehicle_identity", lambda self: asyncio.sleep(0))
+    monkeypatch.setattr(
+        CMD,
+        "send",
+        lambda _ctx, key, **kw: sent.append((key, kw.get("params"))) or "ok",
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=f"Lepas ({FX.VIN})",
+        unique_id=FX.VIN,
+        data={
+            CONF_VIN: FX.VIN,
+            CONF_TUSERID: FX.TUSERID,
+            "email": FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            DATA_CAPS_PROBED_V5: True,
+        },
+        entry_id="manual_comfort_dur",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        coord.clima_duration = 5
+        coord.departure_preclimate_duration = 10
+        coord._last_msg_ts = time.time()
+
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.lepas_driver_seat_heating"},
+            blocking=True,
+        )
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.lepas_steering_wheel_heating"},
+            blocking=True,
+        )
+        await hass.services.async_call(
+            "switch",
+            "turn_on",
+            {"entity_id": "switch.lepas_heat_everything"},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+        assert sent == [
+            ("sedile_guida_caldo", {"times": "5"}),
+            ("volante_caldo", None),
+            ("clima_riscalda_on", {"duration": "5"}),
+        ]
+
+        macro = next(
+            e
+            for e in hass.data["entity_components"]["switch"].entities
+            if e.entity_id == "switch.lepas_heat_everything"
+        )
+        resto = macro._resto_scadenza()
+        assert resto is not None
+        assert 300 < resto <= (5 * 60 + 60)
+
+        sent.clear()
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": "switch.lepas_heat_everything"},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+        assert sent == [("clima_riscalda_off", None)]
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_scheduled_comfort_optimistic_sync_rollback_probe_and_rejection_log(
+    hass, cloud, monkeypatch, caplog
+):
+    from unittest.mock import AsyncMock
+
+    from custom_components.lepas import coordinator as coord_mod
+    from custom_components.lepas.const import PROBE_MQTT_GRACE_S
+    from custom_components.lepas.core import commands as CMD
+    from custom_components.lepas.timers import CMD_PROBE
+
+    monkeypatch.setattr(coord_mod, "COMMAND_SETTLE_S", 0)
+    monkeypatch.setattr(LepasCoordinator, "_provision_certs", lambda self: (True, "ok"))
+    monkeypatch.setattr(LepasCoordinator, "_connect_car", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_keepalive", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_telemetry_poll", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_start_drive_watch", lambda self: None)
+    monkeypatch.setattr(LepasCoordinator, "async_ensure_vehicle_identity", lambda self: asyncio.sleep(0))
+
+    sent_cmd: list[tuple[str, dict | None]] = []
+    monkeypatch.setattr(
+        CMD,
+        "send",
+        lambda _ctx, key, **kw: sent_cmd.append((key, kw.get("params"))) or "ok",
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=f"Lepas ({FX.VIN})",
+        unique_id=FX.VIN,
+        data={
+            CONF_VIN: FX.VIN,
+            CONF_TUSERID: FX.TUSERID,
+            "email": FX.EMAIL,
+            CONF_PIN: FX.PIN,
+            DATA_CAPS_PROBED_V5: True,
+        },
+        entry_id="sched_comfort_sync",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coord = hass.data[DOMAIN][entry.entry_id]
+    monkeypatch.setattr(coord, "async_probe", AsyncMock())
+
+    def _sw(entity_id: str):
+        return next(
+            e
+            for e in hass.data["entity_components"]["switch"].entities
+            if e.entity_id == entity_id
+        )
+
+    def _deliver(payload: dict) -> None:
+        msg = SimpleNamespace(
+            payload=json.dumps(payload).encode("utf-8"),
+            topic="app/1/test/account/msgCenter/msg",
+        )
+        coord._on_car_message(None, None, msg)
+
+    try:
+        coord.poll_enabled = True
+        sw_heat = _sw("switch.lepas_driver_seat_heating")
+        sw_vent = _sw("switch.lepas_driver_seat_ventilation")
+
+        # Initial vehicle telemetry: heating OFF, ventilation ON, HVAC ON
+        _deliver(FX.telemetry_5a02(dSeatHeatingState="0", dSeatVentilateState="1", frontHVACState="1"))
+        await hass.async_block_till_done()
+        assert hass.states.get("switch.lepas_driver_seat_heating").state == "off"
+        assert hass.states.get("switch.lepas_driver_seat_ventilation").state == "on"
+
+        # 1) In-flight optimistic activation + Exception rollback of self and _exclusive
+        tz = timezone.utc
+        coord.departure_climate_mode = "anywhere"
+        coord.departure_weekly[1] = (True, 7 * 60)
+        coord.departure_preclimate_duration = 10
+        coord.departure_climate_extras = ["driver_seat_heating", "steering_wheel_heating"]
+
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        orig_send = coord.async_send_command
+
+        async def paused_fail_send(key: str, params: dict | None = None) -> str:
+            if key == "sedile_guida_caldo":
+                entered.set()
+                await release.wait()
+                raise HomeAssistantError("send failed")
+            return await orig_send(key, params)
+
+        monkeypatch.setattr(coord, "async_send_command", paused_fail_send)
+        tick_task = asyncio.create_task(
+            coord._departure_tick_cb(_now=datetime(2026, 11, 16, 6, 50, tzinfo=tz))
+        )
+        await entered.wait()
+        assert sw_heat.is_on is True
+        assert sw_heat._opt_value is True
+        assert sw_vent._opt_value is False
+        assert hass.states.get("switch.lepas_driver_seat_heating").state == "on"
+        assert hass.states.get("switch.lepas_driver_seat_ventilation").state == "off"
+
+        release.set()
+        await tick_task
+        await hass.async_block_till_done()
+        assert sw_heat._opt_value is None
+        assert sw_vent._opt_value is None
+        assert hass.states.get("switch.lepas_driver_seat_heating").state == "off"
+        assert hass.states.get("switch.lepas_driver_seat_ventilation").state == "on"
+        assert "sedile_guida_caldo" not in (coord.data.get("scheduled_opt") or {})
+
+        # 2) CancelledError rollback cleans scheduled_opt and both switches, then re-raises
+        coord._fired_climate_key = None
+        coord._attempted_climate_key = None
+        entered.clear()
+        release.clear()
+        tick_cancel = asyncio.create_task(
+            coord._departure_tick_cb(_now=datetime(2026, 11, 16, 6, 50, tzinfo=tz))
+        )
+        await entered.wait()
+        assert sw_heat._opt_value is True
+        assert sw_vent._opt_value is False
+        tick_cancel.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await tick_cancel
+        await hass.async_block_till_done()
+        assert sw_heat._opt_value is None
+        assert sw_vent._opt_value is None
+        assert "sedile_guida_caldo" not in (coord.data.get("scheduled_opt") or {})
+        assert coord._timers.closing is False
+
+        # 3) Real async_send_command arms CMD_PROBE on comfort extra, NOT clima_on
+        assert coord._timers.is_armed(CMD_PROBE)  # armed by steering_wheel_heating continuing after failure
+        coord._timers.cancel(CMD_PROBE)
+        monkeypatch.setattr(coord, "async_send_command", orig_send)
+        await coord.async_send_command("clima_on")
+        await hass.async_block_till_done()
+        assert not coord._timers.is_armed(CMD_PROBE)
+
+        await coord.async_send_command("sedile_guida_caldo", {"times": "10"})
+        await hass.async_block_till_done()
+        assert coord._timers.is_armed(CMD_PROBE)
+
+        # 4) Scheduled success followed by MQTT reason [4:95] rolls back both switches & logs WARNING (no VIN)
+        coord.departure_climate_extras = ["driver_seat_heating"]
+        coord._fired_climate_key = None
+        coord._attempted_climate_key = None
+        await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 6, 50, tzinfo=tz))
+        await hass.async_block_till_done()
+        assert sw_heat._opt_value is True
+        assert sw_vent._opt_value is False
+
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            _deliver({
+                "content": {
+                    "serviceType": "110F",
+                    "data": {
+                        "result": "1",
+                        "seq": "1",
+                        "reason": [{"modelId": "4", "code": "95"}],
+                    },
+                }
+            })
+            await hass.async_block_till_done()
+
+        assert sw_heat._opt_value is None
+        assert sw_vent._opt_value is None
+        assert hass.states.get("switch.lepas_driver_seat_heating").state == "off"
+        assert hass.states.get("switch.lepas_driver_seat_ventilation").state == "on"
+        warn_msgs = [
+            rec.getMessage() for rec in caplog.records if rec.levelno == logging.WARNING
+        ]
+        assert any("comando rifiutato dall'auto (sedile_guida_caldo)" in m for m in warn_msgs)
+        assert not any(FX.VIN in rec.getMessage() for rec in caplog.records)
+
+        # 5) Past PROBE_MQTT_GRACE_S (15s) inside awake_window (300s): comfort settles, HVAC stays protected
+        coord._fired_climate_key = None
+        coord._attempted_climate_key = None
+        await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 6, 50, tzinfo=tz))
+        await hass.async_block_till_done()
+        assert sw_heat._opt_value is True
+
+        with coord._state_lock:
+            coord._last_msg_ts = time.time() - (PROBE_MQTT_GRACE_S + 5)
+        coord._on_probe_data({"dSeatHeatingState": "1", "dSeatVentilateState": "0", "frontHVACState": "0"})
+        await hass.async_block_till_done()
+
+        assert coord.data["fields"]["dSeatHeatingState"] == "1"
+        assert "dSeatHeatingState" in coord.data["probe_changed_fields"]
+        assert sw_heat._opt_value is None
+        assert hass.states.get("switch.lepas_driver_seat_heating").state == "on"
+        assert coord.data["fields"]["frontHVACState"] == "1"
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()

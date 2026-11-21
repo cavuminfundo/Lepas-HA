@@ -887,6 +887,7 @@ function makeFullHass(overrides = {}, lang = "it") {
     "switch.lepas_departure_sat_enabled": makeState("switch.lepas_departure_sat_enabled", "off"),
     "switch.lepas_departure_sun_enabled": makeState("switch.lepas_departure_sun_enabled", "off"),
     "number.lepas_climate_duration": makeState("number.lepas_climate_duration", "15", { min: 5, max: 30, step: 5 }),
+    "number.lepas_departure_preclimate_duration": makeState("number.lepas_departure_preclimate_duration", "15", { min: 5, max: 15, step: 5, allowed_durations: [5, 10, 15] }),
     "number.lepas_charge_duration": makeState("number.lepas_charge_duration", "6", { min: 1, max: 12, step: 1 }),
     "time.lepas_charge_start_time": makeState("time.lepas_charge_start_time", "23:00:00"),
     "time.lepas_quick_departure_time": makeState("time.lepas_quick_departure_time", "07:30:00"),
@@ -3662,6 +3663,7 @@ test("Horizontal 2-column Cockpit places Hero+Overview on left, 3-tab operationa
     "time.lepas_departure_sat_time": null,
     "time.lepas_departure_sun_time": null,
     "button.lepas_apply_departure_schedule": null,
+    "number.lepas_departure_preclimate_duration": null,
     "switch.lepas_battery_pack_heat": null,
     "time.lepas_battery_pack_heat_time": null,
     "switch.lepas_sync_battery_heat_to_departure": null,
@@ -5009,6 +5011,178 @@ test("Cockpit left-column compact Statistics card displays charging KPIs & EV/Hy
   assert.ok(noStatsCard.shadowRoot.querySelector('[data-bind="cockpitStatsSurface"]') === null, "cockpitStatsSurface must be omitted when no stats entities exist");
   assert.equal(noStatsCard.shadowRoot.querySelector(".cockpit-left").classList.contains("has-cockpit-stats"), false);
 });
+
+test("Independent departure_preclimate_duration selector, I18N labels, runtime allowed_durations rebuild, and mode/car_in_use independence", async () => {
+  const h = LepasCard._helpers;
+
+  // I18N labels (it/en/nl) clarify manual climate+comfort duration vs departure pre-heating duration
+  assert.equal(h.getTexts("it").duration, "Durata clima e comfort");
+  assert.equal(h.getTexts("en").duration, "Climate & comfort duration");
+  assert.equal(h.getTexts("nl").duration, "Klimaat- en comfortduur");
+  assert.equal(h.getTexts("it").depPreheatDuration, "Durata preriscaldamento");
+  assert.equal(h.getTexts("en").depPreheatDuration, "Pre-heating duration");
+  assert.equal(h.getTexts("nl").depPreheatDuration, "Voorverwarmingsduur");
+
+  const makeIndependentHass = (cliVal, depVal, depAllowed, lang = "it", extraOverrides = {}) => makeFullHass({
+    "number.lepas_climate_duration": makeState("number.lepas_climate_duration", String(cliVal), {
+      min: 5,
+      max: 15,
+      step: 5,
+      allowed_durations: [5, 10, 15],
+    }),
+    "number.lepas_departure_preclimate_duration": makeState("number.lepas_departure_preclimate_duration", String(depVal), {
+      min: 5,
+      max: Math.max(...depAllowed),
+      step: 5,
+      allowed_durations: depAllowed,
+    }),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30 (Clima 07:20)", {
+      departure_at: "2026-11-18T07:30:00+01:00",
+      allowed_climate_extras: ["driver_seat_heating"],
+      climate_extras: ["driver_seat_heating"],
+    }),
+    ...extraOverrides,
+  }, lang);
+
+  const hassIt = makeIndependentHass("15", "10", [5, 10, 15], "it");
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hassIt);
+  const root = card.shadowRoot;
+
+  // Climate tab retains climate_duration chips with updated label
+  const cliPanel = root.querySelector('[data-panel="climate"]');
+  assert.ok(cliPanel);
+  const cliDurText = cliPanel.querySelector('[data-bind="cliDurText"]');
+  assert.equal(cliDurText.textContent, "15 min");
+  const cliDurHdr = cliDurText.parentNode;
+  assert.equal(cliDurHdr.children[0].textContent, "Durata clima e comfort");
+  const cliChips = Array.from(cliPanel.querySelectorAll('[data-action-id="climate_duration"]'));
+  assert.deepEqual(cliChips.map((b) => Number(b.getAttribute("data-value"))), [5, 10, 15]);
+  assert.equal(cliPanel.querySelector('[data-action-id="climate_duration"][data-value="15"]').classList.contains("is-active"), true);
+  assert.equal(cliPanel.querySelector('[data-action-id="climate_duration"][data-value="10"]').classList.contains("is-active"), false);
+
+  // Departures panel renders departure_preclimate_duration chips inside depCliDurBox between depCliMode and days-strip/depExtrasBox
+  const depSurface = root.querySelector('[data-bind="depSurface"]');
+  assert.ok(depSurface, "depSurface must exist");
+  const depCliDurBox = depSurface.querySelector('[data-bind="depCliDurBox"]');
+  assert.ok(depCliDurBox, "depCliDurBox must render inside depSurface");
+  const depSurfaceChildren = Array.from(depSurface.children);
+  const modeRowIdx = depSurfaceChildren.findIndex((el) => el.querySelector('[data-entity-input="select.lepas_departure_climate_mode"]'));
+  const durBoxIdx = depSurfaceChildren.indexOf(depCliDurBox);
+  const daysIdx = depSurfaceChildren.findIndex((el) => el.classList.contains("days-strip"));
+  const extrasIdx = depSurfaceChildren.indexOf(depSurface.querySelector('[data-bind="depExtrasBox"]'));
+  assert.ok(modeRowIdx >= 0 && durBoxIdx > modeRowIdx, "depCliDurBox must render below depCliMode");
+  assert.ok(daysIdx > durBoxIdx && extrasIdx > daysIdx, "depCliDurBox must render above days-strip and depExtrasBox");
+
+  const depDurText = depCliDurBox.querySelector('[data-bind="depCliDurText"]');
+  assert.ok(depDurText);
+  assert.equal(depDurText.textContent, "10 min");
+  assert.equal(depDurText.parentNode.children[0].textContent, "Durata preriscaldamento");
+
+  const depChips = () => Array.from(root.querySelector('[data-bind="depSurface"]').querySelectorAll('[data-action-id="departure_preclimate_duration"]'));
+  assert.deepEqual(depChips().map((b) => Number(b.getAttribute("data-value"))), [5, 10, 15]);
+  assert.deepEqual(depChips().map((b) => b.textContent), ["5m", "10m", "15m"]);
+  assert.equal(depSurface.querySelector('[data-action-id="departure_preclimate_duration"][data-value="5"]').classList.contains("is-active"), false);
+  assert.equal(depSurface.querySelector('[data-action-id="departure_preclimate_duration"][data-value="10"]').classList.contains("is-active"), true);
+  assert.equal(depSurface.querySelector('[data-action-id="departure_preclimate_duration"][data-value="15"]').classList.contains("is-active"), false);
+  assert.equal(depSurface.querySelector('[data-action-id="departure_preclimate_duration"][data-value="10"]').getAttribute("aria-pressed"), "true");
+  assert.equal(depSurface.querySelector('[data-action-id="departure_preclimate_duration"][data-value="5"]').getAttribute("aria-pressed"), "false");
+
+  // Clicking departure_preclimate_duration chip calls number.set_value on number.lepas_departure_preclimate_duration without confirm dialog
+  const confirmDlg = root.querySelector('dialog[data-bind="confirmDialog"]');
+  depSurface.querySelector('[data-action-id="departure_preclimate_duration"][data-value="5"]').click();
+  await Promise.resolve();
+  assert.equal(confirmDlg.open, false);
+  assert.deepEqual(hassIt.calls[0], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_departure_preclimate_duration", value: 5 },
+  });
+
+  // Clicking climate_duration chip calls number.set_value on number.lepas_climate_duration independently
+  cliPanel.querySelector('[data-action-id="climate_duration"][data-value="5"]').click();
+  await Promise.resolve();
+  assert.deepEqual(hassIt.calls[1], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_climate_duration", value: 5 },
+  });
+
+  // Runtime update of allowed_durations rebuilds chips & actions and tracks language changes
+  const hassExpandedEn = makeIndependentHass("15", "20", [5, 10, 15, 20], "en");
+  card.hass = hassExpandedEn;
+  assert.deepEqual(depChips().map((b) => Number(b.getAttribute("data-value"))), [5, 10, 15, 20]);
+  assert.equal(root.querySelector('[data-bind="depCliDurText"]').textContent, "20 min");
+  assert.equal(root.querySelector('[data-bind="depCliDurText"]').parentNode.children[0].textContent, "Pre-heating duration");
+  assert.equal(root.querySelector('[data-bind="cliDurText"]').parentNode.children[0].textContent, "Climate & comfort duration");
+  assert.equal(root.querySelector('[data-action-id="departure_preclimate_duration"][data-value="20"]').classList.contains("is-active"), true);
+  root.querySelector('[data-action-id="departure_preclimate_duration"][data-value="20"]').click();
+  await Promise.resolve();
+  assert.deepEqual(hassExpandedEn.calls[0], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_departure_preclimate_duration", value: 20 },
+  });
+
+  // Remains interactive when depCliMode is "off" and even when car_in_use is true
+  const hassModeOffInUse = makeIndependentHass("15", "10", [5, 10, 15], "nl", {
+    "select.lepas_departure_climate_mode": makeState("select.lepas_departure_climate_mode", "off", {
+      options: ["at_home", "anywhere", "off"],
+    }),
+    "climate.lepas_climate": makeState("climate.lepas_climate", "heat_cool", {
+      temperature: 21.0,
+      min_temp: 16,
+      max_temp: 30,
+      target_temperature_step: 0.5,
+      hvac_modes: ["off", "heat_cool"],
+      car_in_use: true,
+    }),
+  });
+  card.hass = hassModeOffInUse;
+  assert.equal(root.querySelector('[data-bind="depCliDurText"]').parentNode.children[0].textContent, "Voorverwarmingsduur");
+  const chip15Off = root.querySelector('[data-action-id="departure_preclimate_duration"][data-value="15"]');
+  assert.equal(chip15Off.disabled, false);
+  assert.equal(chip15Off.classList.contains("is-car-in-use"), false);
+  chip15Off.click();
+  await Promise.resolve();
+  assert.deepEqual(hassModeOffInUse.calls[0], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_departure_preclimate_duration", value: 15 },
+  });
+
+  // Dead state shows em-dash and clears is-active
+  card.hass = makeIndependentHass("15", "unavailable", [5, 10, 15], "en");
+  assert.equal(root.querySelector('[data-bind="depCliDurText"]').textContent, "—");
+  assert.equal(depChips().some((b) => b.classList.contains("is-active")), false);
+
+  // hasDepSection renders depSurface when ONLY number.lepas_departure_preclimate_duration is present
+  const onlyDepDurCard = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "sensor.lepas_next_departure": null,
+    "sensor.lepas_scheduled_departure": null,
+    "switch.lepas_quick_departure": null,
+    "switch.lepas_departure_mon_enabled": null,
+    "switch.lepas_departure_tue_enabled": null,
+    "switch.lepas_departure_wed_enabled": null,
+    "switch.lepas_departure_thu_enabled": null,
+    "switch.lepas_departure_fri_enabled": null,
+    "switch.lepas_departure_sat_enabled": null,
+    "switch.lepas_departure_sun_enabled": null,
+    "time.lepas_departure_mon_time": null,
+    "time.lepas_departure_tue_time": null,
+    "time.lepas_departure_wed_time": null,
+    "time.lepas_departure_thu_time": null,
+    "time.lepas_departure_fri_time": null,
+    "time.lepas_departure_sat_time": null,
+    "time.lepas_departure_sun_time": null,
+    "button.lepas_apply_departure_schedule": null,
+    "switch.lepas_battery_pack_heat": null,
+    "time.lepas_battery_pack_heat_time": null,
+    "switch.lepas_sync_battery_heat_to_departure": null,
+  }, "it"));
+  assert.ok(onlyDepDurCard.shadowRoot.querySelector('[data-bind="depSurface"]'), "hasDepSection must include ctx.depCliDur");
+  assert.ok(onlyDepDurCard.shadowRoot.querySelector('[data-bind="depCliDurBox"]'));
+});
+
 
 
 

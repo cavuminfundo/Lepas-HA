@@ -23,6 +23,7 @@ from custom_components.lepas.const import (
     features_from_permissions,
 )
 from custom_components.lepas.coordinator import LepasCoordinator
+from custom_components.lepas.core.commands import duration_params_for_command
 from custom_components.lepas.scheduler import (
     CHARGE_DAYS_PRESETS,
     DEPARTURE_DAY_SLUGS,
@@ -243,6 +244,9 @@ def test_const_platforms_v4_permissions_and_entity_feature_map(hass):
 def test_coordinator_scheduler_defaults(hass):
     coord = _make_coord(hass)
     assert coord.clima_duration == 15
+    assert coord.departure_preclimate_duration == 15
+    assert coord._sched_opt_seq == 0
+    assert coord._scheduled_opt == {}
     assert coord.charge_duration_hours == 6
     assert coord.charge_start_minutes == 480
     assert coord.charge_days == [1, 2, 3, 4, 5, 6, 7]
@@ -688,3 +692,57 @@ async def test_teardown_closing_guards_and_busy_released_in_finally(hass, monkey
     coord2.async_stop()
     assert coord2._timers.closing is True
     assert not coord2._timers.is_armed(DEPARTURE_TICK)
+
+
+def test_duration_params_for_command():
+    assert duration_params_for_command("sedile_guida_caldo", 10) == {"times": "10"}
+    assert duration_params_for_command("defrost_parabrezza", 5) == {"times": "5"}
+    assert duration_params_for_command("clima_riscalda_on", 10) == {"duration": "10"}
+    assert duration_params_for_command("clima_raffredda_on", 5) == {"duration": "5"}
+    assert duration_params_for_command("volante_caldo", 10) is None
+    assert duration_params_for_command("unknown_cmd", 10) is None
+
+
+def test_entity_feature_map_departure_preclimate_duration(hass):
+    assert ENTITY_FEATURE_MAP[("number", "partenza_preclima_durata")] == "climate"
+    coord_on = _make_coord(
+        hass, data={DATA_VEHICLE_FEATURES: {"climate": True}}, entry_id="dep_dur_on"
+    )
+    coord_off = _make_coord(
+        hass, data={DATA_VEHICLE_FEATURES: {"climate": False}}, entry_id="dep_dur_off"
+    )
+    assert entity_allowed(coord_on, "number", "partenza_preclima_durata") is True
+    assert entity_allowed(coord_off, "number", "partenza_preclima_durata") is False
+
+
+async def test_departure_preclimate_duration_decoupled_from_clima_duration(hass, monkeypatch):
+    tz = timezone.utc
+    coord = _make_coord(hass, entry_id="decoupled_dur")
+    coord.departure_weekly[1] = (True, 7 * 60)
+    coord.departure_climate_mode = "anywhere"
+    coord.departure_preclimate_duration = 10
+    coord.clima_duration = 5
+    coord.departure_climate_extras = ["driver_seat_heating", "steering_wheel_heating"]
+
+    occ = coord.next_departure_occurrence(datetime(2026, 11, 16, 6, 30, tzinfo=tz))
+    assert occ is not None
+    assert occ.climate_start_at == datetime(2026, 11, 16, 6, 50, tzinfo=tz)
+
+    sent: list[tuple[str, dict | None]] = []
+
+    async def fake_send(key: str, params: dict | None = None) -> str:
+        sent.append((key, params))
+        return "ok"
+
+    monkeypatch.setattr(coord, "async_send_command", fake_send)
+    # 06:54 was inside 15-min window only for old coupling, already inside 10-min window at 06:50;
+    # verify 06:48 (inside 15m, outside 10m) does NOT trigger when departure_preclimate_duration=10.
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 6, 48, tzinfo=tz))
+    assert sent == []
+
+    await coord._departure_tick_cb(_now=datetime(2026, 11, 16, 6, 50, tzinfo=tz))
+    assert sent == [
+        ("clima_on", {"temperature": "21.0", "times": "10"}),
+        ("sedile_guida_caldo", {"times": "10"}),
+        ("volante_caldo", None),
+    ]

@@ -286,7 +286,10 @@
     },
     "number": {
       "climate_duration": {
-        "name": "A/C acceso per (pre-clima)"
+        "name": "Durata clima e comfort"
+      },
+      "departure_preclimate_duration": {
+        "name": "Durata preriscaldamento"
       },
       "charge_duration": {
         "name": "Ricarica prog. · durata"

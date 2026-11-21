@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.32.2).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.33.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.32.2";
+  var CARD_VERSION = "1.33.0";
   var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -96,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.32.2",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.32.2",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.32.2",
-    black: "/lepas_card/lepas-hero-black.png?v=1.32.2",
-    white: "/lepas_card/lepas-hero-white.png?v=1.32.2",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.33.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.33.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.33.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.33.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.33.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.32.2";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.33.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -214,7 +214,7 @@
       leftZone: "SX",
       rightZone: "DX",
       airPurification: "Purificazione aria",
-      duration: "Durata",
+      duration: "Durata clima e comfort",
       macros: "Macro comfort",
       coolAll: "Raffredda tutto",
       heatAll: "Riscalda tutto",
@@ -246,6 +246,7 @@
       quickDeparture: "Partenza rapida",
       syncCharge: "Allinea ricarica",
       depClimateMode: "Clima partenza",
+      depPreheatDuration: "Durata preriscaldamento",
       blueprintTitle: "Stato chiusure e TPMS",
       bpAriaLabel: "Vista dall'alto dello stato chiusure e pneumatici Lepas L8",
       securityControls: "Sicurezza e aperture",
@@ -426,7 +427,7 @@
       leftZone: "Left",
       rightZone: "Right",
       airPurification: "Air purification",
-      duration: "Duration",
+      duration: "Climate & comfort duration",
       macros: "Comfort macros",
       coolAll: "Cool everything",
       heatAll: "Heat everything",
@@ -458,6 +459,7 @@
       quickDeparture: "Quick departure",
       syncCharge: "Sync charging",
       depClimateMode: "Departure climate",
+      depPreheatDuration: "Pre-heating duration",
       blueprintTitle: "Closures and TPMS",
       bpAriaLabel: "Top-down view of Lepas L8 closures and tire status",
       securityControls: "Security and closures",
@@ -638,7 +640,7 @@
       leftZone: "Links",
       rightZone: "Rechts",
       airPurification: "Luchtzuivering",
-      duration: "Duur",
+      duration: "Klimaat- en comfortduur",
       macros: "Comfortmacro's",
       coolAll: "Alles koelen",
       heatAll: "Alles verwarmen",
@@ -670,6 +672,7 @@
       quickDeparture: "Snel vertrek",
       syncCharge: "Laden synchroniseren",
       depClimateMode: "Vertrekklimaat",
+      depPreheatDuration: "Voorverwarmingsduur",
       blueprintTitle: "Sluitingen en TPMS",
       bpAriaLabel: "Bovenaanzicht van sluitingen en bandenstatus Lepas L8",
       securityControls: "Beveiliging en sluitingen",
@@ -2623,6 +2626,7 @@
       this._boundStatsDialog = null;
       this._cmdTtlTimer = null;
       this._renderedCliDurKey = "";
+      this._renderedDepCliDurKey = "";
       var selfRef = this;
       this._dialogCtrl = createConfirmDialogController(this, {
         closeOnConfirmImmediate: true,
@@ -3506,6 +3510,7 @@
 
       // Climate entities
       var cliDur = this._findDomain(items, "number", "climate_duration");
+      var depCliDur = this._findDomain(items, "number", "departure_preclimate_duration");
       var setTempL = this._findDomain(items, "sensor", "set_temperature_left");
       var setTempR = this._findDomain(items, "sensor", "set_temperature_right");
       var airPurif = this._findDomain(items, "binary_sensor", "air_purification");
@@ -3690,12 +3695,16 @@
         regAction("temp_down", "climate", "set_temperature", { entity_id: climate.id, temperature: downT }, false, "temp_step");
         regAction("temp_up", "climate", "set_temperature", { entity_id: climate.id, temperature: upT }, false, "temp_step");
       }
-      if (cliDur) {
-        var cdVals = resolveClimateDurationOptions(cliDur.s);
-        cdVals.forEach(function (v) {
-          regAction("climate_duration_" + v, "number", "set_value", { entity_id: cliDur.id, value: v }, false, "climate_duration");
+      var regDurationActions = function (ent, actionId) {
+        if (!ent) return "";
+        var vals = resolveClimateDurationOptions(ent.s);
+        vals.forEach(function (v) {
+          regAction(actionId + "_" + v, "number", "set_value", { entity_id: ent.id, value: v }, false, actionId);
         });
-      }
+        return vals.join(",");
+      };
+      var cliDurOptsSig = regDurationActions(cliDur, "climate_duration");
+      var depCliDurOptsSig = regDurationActions(depCliDur, "departure_preclimate_duration");
       if (trunk) {
         var trunkClosed = trunk.s && trunk.s.state === "closed";
         if (trunkClosed) {
@@ -3803,8 +3812,8 @@
         ? cfg.entities.map(function (e) { return typeof e === "string" ? e : (e && e.entity ? e.entity : ""); }).join(",")
         : "";
       var allowedExtrasSig = allowedClimateExtras.join(",");
-      var cliDurOptsSig = cliDur ? resolveClimateDurationOptions(cliDur.s).join(",") : "";
       this._renderedCliDurKey = cliDurOptsSig;
+      this._renderedDepCliDurKey = depCliDurOptsSig;
       var structKey = [
         lang,
         cfg.layout,
@@ -3812,6 +3821,7 @@
         extraSig,
         allowedExtrasSig,
         cliDurOptsSig,
+        depCliDurOptsSig,
         entityIdsSig,
       ].join("#");
 
@@ -3855,6 +3865,7 @@
           carUpdated: carUpdated,
           cmdResult: cmdResult,
           cliDur: cliDur,
+          depCliDur: depCliDur,
           setTempL: setTempL,
           setTempR: setTempR,
           airPurif: airPurif,
@@ -3965,6 +3976,7 @@
         cmdResult: cmdResult,
         autoUpdatesSw: autoUpdatesSw,
         cliDur: cliDur,
+        depCliDur: depCliDur,
         setTempL: setTempL,
         setTempR: setTempR,
         airPurif: airPurif,
@@ -4203,14 +4215,15 @@
         "</section>";
 
       // Panel 2: Climate
-      var durHtml = "";
-      if (ctx.cliDur) {
-        var cdVals = resolveClimateDurationOptions(ctx.cliDur.s);
-        durHtml = '<div class="sec-hdr"><span>' + self._h(t.duration) + '</span><span class="num" data-bind="cliDurText"></span></div>' +
-          '<div class="chip-row">' + cdVals.map(function (v) {
-            return '<button type="button" class="chip-btn num" data-action-id="climate_duration" data-value="' + v + '">' + v + "m</button>";
+      var buildDurationChipsHtml = function (ent, label, textBind, actionId) {
+        if (!ent) return "";
+        var vals = resolveClimateDurationOptions(ent.s);
+        return '<div class="sec-hdr"><span>' + self._h(label) + '</span><span class="num" data-bind="' + textBind + '"></span></div>' +
+          '<div class="chip-row" role="group" aria-label="' + self._h(label) + '">' + vals.map(function (v) {
+            return '<button type="button" class="chip-btn num" data-action-id="' + actionId + '" data-value="' + v + '" aria-pressed="false">' + v + "m</button>";
           }).join("") + "</div>";
-      }
+      };
+      var durHtml = buildDurationChipsHtml(ctx.cliDur, t.duration, "cliDurText", "climate_duration");
 
       var climateHubHtml = ctx.climate ? (
         '<div class="surface">' +
@@ -4417,9 +4430,15 @@
         "</div>"
       ) : "";
 
+      var depDurHtml = ctx.depCliDur ? (
+        '<div class="dep-subbox" data-bind="depCliDurBox">' +
+          buildDurationChipsHtml(ctx.depCliDur, t.depPreheatDuration, "depCliDurText", "departure_preclimate_duration") +
+        "</div>"
+      ) : "";
+
       var hasDepSection = Boolean(
         ctx.nextDep || ctx.quickDep || hasWeekDays ||
-        ctx.applyDepBtn || ctx.schedDep ||
+        ctx.applyDepBtn || ctx.schedDep || ctx.depCliDur ||
         (ctx.allowedClimateExtras && ctx.allowedClimateExtras.length) ||
         ctx.batteryHeat || ctx.batteryHeatTime || ctx.syncBatteryHeat
       );
@@ -4440,6 +4459,7 @@
               "</div>"
             : "") +
           (ctx.depCliMode ? '<div class="field-row"><label class="field-lbl">' + self._h(t.depClimateMode) + '</label><select class="ctrl-select" data-entity-input="' + self._h(ctx.depCliMode.id) + '" data-uid="input:' + self._h(ctx.depCliMode.id) + '">' + depModeOptsHtml + "</select></div>" : "") +
+          depDurHtml +
           (hasWeekDays
             ? '<div class="days-strip">' + ctx.weekDays.map(function (wd) {
                 return '<button type="button" class="day-chip" data-day-chip="' + wd.slug + '" data-uid="day:' + wd.slug + '">' +
@@ -5045,6 +5065,20 @@
           }
         }
       };
+      var bindDurationChips = function (ent, textBind, actionId, gateCarInUse) {
+        if (!ent) return;
+        var curDur = self._num(ent.s);
+        var txtEl = root.querySelector('[data-bind="' + textBind + '"]');
+        if (txtEl) txtEl.textContent = curDur === null ? "—" : Math.round(curDur) + " min";
+        var chips = root.querySelectorAll('[data-action-id="' + actionId + '"]');
+        for (var ci = 0; ci < chips.length; ci += 1) {
+          var vNum = parseFloat(chips[ci].getAttribute("data-value"));
+          var isAct = curDur !== null && Math.round(curDur) === Math.round(vNum);
+          chips[ci].classList.toggle("is-active", isAct);
+          chips[ci].setAttribute("aria-pressed", isAct ? "true" : "false");
+          if (gateCarInUse) applyCarInUseState(chips[ci], false, false);
+        }
+      };
 
       // Overview Quick Dock + Security Action Buttons (synchronized confirmation keys!)
       if (vm.lock) {
@@ -5272,17 +5306,7 @@
       var apBadge = root.querySelector('[data-bind="airPurifBadge"]');
       if (apBadge) apBadge.classList.toggle("hidden", !this._isOn(vm.airPurif));
 
-      if (vm.cliDur) {
-        var curDur = this._num(vm.cliDur.s);
-        var cdTxt = root.querySelector('[data-bind="cliDurText"]');
-        if (cdTxt) cdTxt.textContent = curDur === null ? "—" : Math.round(curDur) + " min";
-        var allChips = root.querySelectorAll('[data-action-id="climate_duration"]');
-        for (var ci = 0; ci < allChips.length; ci += 1) {
-          var vNum = parseFloat(allChips[ci].getAttribute("data-value"));
-          allChips[ci].classList.toggle("is-active", curDur !== null && Math.round(curDur) === Math.round(vNum));
-          applyCarInUseState(allChips[ci], false, false);
-        }
-      }
+      bindDurationChips(vm.cliDur, "cliDurText", "climate_duration", true);
 
       var coolBtn = root.querySelector('[data-bind="coolAllBtn"]');
       if (coolBtn) {
@@ -5484,6 +5508,7 @@
       syncInputVal(vm.chgStartTime, true);
       syncInputVal(vm.quickDepTime, true);
       syncInputVal(vm.depCliMode, false);
+      bindDurationChips(vm.depCliDur, "depCliDurText", "departure_preclimate_duration", false);
 
       var chgDurEl = root.querySelector('[data-bind="chgDurText"]');
       if (chgDurEl && vm.chgDur) chgDurEl.textContent = this._dead(vm.chgDur.s) ? "—" : this._disp(vm.chgDur.s);

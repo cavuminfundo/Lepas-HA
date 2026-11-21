@@ -153,3 +153,22 @@ def test_card_version_and_matte_titanium_design_tokens() -> None:
     ]
     for token in required_tokens:
         assert token.upper() in source_upper, f"Missing Matte Titanium token {token} in lepas-card.js"
+
+
+def test_independent_duration_labels_and_bindings() -> None:
+    """Verify separate climate/comfort vs departure pre-heating duration selectors and I18N labels."""
+    source = CARD_JS.read_text(encoding="utf-8")
+    for expected in (
+        '"climate_duration"',
+        '"departure_preclimate_duration"',
+        '"cliDurText"',
+        '"depCliDurText"',
+        'data-bind="depCliDurBox"',
+        '"Durata clima e comfort"',
+        '"Climate & comfort duration"',
+        '"Klimaat- en comfortduur"',
+        '"Durata preriscaldamento"',
+        '"Pre-heating duration"',
+        '"Voorverwarmingsduur"',
+    ):
+        assert expected in source, f"Missing {expected} in lepas-card.js"

@@ -38,6 +38,7 @@ from .const import (
     MACRO_WAKE_WAIT_AWAKE,
     entity_allowed,
 )
+from .core.commands import duration_params_for_command
 from .entity import LepasEntity, LepasOptimisticMixin, field_on
 from .naming import ID_PREFIX
 from .scheduler import DEPARTURE_DAY_SLUGS
@@ -186,6 +187,7 @@ class LepasComfortSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Restor
         self._attr_icon = icon
         self._restored: bool | None = None
         self._exclusive: "LepasComfortSwitch | None" = None
+        self._last_sched_opt_token: int | None = None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -203,7 +205,50 @@ class LepasComfortSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Restor
         live = self._live_on()
         return live if live is not None else self._restored
 
+    def _write_exclusive_state(self) -> None:
+        if (
+            self._exclusive is not None
+            and getattr(self._exclusive, "hass", None) is not None
+            and getattr(self._exclusive, "entity_id", None) is not None
+        ):
+            self._exclusive.async_write_ha_state()
+
     def _handle_coordinator_update(self) -> None:
+        data = self.coordinator.data or {}
+        scheduled_opt = data.get("scheduled_opt") or {}
+        token = scheduled_opt.get(self._on_cmd)
+        if (
+            isinstance(token, int)
+            and not isinstance(token, bool)
+            and token != self._last_sched_opt_token
+        ):
+            self._last_sched_opt_token = token
+            anchor = data.get("last_seen")
+            probe_seq = data.get("probe_seq", 0)
+            now_mono = time.monotonic()
+            self._opt_value = True
+            self._opt_anchor = anchor
+            self._opt_probe_seq = probe_seq
+            self._opt_at = now_mono
+            if self._exclusive is not None:
+                self._exclusive._opt_value = False
+                self._exclusive._opt_anchor = anchor
+                self._exclusive._opt_probe_seq = probe_seq
+                self._exclusive._opt_at = now_mono
+                self._write_exclusive_state()
+        elif self._last_sched_opt_token is not None and token is None:
+            self._last_sched_opt_token = None
+            prev_anchor = self._opt_anchor
+            if self._opt_value is True:
+                self._clear_optimistic()
+            if (
+                self._exclusive is not None
+                and self._exclusive._opt_value is False
+                and self._exclusive._opt_anchor == prev_anchor
+            ):
+                self._exclusive._clear_optimistic()
+                self._write_exclusive_state()
+
         rejected = self._opt_value is not None and self._rifiuto_arrivato()
         anchor = self._opt_anchor
         super()._handle_coordinator_update()
@@ -214,17 +259,18 @@ class LepasComfortSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Restor
             and self._exclusive._opt_anchor == anchor
         ):
             self._exclusive._clear_optimistic()
-            if (
-                getattr(self._exclusive, "hass", None) is not None
-                and getattr(self._exclusive, "entity_id", None) is not None
-            ):
-                self._exclusive.async_write_ha_state()
+            self._write_exclusive_state()
 
     async def async_turn_on(self, **kwargs) -> None:
         # mutua esclusione: accendere questo spegne subito il gemello (es. aria↔caldo sedile)
         if self._exclusive is not None:
             self._exclusive._set_optimistic(False)
-        await self._run_command(self._on_cmd, True)
+        dur = int(getattr(self.coordinator, "clima_duration", 15) or 15)
+        await self._run_command(
+            self._on_cmd,
+            True,
+            duration_params_for_command(self._on_cmd, dur),
+        )
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._run_command(self._off_cmd, False)
@@ -526,7 +572,13 @@ class LepasClimaMacroSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Res
         self._set_optimistic(value)
         self._restored = value
 
-    async def _wake_then(self, cmd: str, target: bool) -> None:
+    async def _wake_then(
+        self,
+        cmd: str,
+        target: bool,
+        params: dict[str, str] | None = None,
+        preset_min: int | None = None,
+    ) -> None:
         """Sveglia l'auto SE dorme, attende che i moduli comfort siano alimentati, poi invia
         il comando. I due invii passano dalla coda comandi del coordinator (uno alla volta,
         in ordine).
@@ -577,7 +629,7 @@ class LepasClimaMacroSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Res
             if mia != self._gen.n:
                 return      # sorpassata da una pressione più recente: non si spedisce nulla
             try:
-                await self.coordinator.async_send_command(cmd)
+                await self.coordinator.async_send_command(cmd, params)
             except Exception as err:  # noqa: BLE001
                 raise HomeAssistantError(f"Comando «{cmd}» non riuscito: {err}") from err
             spedito = True
@@ -585,8 +637,9 @@ class LepasClimaMacroSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Res
             # a pubblicare lo stato di PRIMA finché non esegue (vedi `_spento_dall_auto`).
             self._inviato_a = time.monotonic()
             if target:
-                # l'auto chiude il preset dopo ~15 min → riporta lo switch a OFF da solo
-                self._arma_scadenza(MACRO_PRESET_S)
+                self._arma_scadenza(
+                    preset_min * 60 + 60 if preset_min is not None else MACRO_PRESET_S
+                )
         finally:
             # ⚠️ `finally` e non tre `return`: fra la pressione e l'invio ci sono fino a 35
             # secondi di attesa, ed è la finestra più larga del componente. Un task annullato
@@ -620,7 +673,13 @@ class LepasClimaMacroSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity, Res
             # la carta nell'interfaccia.
             self._exclusive._cancel_expire()
             self._exclusive._set_state(False)
-        await self._wake_then(self._on_cmd, True)
+        dur = int(getattr(self.coordinator, "clima_duration", 15) or 15)
+        await self._wake_then(
+            self._on_cmd,
+            True,
+            duration_params_for_command(self._on_cmd, dur),
+            preset_min=dur,
+        )
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._wake_then(self._off_cmd, False)

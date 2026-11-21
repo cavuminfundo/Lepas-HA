@@ -163,6 +163,22 @@ SENSORS = [
 ]
 META = {s["key"]: s for s in SENSORS}
 
+_COMFORT_PROBE_META_KEYS = frozenset({
+    "dSeatHeatingState",
+    "dSeatVentilateState",
+    "pSeatHeatingState",
+    "pSeatVentilateState",
+    "lSeatHeatingState2",
+    "lSeatVentilateState2",
+    "rSeatHeatingState2",
+    "rSeatVentilateState2",
+    "frontWindshieldHeat",
+    "fWinHeatingState",
+    "rWinHeatingState",
+    "steerWheelHeating",
+})
+_COMFORT_PROBE_COMMANDS = frozenset(DEPARTURE_CLIMATE_EXTRAS_COMMANDS.values())
+
 # Meta-campi dei push di CONFERMA comando (110x/1105/1135…): NON sono telemetria di
 # stato del veicolo → non vanno messi tra i "fields" (vedi _on_car_message / Item 4).
 CMD_CONFIRM_META = ("result", "resultTime", "seq", "reason", "hasAsy")
@@ -462,6 +478,7 @@ class LepasCoordinator(DataUpdateCoordinator):
                      "realtime": None,
                      "cmd_rejected_fields": frozenset(),
                      "cmd_rejected_other": False,
+                     "scheduled_opt": {},
                      "car_in_use": False}
         # Lock dedicato solo al latch di sessione HV (mai annidato con _state_lock: AB-LEP-007).
         self._hv_lock: threading.Lock = threading.Lock()
@@ -491,6 +508,9 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._mqtt_up_ts = 0.0   # istante dell'ultima connect MQTT (uptime nel monitor)
         # Programmatore partenze e ricarica intelligente (stato in-memory, popolato da UI/servizi).
         self.clima_duration: int = 15
+        self.departure_preclimate_duration: int = 15
+        self._sched_opt_seq: int = 0
+        self._scheduled_opt: dict[str, int] = {}
         self.charge_duration_hours: int = 6
         self.charge_start_minutes: int = 480
         self.charge_days: list[int] = [1, 2, 3, 4, 5, 6, 7]
@@ -1043,7 +1063,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             self.departure_weekly,
             self.quick_departure_enabled,
             self.quick_departure_minutes,
-            self.clima_duration,
+            self.departure_preclimate_duration,
         )
 
     def effective_charge_days(self, target_days=None) -> list[int]:
@@ -1786,6 +1806,18 @@ class LepasCoordinator(DataUpdateCoordinator):
             pass
         return False
 
+    def _set_scheduled_opt(self, cmd_key: str, active: bool) -> None:
+        if self._timers.closing:
+            return
+        if active:
+            self._sched_opt_seq += 1
+            self._scheduled_opt[cmd_key] = self._sched_opt_seq
+        else:
+            if cmd_key not in self._scheduled_opt:
+                return
+            self._scheduled_opt.pop(cmd_key, None)
+        self._apply_update({"scheduled_opt": dict(self._scheduled_opt)})
+
     async def _maybe_trigger_preclimate(self, occ: DepartureOccurrence) -> bool:
         if self._timers.closing:
             return False
@@ -1807,9 +1839,11 @@ class LepasCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("[scheduler] pre-clima saltato: veicolo acceso o in movimento")
             return False
 
+        from .core.commands import duration_params_for_command
+
         lo, hi, _step = self.climate_limits()
         temp = min(hi, max(lo, float(self.climate_target_temp)))
-        dur = int(self.clima_duration or 15)
+        dur = int(self.departure_preclimate_duration or 15)
         self._attempted_climate_key = occ.key
         try:
             await self.async_send_command(
@@ -1834,11 +1868,18 @@ class LepasCoordinator(DataUpdateCoordinator):
                 if self._timers.closing:
                     return False
                 cmd_key = DEPARTURE_CLIMATE_EXTRAS_COMMANDS[extra_key]
+                extra_params = duration_params_for_command(cmd_key, dur)
+                self._set_scheduled_opt(cmd_key, active=True)
                 try:
-                    await self.async_send_command(cmd_key)
+                    await self.async_send_command(cmd_key, extra_params)
+                except asyncio.CancelledError:
+                    if not self._timers.closing:
+                        self._set_scheduled_opt(cmd_key, active=False)
+                    raise
                 except Exception as extra_err:  # noqa: BLE001 — non azzera _fired_climate_key
                     if self._timers.closing:
                         return False
+                    self._set_scheduled_opt(cmd_key, active=False)
                     _LOGGER.warning(
                         "[scheduler] extra clima '%s' fallito (%s)",
                         extra_key,
@@ -2234,6 +2275,13 @@ class LepasCoordinator(DataUpdateCoordinator):
             # comando successivo: da qui in poi l'auto non è più occupata da questo.
             with self._state_lock:
                 self._confirm_n += 1
+                cmd_key = self._last_cmd_key
+            if rej_fields or rej_other:
+                _LOGGER.warning(
+                    "[cmd] comando rifiutato dall'auto (%s): %s",
+                    cmd_key or "?",
+                    patch["cmd_status"],
+                )
             # [diag] il push di conferma GREZZO. Senza, del fallimento resta solo la frase
             # tradotta: i codici in `reason` (modulo + codice per ogni centralina che non ha
             # eseguito) non si possono decodificare a posteriori, ed è l'unica traccia che
@@ -2773,7 +2821,7 @@ class LepasCoordinator(DataUpdateCoordinator):
                               duration_ms=int((time.monotonic() - t0) * 1000), result=res)
         # comando riuscito → un eventuale avviso "PIN errato" non ha più ragione d'essere
         self._clear_pin_issue()
-        if key in CLOSURE_PROBE_COMMANDS:
+        if key in CLOSURE_PROBE_COMMANDS or key in _COMFORT_PROBE_COMMANDS:
             self._schedule_cmd_probe_sequence(0)
 
         async def _hold_then_release() -> None:
@@ -3238,7 +3286,11 @@ class LepasCoordinator(DataUpdateCoordinator):
                     or k in GEO_KEYS
                 ):
                     continue
-                blocked = mqtt_recent if k in CLOSURE_META_KEYS else awake
+                blocked = (
+                    mqtt_recent
+                    if (k in CLOSURE_META_KEYS or k in _COMFORT_PROBE_META_KEYS)
+                    else awake
+                )
                 if blocked and k in self._fields:
                     continue
                 prev_val = self._fields.get(k)

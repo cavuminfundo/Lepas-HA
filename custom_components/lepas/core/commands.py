@@ -728,6 +728,19 @@ def durata_ammessa(minuti, durate) -> int | None:
     return max(minori) if minori else min(durate)
 
 
+def duration_params_for_command(cmd_key: str, duration_min: int) -> dict[str, str] | None:
+    """Return `times` or `duration` override dict if supported by `CMD_MAP[cmd_key]`."""
+    spec = CMD_MAP.get(cmd_key)
+    body = spec.get("body") if isinstance(spec, dict) else None
+    if not isinstance(body, dict):
+        return None
+    dur_str = str(max(1, int(duration_min)))
+    for field in ("times", "duration"):
+        if field in body:
+            return {field: dur_str}
+    return None
+
+
 # `maxAirDuration` è la durata dell'**aria**: vale per il climatizzatore, non per tutto ciò
 # che ha un timer. Il campo `times` compare anche su `seatControl` (8 comandi), sulla
 # resistenza del parabrezza e su quella del lunotto: sono durate di riscaldatori elettrici,

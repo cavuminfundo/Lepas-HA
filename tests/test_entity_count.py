@@ -39,7 +39,7 @@ ATTESO = {
     "button": 17,
     "switch": 30,
     "cover": 3,
-    "number": 2,
+    "number": 3,
     "climate": 1,
     "lock": 1,
     "device_tracker": 1,
@@ -81,7 +81,8 @@ ATTESO = {
 # 2026-11-19: `potenza_ricarica` (`sensor.lepas_charging_power`) promosso da BEV-only a tutti
 # i modelli (confermato `chargingPower` su Lepas L8 PHEV sotto carica) -> 142 attive.
 # 2026-11-19 (v1.30.0): +5 entità statistiche ricarica (+4 sensor periodici, +1 button reset) -> 147.
-TOTALE_ATTESO = 147
+# 2026-11-21: +1 entità durata preriscaldamento partenza (`number.lepas_departure_preclimate_duration`) -> 148.
+TOTALE_ATTESO = 148
 
 
 def test_totale_dichiarato_coerente():

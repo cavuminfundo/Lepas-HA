@@ -75,8 +75,9 @@ ENGLISH_KEYS: dict[str, str] = {
     # --- lock ---
     "serratura":                      "lock",                 # Lock
     # --- number ---
-    "durata_clima":                   "climate_duration",     # Climate duration
-    "ricarica_durata":                "charge_duration",      # Charge duration
+    "durata_clima":                         "climate_duration",              # Climate duration
+    "durata_preriscaldamento_partenza":     "departure_preclimate_duration", # Pre-heating duration
+    "ricarica_durata":                      "charge_duration",               # Charge duration
     # --- sensor ---
     # Solo su BEV confermata: nascono dopo, quando le capability sono state sondate,
     # quindi non c'erano nel registro da cui questa tabella e' stata generata. Il primo
@@ -199,6 +200,7 @@ CANON_ENTITY_ID: dict[tuple[str, str], str] = {
     ("device_tracker", "position"):                     "device_tracker.lepas_location",
     ("lock", "lock"):                                   "lock.lepas_lock",
     ("number", "clima_durata"):                         "number.lepas_climate_duration",
+    ("number", "partenza_preclima_durata"):             "number.lepas_departure_preclimate_duration",
     ("number", "ricarica_durata_ore"):                  "number.lepas_charge_duration",
     ("select", "charge_days"):                          "select.lepas_charge_days",
     ("select", "departure_climate_mode"):               "select.lepas_departure_climate_mode",

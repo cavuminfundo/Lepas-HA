@@ -33,6 +33,9 @@ from .entity import LepasEntity
 NUMBERS = [
     ("Lepas Durata clima", "clima_durata", "clima_duration",
      5, 30, 5, 15, UnitOfTime.MINUTES, "mdi:timer-cog"),
+    ("Lepas Durata preriscaldamento partenza", "partenza_preclima_durata",
+     "departure_preclimate_duration",
+     5, 30, 5, 15, UnitOfTime.MINUTES, "mdi:car-clock"),
     # L'ORA di inizio è ora un'entità `time` (HH:MM, vedi time.py): più precisa del
     # vecchio cursore 0–23 perché l'auto accetta i minuti. Qui resta solo la DURATA.
     ("Lepas Ricarica · durata", "ricarica_durata_ore", "charge_duration_hours",
@@ -55,7 +58,7 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
         super().__init__(coord, name, suffix, entity_id_format=ENTITY_ID_FORMAT)
         self._attr = attr
         self._allowed_durations: list[int] = []
-        if attr == "clima_duration" and hasattr(coord, "air_durations"):
+        if attr in ("clima_duration", "departure_preclimate_duration") and hasattr(coord, "air_durations"):
             raw_allowed = coord.air_durations() or ()
             allowed = sorted(
                 {
@@ -122,7 +125,11 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
                 self._value = self._snap_value(parsed)
                 restored = True
         self._push()
-        if restored and hasattr(self.coordinator, "notify_schedule_changed"):
+        if (
+            restored
+            and self._attr in ("charge_duration_hours", "departure_preclimate_duration")
+            and hasattr(self.coordinator, "notify_schedule_changed")
+        ):
             self.coordinator.notify_schedule_changed()
 
     def _push(self) -> None:
@@ -144,7 +151,10 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
     async def async_set_native_value(self, value: float) -> None:
         self._value = self._snap_value(value)
         self._push()
-        if hasattr(self.coordinator, "notify_schedule_changed"):
+        if (
+            self._attr in ("charge_duration_hours", "departure_preclimate_duration")
+            and hasattr(self.coordinator, "notify_schedule_changed")
+        ):
             self.coordinator.notify_schedule_changed(
                 sync_charge=(self._attr == "charge_duration_hours")
             )

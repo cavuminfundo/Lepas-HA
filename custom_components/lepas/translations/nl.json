@@ -286,7 +286,10 @@
     },
     "number": {
       "climate_duration": {
-        "name": "Airco-duur (voorklimatisering)"
+        "name": "Klimaat- en comfortduur"
+      },
+      "departure_preclimate_duration": {
+        "name": "Voorverwarmingsduur"
       },
       "charge_duration": {
         "name": "Gepland laden · duur"

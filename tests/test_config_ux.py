@@ -21,6 +21,8 @@ from custom_components.lepas.const import (
     DATA_CAPS_PROBED_V4,
     DATA_VEHICLE_FEATURES,
     DOMAIN,
+    ENTITY_FEATURE_MAP,
+    entity_allowed,
 )
 from custom_components.lepas.coordinator import LepasCoordinator
 from custom_components.lepas.scheduler import DEPARTURE_DAY_SLUGS
@@ -351,6 +353,18 @@ async def test_number_notify_schedule_and_climate_target_temp_sync(
             blocking=True,
         )
         assert coord.clima_duration == 20
+        assert coord.departure_preclimate_duration == 15
+        assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
+            "06:45:00+00:00"
+        )
+
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": "number.lepas_departure_preclimate_duration", "value": 20},
+            blocking=True,
+        )
+        assert coord.departure_preclimate_duration == 20
         assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
             "06:40:00+00:00"
         )
@@ -393,6 +407,8 @@ async def test_climate_duration_aligned_to_air_durations_and_clamps(
 
         coord.quick_departure_minutes = 7 * 60
         coord.quick_departure_enabled = True
+        coord.notify_schedule_changed()
+        await hass.async_block_till_done()
         await hass.services.async_call(
             "number",
             "set_value",
@@ -401,8 +417,10 @@ async def test_climate_duration_aligned_to_air_durations_and_clamps(
         )
         assert coord.clima_duration == 10
         assert float(hass.states.get("number.lepas_climate_duration").state) == 10.0
+        # Climate duration no longer shifts departure pre-heating lead time
+        assert coord.departure_preclimate_duration == 15
         assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
-            "06:50:00+00:00"
+            "06:45:00+00:00"
         )
 
         num_entity = next(
@@ -453,6 +471,90 @@ async def test_climate_duration_aligned_to_air_durations_and_clamps(
         assert float(hass.states.get("number.lepas_climate_duration").state) == 5.0
     finally:
         await hass.config_entries.async_remove(entry_gap.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_departure_preclimate_duration_restore_snapping_and_feature_gating(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    sent = _patch_io(monkeypatch)
+    tz = timezone.utc
+    monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 6, 0, tzinfo=tz))
+    assert ENTITY_FEATURE_MAP[("number", "partenza_preclima_durata")] == "climate"
+
+    mock_restore_cache(
+        hass,
+        [
+            State("number.lepas_departure_preclimate_duration", "30"),
+            State("switch.lepas_sync_charge_to_departure", "on"),
+            State("switch.lepas_quick_departure", "on"),
+            State("time.lepas_quick_departure_time", "07:00:00"),
+        ],
+    )
+    entry = await _setup_entry(
+        hass,
+        vin="L8DEPDUR000000001",
+        entry_id="ux_dep_dur_1",
+        features={"climate": True, "scheduled_charging": True},
+        air_durations=[5, 10, 15],
+    )
+    coord = hass.data[DOMAIN][entry.entry_id]
+
+    try:
+        st = hass.states.get("number.lepas_departure_preclimate_duration")
+        assert st is not None
+        assert st.attributes["min"] == 5
+        assert st.attributes["max"] == 15
+        assert st.attributes["step"] == 5
+        assert st.attributes["allowed_durations"] == [5, 10, 15]
+        assert float(st.state) == 15.0
+        assert coord.departure_preclimate_duration == 15
+        assert coord.clima_duration == 15
+        # Boot restore calls notify_schedule_changed() with sync_charge=False
+        assert sent == []
+
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                "number",
+                "set_value",
+                {"entity_id": "number.lepas_departure_preclimate_duration", "value": 30},
+                blocking=True,
+            )
+
+        coord.quick_departure_minutes = 7 * 60
+        coord.quick_departure_enabled = True
+        coord.sync_charge_to_departure = True
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": "number.lepas_departure_preclimate_duration", "value": 12},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert coord.departure_preclimate_duration == 10
+        assert coord.clima_duration == 15
+        assert float(hass.states.get("number.lepas_departure_preclimate_duration").state) == 10.0
+        assert hass.states.get("sensor.lepas_next_departure").attributes["climate_start_at"].endswith(
+            "06:50:00+00:00"
+        )
+        # Updating pre-heating duration must NOT trigger charge sync
+        assert sent == []
+    finally:
+        await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done()
+
+    entry_no_climate = await _setup_entry(
+        hass,
+        vin="L8DEPDUR000000002",
+        entry_id="ux_dep_dur_off",
+        features={"climate": False},
+    )
+    try:
+        coord_off = hass.data[DOMAIN][entry_no_climate.entry_id]
+        assert entity_allowed(coord_off, "number", "partenza_preclima_durata") is False
+        assert hass.states.get("number.lepas_departure_preclimate_duration") is None
+    finally:
+        await hass.config_entries.async_remove(entry_no_climate.entry_id)
         await hass.async_block_till_done()
 
 
