@@ -55,11 +55,14 @@ from .coordinator import SENSORS, _pick_field
 from .entity import LepasEntity, field_on, in_zona_casa
 from .naming import ID_PREFIX
 from .scheduler import (
+    align_charge_start_minutes,
     compute_battery_heat_start_for_departure,
     compute_charge_start_for_departure,
     compute_charge_window,
+    decode_charge_appoint_plan,
     normalize_climate_extras,
     parse_days_input,
+    resolve_tzinfo,
 )
 
 # ───────────────────────── sensori "realtime" (Round B) ─────────────────────────
@@ -949,10 +952,7 @@ def _orario_locale(minuti, hass=None) -> tuple[str | None, int]:
     if _orario(minuti) is None:
         return None, 0
     m = int(minuti)
-    tz_name = getattr(getattr(hass, "config", None), "time_zone", None) if hass is not None else None
-    tz = (dt_util.get_time_zone(tz_name) if tz_name else None) or (
-        dt_util.DEFAULT_TIME_ZONE if hass is not None else timezone.utc
-    )
+    tz = resolve_tzinfo(hass)
     utc_today = dt_util.utcnow().date()
     utc_dt = datetime(utc_today.year, utc_today.month, utc_today.day, m // 60, m % 60, tzinfo=timezone.utc)
     local_dt = utc_dt.astimezone(tz)
@@ -975,10 +975,9 @@ class LepasDeparturePlan(_LepasRestoreSensor):
     esatto della lettura. Mostrarli significherebbe dire all'utente «impostato oggi alle 09:31»
     di un piano che non tocca da mesi.
 
-    ⚠️ A differenza di `chargeAppointPlans.startTime` (che è in ora locale), `travelTime`
-    arriva in minuti dalla mezzanotte **UTC** (verificato dal vivo il 2026-11-17: 06:05 CET
-    impostato in app = `305` / `05:05` UTC nel payload realtime) e viene quindi convertito
-    nel fuso orario locale di Home Assistant."""
+    ⚠️ Sia `travelTime` sia `chargeAppointPlans.startTime` arrivano in minuti dalla mezzanotte
+    **UTC** (verificato dal vivo il 2026-11-17 e il 2026-11-26 in CET) e vengono quindi
+    convertiti nel fuso orario locale di Home Assistant."""
 
     _attr_icon = "mdi:calendar-arrow-right"
 
@@ -1202,7 +1201,8 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
         )
 
     def _window_params(self) -> tuple[int, int, list[int]]:
-        start_min = int(getattr(self.coordinator, "charge_start_minutes", 480) or 0) % 1440
+        raw_start = int(getattr(self.coordinator, "charge_start_minutes", 480) or 0)
+        start_min = align_charge_start_minutes(raw_start)
         dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
         eff_fn = getattr(self.coordinator, "effective_charge_days", None)
         if callable(eff_fn):
@@ -1218,14 +1218,24 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
         try:
             plans = ast.literal_eval(raw) if isinstance(raw, str) else raw
             piano = plans[0] if isinstance(plans, list) and plans and isinstance(plans[0], dict) else None
-            if piano is None:
-                return None
-            car_start = int(piano["startTime"]) % 1440
-            car_dur = int(piano["timeConsuming"])
-            car_days = sorted(int(d) for d in (piano.get("cycleData") or []))
-        except (ValueError, SyntaxError, KeyError, TypeError, IndexError):
+        except (ValueError, SyntaxError, TypeError, IndexError):
             return None
-        return car_start == start_min and car_dur == dur_h * 60 and car_days == sorted(days)
+        if piano is None:
+            return None
+        tz = resolve_tzinfo(getattr(self, "hass", None) or getattr(self.coordinator, "hass", None))
+        decoded = decode_charge_appoint_plan(piano, tz)
+        if (
+            decoded is None
+            or decoded["start_minutes"] is None
+            or decoded["duration_minutes"] is None
+            or decoded["days"] is None
+        ):
+            return None
+        return (
+            decoded["start_minutes"] == start_min
+            and decoded["duration_minutes"] == dur_h * 60
+            and decoded["days"] == sorted(days)
+        )
 
     @property
     def native_value(self) -> str:

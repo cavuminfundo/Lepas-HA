@@ -197,6 +197,7 @@ async def test_quick_departure_sync_and_time_updates_and_auto_reset(
 ) -> None:
     sent = _patch_io(monkeypatch)
     tz = timezone.utc
+    hass.config.time_zone = "UTC"
     monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 10, 0, tzinfo=tz))
 
     entry = await _setup_entry(hass)
@@ -381,6 +382,7 @@ async def test_climate_duration_aligned_to_air_durations_and_clamps(
 ) -> None:
     _patch_io(monkeypatch)
     tz = timezone.utc
+    hass.config.time_zone = "UTC"
     monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 10, 0, tzinfo=tz))
     mock_restore_cache(
         hass,
@@ -682,22 +684,13 @@ async def test_scheduled_charging_realtime_fallback_and_priority(
         # Initially restored as ON when no telemetry present
         assert hass.states.get("switch.lepas_scheduled_charging").state == "on"
 
-        # realtime appointmentChargeState = "0" -> off
-        coord._on_probe_data({"appointmentChargeState": "0"})
-        await hass.async_block_till_done()
-        assert hass.states.get("switch.lepas_scheduled_charging").state == "off"
+        # realtime appointmentChargeState is NOT the schedule switch state and must be ignored
+        for appt_val in ("0", "1", "2"):
+            coord._on_probe_data({"appointmentChargeState": appt_val})
+            await hass.async_block_till_done()
+            assert hass.states.get("switch.lepas_scheduled_charging").state == "on"
 
-        # realtime appointmentChargeState = "1" -> on
-        coord._on_probe_data({"appointmentChargeState": "1"})
-        await hass.async_block_till_done()
-        assert hass.states.get("switch.lepas_scheduled_charging").state == "on"
-
-        # Unknown ("2" or None) -> None -> falls back to RestoreEntity ("on")
-        coord._on_probe_data({"appointmentChargeState": "2"})
-        await hass.async_block_till_done()
-        assert hass.states.get("switch.lepas_scheduled_charging").state == "on"
-
-        # chargeAppointPlans in fields takes priority over realtime appointmentChargeState
+        # chargeAppointPlans in fields drives real live state regardless of realtime appointmentChargeState
         coord._update(
             {
                 "realtime": {"appointmentChargeState": "1"},
@@ -715,6 +708,7 @@ async def test_apply_charging_schedule_button(
     hass: HomeAssistant, cloud, monkeypatch
 ) -> None:
     sent = _patch_io(monkeypatch)
+    hass.config.time_zone = "UTC"
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
 
@@ -761,6 +755,7 @@ async def test_charging_window_and_next_departure_sensors_multilang_and_riepilog
 ) -> None:
     _patch_io(monkeypatch)
     tz = timezone.utc
+    hass.config.time_zone = "UTC"
     monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 10, 0, tzinfo=tz))  # Monday
 
     entry = await _setup_entry(hass)
@@ -899,6 +894,7 @@ async def test_services_validation_and_actions(
 ) -> None:
     sent = _patch_io(monkeypatch)
     tz = timezone.utc
+    hass.config.time_zone = "UTC"
     monkeypatch.setattr(dt_util, "now", lambda: datetime(2026, 11, 16, 10, 0, tzinfo=tz))
 
     entry = await _setup_entry(hass)

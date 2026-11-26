@@ -8,8 +8,8 @@ memorizzano una preferenza usata dagli altri controlli al momento dell'invio.
 
 Perché un'entità `time` e non un number 0–23: l'auto accetta l'orario in MINUTI dalla
 mezzanotte → con un selettore orario si può scegliere anche i minuti, non solo l'ora intera.
-Il riferimento è la mezzanotte LOCALE: misurato il 2026-08-10 rileggendo nell'app il piano
-scritto da qui con `startTime = 0` (mostra 00:00; se il filo fosse UTC mostrerebbe 02:00).
+Il riferimento di wire per `chargeAppointControl` è la mezzanotte UTC con allineamento floor
+a 15 minuti; il coordinator converte da/verso il fuso locale configurato in Home Assistant.
 
 È RestoreEntity → al riavvio di HA ripristina l'ultimo orario impostato e lo riscrive
 sul coordinator (da cui lo switch lo legge come `charge_start_minutes`).
@@ -28,7 +28,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .const import DOMAIN, entity_allowed
 from .entity import LepasEntity
 from .naming import ID_PREFIX
-from .scheduler import DEPARTURE_DAY_SLUGS
+from .scheduler import DEPARTURE_DAY_SLUGS, align_charge_start_minutes
 
 # (nome, suffix, attributo-minuti sul coordinator, default HH, default MM, icona, object_id, translation_key)
 TIMES = [
@@ -113,6 +113,9 @@ class LepasConfigTime(LepasEntity, TimeEntity, RestoreEntity):
         last = await self.async_get_last_state()
         parsed = _parse_hhmm(last.state if last is not None else None)
         if parsed is not None:
+            if self._attr == "charge_start_minutes":
+                aligned = align_charge_start_minutes(parsed.hour * 60 + parsed.minute)
+                parsed = time(hour=aligned // 60, minute=aligned % 60)
             self._value = parsed
         self._push()
         if parsed is not None and hasattr(self.coordinator, "notify_schedule_changed"):
@@ -130,6 +133,9 @@ class LepasConfigTime(LepasEntity, TimeEntity, RestoreEntity):
     async def async_set_value(self, value: time) -> None:
         # i secondi non servono (l'auto ragiona in minuti) → li azzeriamo
         self._value = value.replace(second=0, microsecond=0)
+        if self._attr == "charge_start_minutes":
+            aligned = align_charge_start_minutes(self._value.hour * 60 + self._value.minute)
+            self._value = time(hour=aligned // 60, minute=aligned % 60)
         self._push()
         if self._attr == "battery_heat_minutes":
             if getattr(self.coordinator, "battery_heat_enabled", False):

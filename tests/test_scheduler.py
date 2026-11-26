@@ -449,6 +449,7 @@ async def test_preclimate_failure_anti_storm_and_quick_reset_and_anti_rollover(h
 
 async def test_charge_sync_quick_immediate_and_notify_schedule_changed(hass, monkeypatch):
     tz = timezone.utc
+    hass.config.time_zone = "UTC"
     coord = _make_coord(hass)
     coord.charge_duration_hours = 6
     sent: list[tuple[str, dict | None]] = []
@@ -490,6 +491,7 @@ async def test_charge_sync_quick_immediate_and_notify_schedule_changed(hass, mon
 
 async def test_charge_sync_weekly_window_dedup_failure_and_2131_fallback(hass, monkeypatch):
     tz = timezone.utc
+    hass.config.time_zone = "UTC"
     coord = _make_coord(
         hass,
         data={DATA_VEHICLE_FEATURES: {"scheduled_charging": True, "scheduled_charging_custom_days": True}},

@@ -41,7 +41,13 @@ from .const import (
 from .core.commands import duration_params_for_command
 from .entity import LepasEntity, LepasOptimisticMixin, field_on
 from .naming import ID_PREFIX
-from .scheduler import DEPARTURE_DAY_SLUGS
+from .scheduler import (
+    DEPARTURE_DAY_SLUGS,
+    align_charge_start_minutes,
+    decode_charge_appoint_plan,
+    local_schedule_to_utc,
+    resolve_tzinfo,
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
@@ -689,15 +695,12 @@ class LepasScheduledChargeSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity
     """Ricarica PROGRAMMATA on/off (chargeAppointControl, body con array annidato).
 
     Quando si accende, costruisce il piano dalle preferenze (entità time "orario di
-    inizio" + number "durata", tutti i giorni) e invia mainSwitch=1 + piano attivo;
+    inizio" + number "durata", giorni) e invia mainSwitch=1 + piano attivo;
     spegnendo invia mainSwitch=0. Lo stato reale arriva dalla telemetria `chargeAppointPlans`.
 
-    `startTime` è in MINUTI dalla mezzanotte. ⚠️ Il commento precedente diceva «verificato dal
-    vivo: 465 = 07:45»: non lo era — 07:45 è 465/60, un'aritmetica, e nessuno aveva mai
-    confrontato quel numero con l'ora mostrata dall'app. Quella falsa sicurezza è costata una
-    notte di indagine sul sospetto (poi smentito) che spedissimo l'ora sfasata del fuso.
-    Il riferimento è l'ora LOCALE — misurato il 2026-08-10 leggendo nell'app il piano che
-    avevamo scritto noi con `startTime = 0`: mostra 00:00, non 02:00."""
+    `startTime` sul wire (come `travelTime`) è espresso in minuti dalla mezzanotte UTC
+    allineati al quarto d'ora inferiore (`CHARGE_START_STEP_MINUTES = 15`), convertito
+    da/verso il fuso locale configurato in Home Assistant con relativo shift di `cycleData`."""
 
     _attr_device_class = SwitchDeviceClass.SWITCH
     _attr_icon = "mdi:calendar-clock"
@@ -729,15 +732,6 @@ class LepasScheduledChargeSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity
                         return res
             except (ValueError, SyntaxError, AttributeError, IndexError, TypeError):
                 pass
-        rt = self.coordinator.data.get("realtime") or {}
-        if isinstance(rt, dict):
-            appt = rt.get("appointmentChargeState")
-            if appt is not None and not isinstance(appt, bool):
-                state_str = str(appt).strip()
-                if state_str == "1":
-                    return True
-                if state_str == "0":
-                    return False
         return None
 
     @property
@@ -760,47 +754,48 @@ class LepasScheduledChargeSwitch(LepasOptimisticMixin, LepasEntity, SwitchEntity
 
     @property
     def extra_state_attributes(self) -> dict | None:
-        """Orario, durata e giorni **letti dall'auto**, quando li manda.
-
-        Finora l'interruttore mostrava solo acceso/spento e l'utente poteva vedere soltanto le
-        proprie preferenze locali (entità `time` e `number`): se il piano fosse stato cambiato
-        dall'app ufficiale, Home Assistant non l'avrebbe mai saputo.
-
-        ⚠️ Il canale 5A02 è un diario delle VARIAZIONI: questi attributi compaiono quando il
-        piano cambia e non a ogni giro. Assenti ≠ nessun piano. Il piano completo su richiesta
-        richiederebbe una chiamata nuova (`/asd/chargeAppointManage/chargeAppointQuery`), che
-        oggi non facciamo di proposito: sarebbe traffico verso il cloud del costruttore, e va
-        deciso, non aggiunto di nascosto."""
+        """Orario, durata e giorni **letti dall'auto**, quando li manda."""
         piano = self._piano_auto()
         if piano is None:
             return None
+        tz = resolve_tzinfo(getattr(self, "hass", None) or getattr(self.coordinator, "hass", None))
+        decoded = decode_charge_appoint_plan(piano, tz)
+        if decoded is None:
+            return None
         attrs: dict = {}
-        try:
-            minuti = int(piano["startTime"])
-            if 0 <= minuti < 1440:
-                attrs["orario_sull_auto"] = f"{minuti // 60:02d}:{minuti % 60:02d}"
-        except (KeyError, TypeError, ValueError):
-            pass
-        try:
-            attrs["durata_ore_sull_auto"] = round(int(piano["timeConsuming"]) / 60, 1)
-        except (KeyError, TypeError, ValueError):
-            pass
-        giorni = piano.get("cycleData")
-        if isinstance(giorni, list) and giorni:
-            attrs["giorni_sull_auto"] = giorni
+        start_min = decoded["start_minutes"]
+        if isinstance(start_min, int):
+            attrs["orario_sull_auto"] = f"{start_min // 60:02d}:{start_min % 60:02d}"
+        dur_min = decoded["duration_minutes"]
+        if isinstance(dur_min, int):
+            attrs["durata_ore_sull_auto"] = round(dur_min / 60, 1)
+        days = decoded["days"]
+        if days:
+            attrs["giorni_sull_auto"] = days
         return attrs or None
 
     def _plan(self, switch_status: int) -> dict:
-        # orario di inizio in minuti-da-mezzanotte dall'entità time; fallback al vecchio
-        # cursore ore (compat) e infine 08:00 se nessuna preferenza è ancora disponibile.
         mins = getattr(self.coordinator, "charge_start_minutes", None)
         if mins is None:
             mins = int(getattr(self.coordinator, "charge_start_hour", 8) or 8) * 60
         dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
         eff_fn = getattr(self.coordinator, "effective_charge_days", None)
         days = list(eff_fn()) if callable(eff_fn) else [1, 2, 3, 4, 5, 6, 7]
-        return {"cycleData": days, "startTime": int(mins),
-                "switchStatus": switch_status, "timeConsuming": dur_h * 60}
+        if callable(getattr(self.coordinator, "build_charge_appoint_plan", None)):
+            return self.coordinator.build_charge_appoint_plan(
+                local_start_minutes=int(mins),
+                duration_hours=dur_h,
+                local_days=days,
+                switch_status=switch_status,
+            )
+        tz = resolve_tzinfo(getattr(self, "hass", None) or getattr(self.coordinator, "hass", None))
+        utc_min, utc_days = local_schedule_to_utc(align_charge_start_minutes(int(mins)), days, tz)
+        return {
+            "cycleData": list(utc_days),
+            "startTime": int(utc_min),
+            "switchStatus": int(switch_status),
+            "timeConsuming": dur_h * 60,
+        }
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._run_command("ricarica_prog_on", True,

@@ -22,7 +22,7 @@ from .const import (
     PRESET_LEPAS_EU,
     PRESETS,
 )
-from .scheduler import parse_days_input
+from .scheduler import align_charge_start_minutes, parse_days_input
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -432,7 +432,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
             return
 
         if start_min is not None:
-            coord.charge_start_minutes = start_min
+            coord.charge_start_minutes = align_charge_start_minutes(start_min)
         if dur_h is not None:
             coord.charge_duration_hours = dur_h
         if days is not None:

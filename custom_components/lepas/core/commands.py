@@ -916,6 +916,7 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
 
     # Tentativo 1 col taskId riusato (veloce). Se l'auto lo rifiuta come non valido/scaduto,
     # lo si riconia (checkPassword) e si riprova UNA volta sola.
+    avviso_ciclo = None
     for attempt in (1, 2):
         # get_taskid propaga CommandError (PIN/anti-lockout/sessione) col suo `reason`.
         taskid, src = get_taskid(ctx, tuid, emit, force_mint=(attempt == 2))
@@ -1008,14 +1009,9 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
                               "veicolo (corrispondenza NON provata, nessuna potatura)",
                               cmd_key, chiave, voce)
 
-        # Ciclo dei piani programmati: il backend valida anche la FORMA della lista dei giorni,
-        # non solo la presenza dei campi (misurato: `cycleData` [1,3,5] → A00084 sotto la voce
-        # 2131 negata, [1..7] → A00079 sotto la 2132 consentita). Qui non c'è potatura possibile:
-        # inventare giorni che l'utente non ha scelto sarebbe peggio del rifiuto. Si può però
-        # dire prima perché il rifiuto arriverà.
+        # Ciclo dei piani programmati: valutato sul corpo finale e mostrato all'utente solo se il
+        # backend rifiuta davvero (A00084 / HTTP >= 400), evitando falsi allarmi quando 2132=0 passa.
         avviso_ciclo = permessi.ciclo_non_autorizzato(endpoint, body, ctx.permessi or {})
-        if avviso_ciclo:
-            avvisa(f"{c['name']}: {avviso_ciclo}")
 
         url = ctx.tsp_host + (c.get("path") or ("/asc/vehicleControl/" + endpoint))
 
@@ -1062,6 +1058,17 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
     # nomi di campo e poi si conta, e comunque si tronca (vedi `_coda_saltati`).
     if saltati:
         out += _coda_saltati(saltati, len(out))
+    if avviso_ciclo:
+        if esito.fallimento or status >= 400:
+            avvisa(f"{c['name']}: {avviso_ciclo}")
+        else:
+            _LOGGER.debug(
+                "[permessi] %s (%s): %s (accettato dal backend con code=%s)",
+                cmd_key,
+                endpoint,
+                avviso_ciclo,
+                code,
+            )
     emit(out)
     # Esito reale dal `code` (il backend risponde sempre HTTP 200). Un fallimento noto =
     # comando NON eseguito → CommandError, così le entità ottimistiche annullano lo stato

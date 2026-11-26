@@ -678,6 +678,12 @@ CLOSURE_PROBE_COMMANDS = frozenset({
     "tetto_chiudi",
     "tetto_ventila",
 })
+CHARGE_PROBE_COMMANDS = frozenset({
+    "ricarica_prog_on",
+    "ricarica_prog_off",
+    "ricarica_start",
+    "ricarica_stop",
+})
 # Short MQTT grace on /asr/manager/realtime so manual closures propagate without 300s stall.
 PROBE_MQTT_GRACE_S = 15
 PROBE_OPT_SETTLE_S = 60

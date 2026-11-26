@@ -22,7 +22,7 @@ import shutil
 import ssl
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -54,7 +54,7 @@ from .const import (
     capabilities_from_item, features_from_permissions,
     CLIMA_MIN_DEFAULT, CLIMA_MAX_DEFAULT, CLIMA_STEP_DEFAULT,
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
-    AUTO_CLOSE_ON_LOCK_KEYS, CLOSURE_META_KEYS, CLOSURE_PROBE_COMMANDS,
+    AUTO_CLOSE_ON_LOCK_KEYS, CHARGE_PROBE_COMMANDS, CLOSURE_META_KEYS, CLOSURE_PROBE_COMMANDS,
     PROBE_MQTT_GRACE_S, CMD_PROBE_DELAYS_S,
 )
 from .charging_stats import ChargingStatsTracker
@@ -63,13 +63,16 @@ from .scheduler import (
     DEPARTURE_CLIMATE_EXTRAS_COMMANDS,
     DEPARTURE_CLIMATE_EXTRAS_FEATURES,
     DepartureOccurrence,
+    align_charge_start_minutes,
     compute_battery_heat_start_for_departure,
+    compute_charge_start_datetime,
     compute_charge_start_for_departure,
     compute_next_occurrence,
     local_schedule_to_utc,
     next_quick_departure_at,
     normalize_climate_extras,
     parse_days_input,
+    resolve_tzinfo,
     shift_minutes,
 )
 from .timers import (
@@ -1076,8 +1079,31 @@ class LepasCoordinator(DataUpdateCoordinator):
         return parse_days_input(src)
 
     def _local_tzinfo(self):
-        tz_name = getattr(getattr(self.hass, "config", None), "time_zone", None)
-        return (dt_util.get_time_zone(tz_name) if tz_name else None) or dt_util.DEFAULT_TIME_ZONE
+        return resolve_tzinfo(self.hass)
+
+    def build_charge_appoint_plan(
+        self,
+        *,
+        local_start_minutes: int,
+        duration_hours: int,
+        local_days: Sequence[int],
+        switch_status: int = 1,
+        ref_date: date | None = None,
+    ) -> dict:
+        """Build a ``chargeAppointPlans[0]`` payload in aligned UTC wire format."""
+        aligned_min = align_charge_start_minutes(local_start_minutes)
+        utc_min, utc_days = local_schedule_to_utc(
+            aligned_min,
+            list(local_days),
+            self._local_tzinfo(),
+            ref_date=ref_date,
+        )
+        return {
+            "cycleData": list(utc_days),
+            "startTime": int(utc_min),
+            "switchStatus": int(switch_status),
+            "timeConsuming": int(duration_hours) * 60,
+        }
 
     def effective_departure_days(self, target_days=None) -> list[int]:
         """Giorni effettivi per travelWeekday, con ripiego [1..7] se 2121 == 0."""
@@ -1566,7 +1592,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         if occ.source == "quick":
             return True
         dur_h = int(self.charge_duration_hours or 6)
-        charge_start_at = shift_minutes(occ.departure_at, -dur_h * 60)
+        charge_start_at = compute_charge_start_datetime(occ.departure_at, dur_h)
         return shift_minutes(charge_start_at, -60) <= now < occ.departure_at
 
     @callback
@@ -1695,11 +1721,15 @@ class LepasCoordinator(DataUpdateCoordinator):
         if self._timers.closing:
             return
         if start_minutes is not None:
+            if isinstance(start_minutes, bool):
+                raise ValueError(f"start_minutes cannot be bool: {start_minutes!r}")
             m = int(start_minutes)
             if not 0 <= m < 1440:
                 raise ValueError(f"start_minutes out of range 0..1439: {start_minutes!r}")
-            self.charge_start_minutes = m
+            self.charge_start_minutes = align_charge_start_minutes(m)
         if duration_hours is not None:
+            if isinstance(duration_hours, bool):
+                raise ValueError(f"duration_hours cannot be bool: {duration_hours!r}")
             dur = int(duration_hours)
             if not 1 <= dur <= 12:
                 raise ValueError(f"duration_hours out of range 1..12: {duration_hours!r}")
@@ -1712,14 +1742,26 @@ class LepasCoordinator(DataUpdateCoordinator):
             return
 
         dur_h = int(self.charge_duration_hours or 6)
-        start_min = int(self.charge_start_minutes) % 1440
+        start_min = align_charge_start_minutes(self.charge_start_minutes)
         eff_days = self.effective_charge_days()
-        plan = {
-            "cycleData": list(eff_days),
-            "startTime": start_min,
-            "switchStatus": 1,
-            "timeConsuming": dur_h * 60,
-        }
+        now = dt_util.now()
+        occ = self.next_departure_occurrence(now)
+        target_iso = "manual"
+        ref_date: date | None = None
+        if self.sync_charge_to_departure and occ is not None:
+            occ_charge_start = compute_charge_start_datetime(occ.departure_at, dur_h)
+            occ_start_min = occ_charge_start.hour * 60 + occ_charge_start.minute
+            occ_days = self.effective_charge_days([occ_charge_start.isoweekday()])
+            if occ_start_min == start_min and tuple(occ_days) == tuple(eff_days):
+                target_iso = occ_charge_start.isoformat()
+                ref_date = occ_charge_start.date()
+        plan = self.build_charge_appoint_plan(
+            local_start_minutes=start_min,
+            duration_hours=dur_h,
+            local_days=eff_days,
+            switch_status=1,
+            ref_date=ref_date,
+        )
         await self.async_send_command(
             "ricarica_prog_on",
             {"mainSwitch": 1, "chargeAppointPlans": [plan]},
@@ -1727,15 +1769,6 @@ class LepasCoordinator(DataUpdateCoordinator):
         if self._timers.closing:
             return
 
-        now = dt_util.now()
-        occ = self.next_departure_occurrence(now)
-        target_iso = "manual"
-        if self.sync_charge_to_departure and occ is not None:
-            occ_start_min = compute_charge_start_for_departure(occ.departure_at_minutes, dur_h)
-            occ_charge_start = shift_minutes(occ.departure_at, -dur_h * 60)
-            occ_days = self.effective_charge_days([occ_charge_start.isoweekday()])
-            if occ_start_min == start_min and tuple(occ_days) == tuple(eff_days):
-                target_iso = occ_charge_start.isoformat()
         self._last_synced_charge_sig = (target_iso, start_min, dur_h, tuple(eff_days))
         self._last_attempted_charge_sig = None
 
@@ -1743,19 +1776,20 @@ class LepasCoordinator(DataUpdateCoordinator):
         if self._timers.closing:
             return
         dur_h = int(self.charge_duration_hours or 6)
-        start_min = compute_charge_start_for_departure(occ.departure_at_minutes, dur_h)
-        charge_start_at = shift_minutes(occ.departure_at, -dur_h * 60)
+        charge_start_at = compute_charge_start_datetime(occ.departure_at, dur_h)
+        start_min = charge_start_at.hour * 60 + charge_start_at.minute
         days = self.effective_charge_days([charge_start_at.isoweekday()])
         sig = (charge_start_at.isoformat(), start_min, dur_h, tuple(days))
         if sig == self._last_synced_charge_sig or sig == self._last_attempted_charge_sig:
             return
 
-        plan = {
-            "cycleData": list(days),
-            "startTime": int(start_min),
-            "switchStatus": 1,
-            "timeConsuming": dur_h * 60,
-        }
+        plan = self.build_charge_appoint_plan(
+            local_start_minutes=start_min,
+            duration_hours=dur_h,
+            local_days=days,
+            switch_status=1,
+            ref_date=charge_start_at.date(),
+        )
         try:
             await self.async_send_command(
                 "ricarica_prog_on",
@@ -2821,7 +2855,11 @@ class LepasCoordinator(DataUpdateCoordinator):
                               duration_ms=int((time.monotonic() - t0) * 1000), result=res)
         # comando riuscito → un eventuale avviso "PIN errato" non ha più ragione d'essere
         self._clear_pin_issue()
-        if key in CLOSURE_PROBE_COMMANDS or key in _COMFORT_PROBE_COMMANDS:
+        if (
+            key in CLOSURE_PROBE_COMMANDS
+            or key in _COMFORT_PROBE_COMMANDS
+            or key in CHARGE_PROBE_COMMANDS
+        ):
             self._schedule_cmd_probe_sequence(0)
 
         async def _hold_then_release() -> None:

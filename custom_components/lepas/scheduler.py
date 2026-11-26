@@ -5,6 +5,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
+CHARGE_START_STEP_MINUTES = 15
+
 CHARGE_DAYS_PRESETS: dict[str, list[int]] = {
     "all_days": [1, 2, 3, 4, 5, 6, 7],
     "weekdays": [1, 2, 3, 4, 5],
@@ -171,11 +173,56 @@ def compute_charge_window(
     return (f"{start // 60:02d}:{start % 60:02d}", f"{end // 60:02d}:{end % 60:02d}", next_day)
 
 
+def align_charge_start_minutes(
+    minutes: int, *, step: int = CHARGE_START_STEP_MINUTES
+) -> int:
+    """Floor ``minutes`` within ``0..1439`` down to the nearest ``step``-minute boundary."""
+    if isinstance(minutes, bool):
+        raise ValueError(f"Boolean is not a valid minute count: {minutes!r}")
+    if isinstance(step, bool) or int(step) <= 0:
+        raise ValueError(f"step must be a positive integer: {step!r}")
+    step_int = int(step)
+    return ((int(minutes) % 1440) // step_int) * step_int
+
+
+def resolve_tzinfo(hass=None):
+    """Resolve local tzinfo from Home Assistant config, or deterministic UTC when absent."""
+    if hass is None:
+        return timezone.utc
+    tz_name = getattr(getattr(hass, "config", None), "time_zone", None)
+    try:
+        from homeassistant.util import dt as dt_util
+
+        if tz_name:
+            return dt_util.get_time_zone(tz_name) or dt_util.DEFAULT_TIME_ZONE or timezone.utc
+        return dt_util.DEFAULT_TIME_ZONE or timezone.utc
+    except ImportError:
+        if tz_name:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+            try:
+                return ZoneInfo(str(tz_name))
+            except (ZoneInfoNotFoundError, ValueError):
+                return timezone.utc
+        return timezone.utc
+
+
 def compute_charge_start_for_departure(
     departure_minutes: int, duration_hours: int | float
 ) -> int:
-    """Compute charge start time in local minutes from midnight, wrapping across midnight."""
-    return (int(departure_minutes) - int(round(float(duration_hours) * 60))) % 1440
+    """Compute aligned charge start time in local minutes from midnight, wrapping across midnight."""
+    raw = (int(departure_minutes) - int(round(float(duration_hours) * 60))) % 1440
+    return align_charge_start_minutes(raw)
+
+
+def compute_charge_start_datetime(
+    departure_at: datetime, duration_hours: int | float
+) -> datetime:
+    """Compute aligned local charge start datetime before ``departure_at``."""
+    dur_min = int(round(float(duration_hours) * 60))
+    raw_start = (departure_at.hour * 60 + departure_at.minute - dur_min) % 1440
+    floor_delta = raw_start - align_charge_start_minutes(raw_start)
+    return shift_minutes(departure_at, -(dur_min + floor_delta))
 
 
 def compute_battery_heat_start_for_departure(
@@ -227,6 +274,61 @@ def utc_schedule_to_local(
     local_minutes = local_dt.hour * 60 + local_dt.minute
     day_delta = (local_dt.date() - utc_dt.date()).days
     return local_minutes, _shift_schedule_days(days, day_delta)
+
+
+def decode_charge_appoint_plan(
+    piano: dict, tzinfo, *, ref_date: date | None = None
+) -> dict[str, object] | None:
+    """Decode ``chargeAppointPlans[0]`` from UTC wire format into local schedule fields."""
+    if not isinstance(piano, dict):
+        return None
+
+    raw_start = piano.get("startTime")
+    utc_min: int | None = None
+    local_start: int | None = None
+    if raw_start is not None and not isinstance(raw_start, bool):
+        try:
+            parsed_start = int(raw_start)
+        except (TypeError, ValueError):
+            parsed_start = -1
+        if 0 <= parsed_start < 1440:
+            utc_min = parsed_start
+            local_start, _ = utc_schedule_to_local(utc_min, None, tzinfo, ref_date=ref_date)
+
+    raw_dur = piano.get("timeConsuming")
+    duration_minutes: int | None = None
+    if raw_dur is not None and not isinstance(raw_dur, bool):
+        try:
+            parsed_dur = int(raw_dur)
+        except (TypeError, ValueError):
+            parsed_dur = -1
+        if parsed_dur >= 0:
+            duration_minutes = parsed_dur
+
+    raw_days = piano.get("cycleData")
+    days: list[int] | None
+    if raw_days is None or raw_days == []:
+        days = []
+    elif isinstance(raw_days, (list, tuple)) and utc_min is not None:
+        try:
+            _, days = utc_schedule_to_local(utc_min, raw_days, tzinfo, ref_date=ref_date)
+        except (ValueError, TypeError):
+            days = None
+    elif isinstance(raw_days, (list, tuple)) and utc_min is None:
+        try:
+            days = sorted({_parse_day_token(d) for d in raw_days})
+        except (ValueError, TypeError):
+            days = None
+    else:
+        days = None
+
+    if local_start is None and duration_minutes is None and not days:
+        return None
+    return {
+        "start_minutes": local_start,
+        "duration_minutes": duration_minutes,
+        "days": days,
+    }
 
 
 def normalize_climate_extras(extras: Sequence[str] | object) -> list[str]:

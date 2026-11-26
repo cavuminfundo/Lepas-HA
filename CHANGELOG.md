@@ -16,6 +16,24 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.33.2 — 2026-11-26
+
+### 🇬🇧 English
+
+- **Scheduled Charging UTC Alignment, 15-Minute Floor & Fast Probe (`scheduler.py`, `coordinator.py`, `switch.py`, `sensor.py`, `time.py`, `__init__.py`, `const.py`, `core/commands.py`)**:
+  - **UTC ↔ Local Conversion & 15-Minute Floor (`scheduler.py`, `coordinator.py`, `switch.py`, `sensor.py`, `time.py`, `__init__.py`)**: Aligned `chargeAppointPlans.startTime` and `cycleData` weekday rollover to UTC on write and back to Home Assistant's configured local timezone on decode (matching `appointmentTravel` and `batteryPackHeat`), and floored `charge_start_minutes` to 15-minute boundaries (`05:20 → 05:15`) to match the official Lepas Android app's 15-minute selector while keeping departure times exact (`13:20`).
+  - **Fast Post-Command Telemetry Probe (`const.py`, `coordinator.py`)**: Armed `CMD_PROBE` (`25s`/`65s`) on `CHARGE_PROBE_COMMANDS` (`ricarica_prog_on`, `ricarica_prog_off`, `ricarica_start`, `ricarica_stop`) so charging state, power, current, and remaining time refresh immediately after schedule or charge commands.
+  - **Deferred `2132` Cycle Warning (`core/commands.py`, `core/permessi.py`)**: Deferred `permessi.ciclo_non_autorizzato` (`avvisa`) to emit only if the command actually fails (`A00084` / `HTTP >= 400`), logging permissive `A00079` passes at `DEBUG` without PII.
+  - **Scheduled Charging Switch Reboot Guard & Card Assets (`switch.py`, `lepas-card.js`)**: Removed the unreliable `realtime["appointmentChargeState"]` fallback from `LepasScheduledChargeSwitch._live_on()` to prevent false `OFF` states after Home Assistant restarts, and bumped card assets to `?v=1.33.2`.
+
+### 🇮🇹 Italiano
+
+- **Allineamento UTC Ricarica Programmata, Floor 15 Minuti & Probe Rapido (`scheduler.py`, `coordinator.py`, `switch.py`, `sensor.py`, `time.py`, `__init__.py`, `const.py`, `core/commands.py`)**:
+  - **Conversione UTC ↔ Locale & Arrotondamento a 15 Minuti (`scheduler.py`, `coordinator.py`, `switch.py`, `sensor.py`, `time.py`, `__init__.py`)**: Allineati `chargeAppointPlans.startTime` e il cambio giorno `cycleData` al fuso UTC in scrittura e al fuso locale di Home Assistant in lettura (come `appointmentTravel` e `batteryPackHeat`), con arrotondamento per difetto a scatti di 15 minuti su `charge_start_minutes` (`05:20 → 05:15`) per rispecchiare il selettore dell'app Android Lepas lasciando esatti gli orari di partenza (`13:20`).
+  - **Aggiornamento Rapido Post-Comando (`const.py`, `coordinator.py`)**: Armata la sequenza `CMD_PROBE` (`25s`/`65s`) su `CHARGE_PROBE_COMMANDS` (`ricarica_prog_on`, `ricarica_prog_off`, `ricarica_start`, `ricarica_stop`) per aggiornare subito stato, potenza, corrente e tempo residuo di ricarica.
+  - **Avviso Ciclo `2132` Differito al Fallimento (`core/commands.py`, `core/permessi.py`)**: L'avviso `permessi.ciclo_non_autorizzato` viene ora mostrato su `sensor.lepas_command_result` solo in caso di rifiuto reale (`A00084` / `HTTP >= 400`), mentre su successo (`A00079`) resta registrato solo a livello `DEBUG` senza dati sensibili.
+  - **Protezione Switch al Riavvio & Asset Card (`switch.py`, `lepas-card.js`)**: Rimosso il fallback inaffidabile su `realtime["appointmentChargeState"]` da `LepasScheduledChargeSwitch._live_on()` per evitare falsi `OFF` dopo un riavvio di Home Assistant, e aggiornati gli asset della card a `?v=1.33.2`.
+
 ## v1.33.1 — 2026-11-21
 
 ### 🇬🇧 English

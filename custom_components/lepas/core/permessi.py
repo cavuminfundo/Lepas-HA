@@ -428,12 +428,12 @@ def _giorni(body: dict, campo: str) -> list | None:
 
 
 def ciclo_non_autorizzato(endpoint: str, body: dict, perms: dict) -> str | None:
-    """Messaggio da mostrare PRIMA dell'invio se il ciclo scelto non è autorizzato, altrimenti None.
+    """Messaggio diagnostico per ciclo non autorizzato dai permessi, altrimenti None.
 
     Non corregge nulla di proposito: gli unici rimedi possibili sarebbero cambiare i giorni scelti
     dall'utente o togliere la lista, e un piano che parte in giorni che nessuno ha chiesto è
-    peggio di un rifiuto onesto. Serve solo a far capire che il `A00084` che sta per arrivare non
-    è un difetto dell'integrazione."""
+    peggio di un rifiuto onesto. `commands.send()` espone questo messaggio via `avvisa(...)`
+    solo su rifiuto/fallimento (`A00084` / `HTTP >= 400`), registrandolo a DEBUG quando accettato."""
     regola = CICLO.get(endpoint)
     if not perms or not regola:
         return None
