@@ -1037,11 +1037,17 @@ class LepasDeparturePlan(_LepasRestoreSensor):
         if not isinstance(rt, dict):
             return None
 
+        now = dt_util.now()
+        hold_fn = getattr(self.coordinator, "active_quick_hold_occurrence", None)
+        expected_occ = hold_fn(now) if callable(hold_fn) else None
+        if expected_occ is None:
+            expected_occ = occ_fn(now)
+
         main_state = field_on(rt.get("mainSwitcher"))
         if piano is None:
             if main_state is not False:
                 return None
-            return occ_fn(dt_util.now()) is None
+            return expected_occ is None
 
         sw_state = field_on(piano.get("switcher"))
         if sw_state is None and main_state is not False:
@@ -1054,7 +1060,7 @@ class LepasDeparturePlan(_LepasRestoreSensor):
             else sw_state is True
         )
         car_active = (main_state is not False) and any_sw_on
-        occ = occ_fn(dt_util.now())
+        occ = expected_occ
         if occ is None:
             return not car_active
         if not car_active:

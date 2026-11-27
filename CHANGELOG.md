@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.34.2 — 2026-11-27
+
+### 🇬🇧 English
+
+- **Quick Departure Pre-Climate Hold Sync Alignment (`coordinator.py`, `sensor.py`, `lepas-card.js`)**:
+  - **No False `"To apply"` Banner During Pre-Climate Hold (`coordinator.py`, `sensor.py`)**: Added `LepasCoordinator.active_quick_hold_occurrence()` shared by `has_pending_departure_changes()`, `_departure_tick_cb()` (`tick_ui_sig`), and `LepasDeparturePlan._synced_with_ha()` so that while the pre-climate hold (`_quick_native_until`) keeps the applied quick departure time on the car until departure, `sensor.lepas_scheduled_departure` stays synced instead of falsely showing `"To apply"` once `quick_departure_enabled` flips `False`.
+  - **Preserved Drift & Expiry Detection (`coordinator.py`, `sensor.py`)**: Car-side drift, weekly schedule edits during the hold, local-only (unapplied) quick departures, and failed cloud resyncs at hold expiry continue to surface immediately as pending/unsynced, bumping card assets to `?v=1.34.2`.
+
+### 🇮🇹 Italiano
+
+- **Allineamento Sincronizzazione Durante l'Hold Preriscaldamento Partenza Rapida (`coordinator.py`, `sensor.py`, `lepas-card.js`)**:
+  - **Nessun Falso Avviso `"Da applicare"` Durante il Preriscaldamento Rapido (`coordinator.py`, `sensor.py`)**: Aggiunto `LepasCoordinator.active_quick_hold_occurrence()` condiviso da `has_pending_departure_changes()`, `_departure_tick_cb()` (`tick_ui_sig`) e `LepasDeparturePlan._synced_with_ha()` in modo che, finché la finestra di hold (`_quick_native_until`) mantiene sull'auto l'orario della partenza rapida applicata fino alla partenza, `sensor.lepas_scheduled_departure` resti sincronizzato senza mostrare falsamente `"Da applicare"` allo spegnimento automatico di `quick_departure_enabled`.
+  - **Rilevamento Drift e Scadenza Preservato (`coordinator.py`, `sensor.py`)**: Eventuali modifiche lato auto, modifiche al piano settimanale durante l'hold, partenze rapide solo locali (mai applicate) ed errori di risincronizzazione cloud a scadenza continuano a essere segnalati subito come pendenti/non sincronizzati, aggiornando gli asset della card a `?v=1.34.2`.
+
 ## v1.34.1 — 2026-11-27
 
 ### 🇬🇧 English

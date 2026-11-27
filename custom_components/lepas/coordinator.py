@@ -1446,7 +1446,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         return json.dumps({"q": quick, "w": weekly}, separators=(",", ":"), sort_keys=True)
 
     @staticmethod
-    def _weekly_signature_part(raw_sig: str | None) -> list | None:
+    def _signature_part(raw_sig: str | None, key: str) -> list | None:
         if not isinstance(raw_sig, str) or not raw_sig.strip():
             return None
         try:
@@ -1455,8 +1455,40 @@ class LepasCoordinator(DataUpdateCoordinator):
             return None
         if not isinstance(parsed, dict):
             return None
-        weekly = parsed.get("w")
-        return weekly if isinstance(weekly, list) else None
+        part = parsed.get(key)
+        return part if isinstance(part, list) else None
+
+    @classmethod
+    def _weekly_signature_part(cls, raw_sig: str | None) -> list | None:
+        return cls._signature_part(raw_sig, "w")
+
+    @classmethod
+    def _quick_signature_part(cls, raw_sig: str | None) -> list | None:
+        return cls._signature_part(raw_sig, "q")
+
+    def active_quick_hold_occurrence(
+        self, now: datetime | None = None
+    ) -> DepartureOccurrence | None:
+        """Return held quick occurrence while pre-climate keeps quick time on car until departure."""
+        until = self._quick_native_until
+        if until is None or self.quick_departure_enabled:
+            return None
+        ref = now if now is not None else dt_util.now()
+        if ref >= until:
+            return None
+        if not (self.native_departure_sync or self._quick_applied_native):
+            return None
+        hold_min = (until.hour * 60 + until.minute) % 1440
+        if self._quick_signature_part(self._applied_schedule_sig) != [True, hold_min]:
+            return None
+        dur = max(0, int(self.departure_preclimate_duration or 0))
+        return DepartureOccurrence(
+            source="quick",
+            weekday=until.isoweekday(),
+            departure_at=until,
+            climate_start_at=shift_minutes(until, -dur),
+            key=f"quick:{until.isoformat()}",
+        )
 
     def _is_weekly_dirty(self) -> bool:
         return (
@@ -1497,6 +1529,8 @@ class LepasCoordinator(DataUpdateCoordinator):
         return any_sw_on
 
     def has_pending_departure_changes(self) -> bool:
+        if self.active_quick_hold_occurrence() is not None:
+            return self._is_weekly_dirty()
         car_active = self._is_car_departure_active()
         if not self.has_active_departure_schedule():
             return car_active is True or (
@@ -2379,6 +2413,7 @@ class LepasCoordinator(DataUpdateCoordinator):
                 tick_ui_sig = (
                     now.date(),
                     occ.key if occ is not None else None,
+                    self.active_quick_hold_occurrence(now) is not None,
                     plan.action,
                     plan.reason,
                     plan.start_minutes,

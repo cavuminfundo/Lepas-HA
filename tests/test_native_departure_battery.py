@@ -1644,3 +1644,98 @@ async def test_scheduled_comfort_optimistic_sync_rollback_probe_and_rejection_lo
     finally:
         await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
+
+
+async def test_quick_departure_hold_stays_synced_until_expiry_and_guards_edges(hass, monkeypatch):
+    from custom_components.lepas.sensor import LepasDeparturePlan
+
+    rome = ZoneInfo("Europe/Rome")
+    hass.config.time_zone = "Europe/Rome"
+    coord = _make_coord(
+        hass,
+        entry_id="quick_hold_sync",
+        data={DATA_VEHICLE_FEATURES: {"scheduled_departure_control": True, "scheduled_departure_custom_days": True}},
+    )
+    coord.departure_climate_mode = "anywhere"
+    coord.departure_preclimate_duration = 10
+    coord.departure_weekly[6] = (True, 13 * 60 + 20)  # Sat 13:20 CET
+    dp = LepasDeparturePlan(coord)
+    dp.hass = hass
+
+    fail_cmd = False
+    sent: list[str] = []
+    # 20:40 CET Fri (2026-11-27) == 19:40 UTC (1180) on [5]; Sat 13:20 CET == 12:20 UTC (740) on [6]
+    car_quick = {"mainSwitcher": "1", "appointmentTravelSetVOS": [{"planId": 1, "switcher": "1", "travelTime": "1180", "travelDate": [5]}]}
+    car_weekly = {"mainSwitcher": "1", "appointmentTravelSetVOS": [{"planId": 1, "switcher": "1", "travelTime": "740", "travelDate": [6]}]}
+
+    async def fake_send(key: str, params: dict | None = None) -> str:
+        if fail_cmd:
+            raise HomeAssistantError("transient failure")
+        sent.append(key)
+        return "ok"
+
+    monkeypatch.setattr(coord, "async_send_command", fake_send)
+    monkeypatch.setattr(coord, "_schedule_travel_refresh", lambda: asyncio.sleep(0))
+
+    # 1) Apply quick 20:40 at 20:32 Fri -> pre-climate fires at 20:33 -> hold stays synced at 20:35
+    now_2032 = datetime(2026, 11, 27, 20, 32, tzinfo=rome)
+    monkeypatch.setattr(dt_util, "now", lambda: now_2032)
+    await coord.async_set_quick_departure(20 * 60 + 40, True, apply_native=True)
+    coord.native_departure_sync = True
+    coord._apply_update({"realtime": car_quick})
+
+    t2033 = datetime(2026, 11, 27, 20, 33, tzinfo=rome)
+    monkeypatch.setattr(dt_util, "now", lambda: t2033)
+    await coord._departure_tick_cb(_now=t2033)
+    assert coord.quick_departure_enabled is False
+    assert coord._quick_native_until == datetime(2026, 11, 27, 20, 40, tzinfo=rome)
+
+    t2035 = datetime(2026, 11, 27, 20, 35, tzinfo=rome)
+    monkeypatch.setattr(dt_util, "now", lambda: t2035)
+    assert coord.active_quick_hold_occurrence(t2035) is not None
+    assert coord.has_pending_departure_changes() is False
+    assert dp._synced_with_ha(car_quick["appointmentTravelSetVOS"][0]) is True
+
+    # Car-side drift during hold still flags synced_with_ha=False
+    coord._apply_update({"realtime": {"mainSwitcher": "0"}})
+    assert dp._synced_with_ha(None) is False
+    coord._apply_update({"realtime": car_quick})
+
+    # 2) Weekly edit during hold marks pending=True
+    coord.departure_weekly[6] = (True, 14 * 60)
+    assert coord.has_pending_departure_changes() is True
+    coord.departure_weekly[6] = (True, 13 * 60 + 20)
+    assert coord.has_pending_departure_changes() is False
+
+    # 3) Local-only quick (never applied) does NOT spoof sync against car weekly Sat 13:20
+    coord._applied_schedule_sig = coord.departure_schedule_signature()  # q:[false,null]
+    coord._apply_update({"realtime": car_weekly})
+    assert coord.active_quick_hold_occurrence(t2035) is None
+    assert coord.has_pending_departure_changes() is False
+    assert dp._synced_with_ha(car_weekly["appointmentTravelSetVOS"][0]) is True
+
+    # 4) Applied quick with NO weekly schedule stays synced during hold
+    coord.departure_weekly[6] = (False, 13 * 60 + 20)
+    coord.native_departure_sync = False
+    monkeypatch.setattr(dt_util, "now", lambda: now_2032)
+    await coord.async_set_quick_departure(20 * 60 + 40, True, apply_native=True)
+    monkeypatch.setattr(dt_util, "now", lambda: t2033)
+    await coord._departure_tick_cb(_now=t2033)
+    monkeypatch.setattr(dt_util, "now", lambda: t2035)
+    coord._apply_update({"realtime": car_quick})
+    assert coord.has_pending_departure_changes() is False
+    assert dp._synced_with_ha(car_quick["appointmentTravelSetVOS"][0]) is True
+
+    # 5) Hold expiry with failed cloud resync notifies listeners and flips back to pending/unsynced
+    events: list[int] = []
+    unsub = coord.async_add_listener(lambda: events.append(1))
+    fail_cmd = True
+    t2040 = datetime(2026, 11, 27, 20, 40, tzinfo=rome)
+    monkeypatch.setattr(dt_util, "now", lambda: t2040)
+    await coord._departure_tick_cb(_now=t2040)
+    unsub()
+    assert coord._quick_native_until is None
+    assert len(events) >= 1
+    assert coord.has_pending_departure_changes() is True
+    assert dp._synced_with_ha(car_quick["appointmentTravelSetVOS"][0]) is False
+
