@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.34.3 — 2026-11-27
+
+### 🇬🇧 English
+
+- **GPS Coordinate Hardening, Missing-GPS Probe Guard & Trip-End Realignment (`probe.py`, `coordinator.py`, `const.py`, `lepas-card.js`)**:
+  - **Shared Coordinate Validation & Probe Merge Guard (`core/probe.py`)**: Added `valid_coord()` and `has_valid_geo()` rejecting booleans, blanks, out-of-range values, and Null Island `(0, 0)`, prevented empty/invalid `realtime` coordinates from overwriting valid `queryVehicleLocation` coordinates, added explicit `GPS=assente` / `(GPS assente)` diagnostic notice without leaking coordinates, and exposed `has_geo` in `probe_once()` results.
+  - **Automatic GPS Realignment with 12V Cooldown Guard (`coordinator.py`, `const.py`)**: Updated `_on_car_message` and `_on_probe_data` to validate coordinates via `_extract_geo()`, ignore degraded `odometer <= 0` frames via `_positive_float()`, defer `away_park`/`away_plug_in` while GPS realignment is pending or in flight, trigger a `300s` cooldown-guarded `localizza` fallback (`LOCATION_FALLBACK_COOLDOWN_S`) awaiting MQTT `1301` fixes (`GPS_REALIGN_WAIT_S = 15s`) at trip end or once on online boot without live GPS, and cancel cleanly on `set_poll_enabled(False)` and `async_stop()`. Bumped card assets to `?v=1.34.3`.
+
+### 🇮🇹 Italiano
+
+- **Validazione Coordinate GPS, Protezione Sonda Senza GPS & Riallineamento a Fine Viaggio (`probe.py`, `coordinator.py`, `const.py`, `lepas-card.js`)**:
+  - **Validazione Condivisa Coordinate & Merge Sonda (`core/probe.py`)**: Aggiunti `valid_coord()` e `has_valid_geo()` per scartare booleani, stringhe vuote, valori fuori intervallo e Null Island `(0, 0)`, impedita la sovrascrittura delle coordinate valide di `queryVehicleLocation` da parte di `realtime` vuoti/invalidi, aggiunta la segnalazione `GPS=assente` / `(GPS assente)` senza esporre coordinate e aggiunto `has_geo` al ritorno di `probe_once()`.
+  - **Riallineamento GPS Automatico con Cooldown Anti-Scarica 12V (`coordinator.py`, `const.py`)**: Aggiornati `_on_car_message` e `_on_probe_data` con `_extract_geo()` e `_positive_float()` (ignorando frame degradati `odometer <= 0`), differiti `away_park`/`away_plug_in` quando il riallineamento GPS è pendente o in corso, introdotto il fallback `localizza` protetto da cooldown `300s` (`LOCATION_FALLBACK_COOLDOWN_S`) con attesa push MQTT `1301` (`GPS_REALIGN_WAIT_S = 15s`) a fine viaggio o una sola volta all'avvio online senza fix GPS live, e aggiunta cancellazione pulita in `set_poll_enabled(False)` e `async_stop()`. Aggiornati gli asset della card a `?v=1.34.3`.
+
 ## v1.34.2 — 2026-11-27
 
 ### 🇬🇧 English

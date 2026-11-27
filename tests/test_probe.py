@@ -79,3 +79,95 @@ def _ctx():
     from custom_components.lepas.core.context import CoreCtx
     return CoreCtx(vin=FX.VIN, tuserid=FX.TUSERID, pin=FX.PIN, email=FX.EMAIL,
                    tsp_host=FX.TSP_HOST, bff=FX.BFF)
+
+
+def test_sonda_senza_gps_segnala_gps_assente_e_has_geo_false(core, cloud):
+    """Realtime privo di coordinate + location con solo resultTime -> has_geo=False e GPS=assente."""
+    probe = core["probe"]
+    ctx = _ctx()
+    cloud.on("/asr/manager/realtime", {"code": "000000", "data": {
+        "odometer": "4062", "dumpEnergy": "68", "onlineStatus": "1"}})
+    cloud.on("/asc/vehicleControl/queryVehicleLocation", {
+        "code": "000000", "data": {"resultTime": "1795814172066"}})
+    cloud.on("/asd/travelManage/travelQuery", {"code": "A07900"})
+
+    messaggi: list[str] = []
+    res = probe.probe_once(ctx, messaggi.append, force=True)
+
+    testo = " ".join(messaggi)
+    assert res["ok"] is True
+    assert res["online"] is True
+    assert res["has_geo"] is False
+    assert "GPS=assente" in testo
+    assert "odometer=4062" in testo
+
+
+def test_sonda_realtime_con_lat_vuoto_non_sovrascrive_query_vehicle_location(core, cloud):
+    """Realtime con lat='' e lon=None non deve cancellare le coordinate valide da queryVehicleLocation."""
+    probe = core["probe"]
+    ctx = _ctx()
+    cloud.on("/asr/manager/realtime", {"code": "000000", "data": {
+        "lat": "", "lon": None, "odometer": "4062", "dumpEnergy": "68"}})
+    cloud.on("/asc/vehicleControl/queryVehicleLocation", {"code": "000000", "data": {
+        "lat": str(LAT), "lon": str(LON), "direction": "180"}})
+    cloud.on("/asd/travelManage/travelQuery", {"code": "A07900"})
+
+    messaggi: list[str] = []
+    ricevuti: dict = {}
+    res = probe.probe_once(ctx, messaggi.append, force=True, on_data=ricevuti.update)
+
+    testo = " ".join(messaggi)
+    assert res["has_geo"] is True
+    assert ricevuti.get("lat") == str(LAT)
+    assert ricevuti.get("lon") == str(LON)
+    assert ricevuti.get("odometer") == "4062"
+    assert str(LAT) not in testo
+    assert str(LON) not in testo
+    assert "GPS=assente" not in testo
+
+
+def test_sonda_accetta_latitude_longitude_e_scarta_null_island(core, cloud):
+    """has_valid_geo accetta stringhe latitude/longitude e rifiuta Null Island (0, 0) e bool."""
+    probe = core["probe"]
+    assert probe.has_valid_geo({"latitude": str(LAT), "longitude": str(LON)}) is True
+    assert probe.has_valid_geo({"lat": 0, "lon": 0}) is False
+    assert probe.has_valid_geo({"latitude": "0.0", "longitude": "0.0"}) is False
+    assert probe.has_valid_geo({"lat": True, "lon": LON}) is False
+    assert probe.has_valid_geo({"latitude": LAT, "longitude": False}) is False
+    assert probe.valid_coord(True, limit=90.0) is None
+    assert probe.valid_coord("90.5", limit=90.0) is None
+
+    ctx = _ctx()
+    cloud.on("/asr/manager/realtime", {"code": "000000", "data": {
+        "latitude": str(LAT), "longitude": str(LON), "odometer": "4100"}})
+    cloud.on("/asc/vehicleControl/queryVehicleLocation", {"code": "A07900"})
+    cloud.on("/asd/travelManage/travelQuery", {"code": "A07900"})
+
+    messaggi: list[str] = []
+    res = probe.probe_once(ctx, messaggi.append, force=True)
+    testo = " ".join(messaggi)
+    assert res["has_geo"] is True
+    assert str(LAT) not in testo
+    assert str(LON) not in testo
+
+    cloud.on("/asr/manager/realtime", {"code": "000000", "data": {
+        "lat": "0", "lon": "0", "odometer": "4100"}})
+    messaggi_null: list[str] = []
+    res_null = probe.probe_once(ctx, messaggi_null.append, force=True)
+    assert res_null["has_geo"] is False
+    assert "GPS=assente" in " ".join(messaggi_null)
+
+
+def test_sonda_offline_restituisce_has_geo_false(core, cloud):
+    """Con tutti gli endpoint in A07900, il risultato offline espone has_geo=False."""
+    probe = core["probe"]
+    ctx = _ctx()
+    cloud.on("/asr/manager/realtime", {"code": "A07900"})
+    cloud.on("/asc/vehicleControl/queryVehicleLocation", {"code": "A07900"})
+    cloud.on("/asd/travelManage/travelQuery", {"code": "A07900"})
+
+    res = probe.probe_once(ctx, lambda _m: None, force=True)
+    assert res["ok"] is True
+    assert res["online"] is False
+    assert res["got_data"] is False
+    assert res["has_geo"] is False

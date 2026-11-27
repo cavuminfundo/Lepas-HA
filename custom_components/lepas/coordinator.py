@@ -24,6 +24,7 @@ import ssl
 import threading
 import time
 from datetime import date, datetime, timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -57,7 +58,9 @@ from .const import (
     DEFAULTS, DIAG_SWITCH_FILE, NOTE_COMANDO_S,
     AUTO_CLOSE_ON_LOCK_KEYS, CHARGE_PROBE_COMMANDS, CLOSURE_META_KEYS, CLOSURE_PROBE_COMMANDS,
     PROBE_MQTT_GRACE_S, CMD_PROBE_DELAYS_S,
+    LOCATION_FALLBACK_COOLDOWN_S, GPS_REALIGN_WAIT_S,
 )
+from .core.probe import valid_coord
 from .charging_stats import (
     ChargingStatsTracker,
     classify_charge_kind,
@@ -358,6 +361,36 @@ def _safe_float(v) -> float | None:
     return val if math.isfinite(val) else None
 
 
+def _positive_float(val: Any) -> float | None:
+    """Return finite float > 0.0, rejecting bools and zero sentinel frames."""
+    if isinstance(val, bool):
+        return None
+    f = _safe_float(val)
+    return f if f is not None and math.isfinite(f) and f > 0.0 else None
+
+
+def _extract_geo(data: dict) -> dict | None:
+    """Extract validated geo dict (lat/lon or latitude/longitude), rejecting Null Island."""
+    if not isinstance(data, dict):
+        return None
+    lat_val = valid_coord(data.get("lat"), limit=90.0)
+    lon_val = valid_coord(data.get("lon"), limit=180.0)
+    use_short = lat_val is not None and lon_val is not None
+    if not use_short:
+        lat_val = valid_coord(data.get("latitude"), limit=90.0)
+        lon_val = valid_coord(data.get("longitude"), limit=180.0)
+    if lat_val is None or lon_val is None or (lat_val == 0.0 and lon_val == 0.0):
+        return None
+    geo = {k: data[k] for k in GEO_KEYS if k in data}
+    if use_short:
+        geo.pop("latitude", None)
+        geo.pop("longitude", None)
+    else:
+        geo.pop("lat", None)
+        geo.pop("lon", None)
+    return geo
+
+
 def _pick_field(sources: tuple[dict | None, ...], key: str):
     """Restituisce il primo valore valorizzato per `key` rispettando la precedenza di `sources`."""
     for src in sources:
@@ -477,6 +510,17 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._last_cmd_at: float | None = None
         self._probe_seq: int = 0
         self.position: dict | None = None
+        # GPS realignment tracking: lock-protected fields vs event-loop task/flags.
+        self._last_pos_fix_mono: float = 0.0
+        self._last_gps_odo: float | None = None
+        self._last_probe_odo: float | None = None
+        self._trip_needs_gps_realign: bool = False
+        self._probe_missing_gps: bool = False
+        self._last_gps_fallback_mono: float = 0.0
+        self._boot_gps_realign_done: bool = False
+        self._gps_realign_task: asyncio.Task | None = None
+        self._pending_realign_away_park: bool = False
+        self._pending_realign_plug_in: bool = False
         self.data = {"fields": {}, "msg_fields": {}, "position": None,
                      "probe_seq": 0, "probe_fields": {}, "probe_changed_fields": frozenset(),
                      "awake": False, "car_connected": False,
@@ -543,6 +587,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._prev_car_in_use_loop: bool | None = None
         self._last_charge_source_is_rt: bool = True
         self._last_seen_rt_ref: object | None = None
+        self._recent_mqtt_charge_fields: dict[str, str] = {}
         self._probed_permessi: dict[int, int] | None = None
         self._departure_busy: bool = False
         self._quick_target_at: datetime | None = None
@@ -807,6 +852,11 @@ class LepasCoordinator(DataUpdateCoordinator):
         """Ingest realtime/fields patch on the HA event loop and handle charge transitions."""
         if self._timers.closing:
             return
+        with self._state_lock:
+            needs_gps = self._trip_needs_gps_realign
+        realign_active = (
+            self._gps_realign_task is not None and not self._gps_realign_task.done()
+        )
         has_telemetry = "realtime" in patch or "fields" in patch
         if not has_telemetry:
             if "car_in_use" in patch:
@@ -814,14 +864,19 @@ class LepasCoordinator(DataUpdateCoordinator):
                 car_in_use_now = self.car_in_use
                 prev_car_in_use = self._prev_car_in_use_loop
                 self._prev_car_in_use_loop = car_in_use_now
-                if (
-                    prev_car_in_use is True
-                    and not car_in_use_now
-                    and in_home is False
-                    and self._charge_window_mode != "off"
-                ):
-                    self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
-                    self._schedule_charge_sync_task("away_park")
+                if prev_car_in_use is True and not car_in_use_now:
+                    if (
+                        (needs_gps or realign_active)
+                        and self.poll_enabled
+                        and not self._timers.closing
+                    ):
+                        self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                        self._schedule_gps_realign_task(
+                            defer_away_park=(self._charge_window_mode != "off")
+                        )
+                    elif in_home is False and self._charge_window_mode != "off":
+                        self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                        self._schedule_charge_sync_task("away_park")
                 if in_home is False:
                     self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
             return
@@ -888,28 +943,53 @@ class LepasCoordinator(DataUpdateCoordinator):
         prev_car_in_use = self._prev_car_in_use_loop
         self._prev_car_in_use_loop = car_in_use_now
 
-        if prev_plugged is False and plugged:
-            self._last_attempted_charge_sig = None
-            if self._charge_window_mode != "off":
-                if in_home is True and not car_in_use_now:
-                    self._arm_charge_plugin_debounce()
-                elif in_home is False and not car_in_use_now:
-                    self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
-                    self._schedule_charge_sync_task("away_plug_in")
-        elif prev_plugged is True and not plugged:
-            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
-
-        if (
-            prev_car_in_use is True
+        trip_ended = prev_car_in_use is True and not car_in_use_now
+        plug_started = prev_plugged is False and plugged
+        gps_pending = (
+            (needs_gps or realign_active)
+            and self.poll_enabled
+            and not self._timers.closing
+        )
+        defer_trip = trip_ended and gps_pending
+        defer_plug = (
+            plug_started
             and not car_in_use_now
-            and in_home is False
             and self._charge_window_mode != "off"
-        ):
+            and gps_pending
+        )
+        if plug_started:
+            self._last_attempted_charge_sig = None
+        if prev_plugged is True and not plugged:
             self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
-            self._schedule_charge_sync_task("away_park")
+        if defer_trip or defer_plug:
+            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+            self._schedule_gps_realign_task(
+                defer_away_park=(trip_ended and self._charge_window_mode != "off"),
+                defer_plug_in=defer_plug,
+            )
+        else:
+            if prev_plugged is False and plugged:
+                self._last_attempted_charge_sig = None
+                if self._charge_window_mode != "off":
+                    if in_home is True and not car_in_use_now:
+                        self._arm_charge_plugin_debounce()
+                    elif in_home is False and not car_in_use_now:
+                        self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                        self._schedule_charge_sync_task("away_plug_in")
+            elif prev_plugged is True and not plugged:
+                self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
 
-        if in_home is False:
-            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+            if (
+                prev_car_in_use is True
+                and not car_in_use_now
+                and in_home is False
+                and self._charge_window_mode != "off"
+            ):
+                self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                self._schedule_charge_sync_task("away_park")
+
+            if in_home is False:
+                self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
 
     @callback
     def _arm_charge_plugin_debounce(self) -> None:
@@ -1136,6 +1216,23 @@ class LepasCoordinator(DataUpdateCoordinator):
             await self.async_probe(force=True)
         except Exception as err:  # noqa: BLE001 — il seed non deve far fallire l'avvio
             _LOGGER.debug("[poll] probe iniziale (seed) fallito: %s", err)
+        else:
+            with self._state_lock:
+                last_fix = self._last_pos_fix_mono
+                missing_gps = self._probe_missing_gps
+            if (
+                not self._timers.closing
+                and self.poll_enabled
+                and self._online
+                and not self.car_in_use
+                and last_fix == 0.0
+                and missing_gps
+                and not self._boot_gps_realign_done
+            ):
+                self._boot_gps_realign_done = True
+                self._schedule_gps_realign_task(
+                    defer_away_park=False, defer_plug_in=False
+                )
 
     @callback
     def set_poll_enabled(self, on: bool) -> None:
@@ -1152,6 +1249,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             # sessione senza mai contattare l'auto.
             self._timers.cancel_many(GRUPPO_POLL)
             self._hv_poll_count = 0
+            self._cancel_gps_realign_task()
         if not self._timers.closing:
             self.async_update_listeners()
 
@@ -1805,9 +1903,13 @@ class LepasCoordinator(DataUpdateCoordinator):
         if (
             not self._last_charge_source_is_rt
             and rt is self._last_seen_rt_ref
-            and isinstance(msg_fields, dict)
+            and (isinstance(msg_fields, dict) or self._recent_mqtt_charge_fields)
         ):
-            return (msg_fields, rt_dict, fields)
+            merged_mqtt = {
+                **self._recent_mqtt_charge_fields,
+                **(msg_fields if isinstance(msg_fields, dict) else {}),
+            }
+            return (merged_mqtt, rt_dict, fields)
         return (rt_dict, fields)
 
     def _car_charge_schedule_is_on(self) -> bool | None:
@@ -2232,11 +2334,11 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._last_attempted_charge_sig = None
 
     def _current_position(self) -> dict | None:
-        pos = (self.data or {}).get("position")
-        if isinstance(pos, dict):
-            return pos
         with self._state_lock:
-            return dict(self.position) if isinstance(self.position, dict) else None
+            if isinstance(self.position, dict):
+                return dict(self.position)
+        pos = (self.data or {}).get("position")
+        return pos if isinstance(pos, dict) else None
 
     def _vehicle_running_or_moving(self) -> bool:
         from .entity import field_on
@@ -2720,6 +2822,10 @@ class LepasCoordinator(DataUpdateCoordinator):
             self.hass.loop.call_soon_threadsafe(self._mqtt_msg_event.set)
         except RuntimeError:
             pass
+        try:
+            self.hass.loop.call_soon_threadsafe(self._cancel_gps_realign_task)
+        except RuntimeError:
+            pass
         if self._diag_stop_unsub is not None:
             self._diag_stop_unsub()
             self._diag_stop_unsub = None
@@ -2755,11 +2861,27 @@ class LepasCoordinator(DataUpdateCoordinator):
         # [MED] serviceType 1301 = push POSIZIONE (lat/lon) → device_tracker. Si
         # discrimina sul TIPO messaggio (non sulla sola presenza di lat/lon) e si
         # tiene in position SOLO la geolocalizzazione (no **data).
-        if svc == "1301" and "lat" in data and "lon" in data:
-            geo = {k: data[k] for k in GEO_KEYS if k in data}
+        geo = _extract_geo(data) if svc == "1301" else None
+        if geo is not None:
+            rt_raw = (self.data or {}).get("realtime")
+            rt_odo = _positive_float(rt_raw.get("odometer")) if isinstance(rt_raw, dict) else None
             with self._state_lock:
                 self.position = geo
                 pos_copy = dict(geo)
+                self._last_pos_fix_mono = time.monotonic()
+                self._trip_needs_gps_realign = False
+                self._probe_missing_gps = False
+                known_odo = (
+                    rt_odo
+                    if rt_odo is not None
+                    else (
+                        self._last_probe_odo
+                        if self._last_probe_odo is not None
+                        else _positive_float(self._fields.get("odometer"))
+                    )
+                )
+                if known_odo is not None:
+                    self._last_gps_odo = known_odo
             patch["position"] = pos_copy
             patch["last_pos_fix"] = now_dt
 
@@ -3108,8 +3230,14 @@ class LepasCoordinator(DataUpdateCoordinator):
         if "realtime" in patch:
             self._last_seen_rt_ref = patch.get("realtime")
             self._last_charge_source_is_rt = True
+            self._recent_mqtt_charge_fields = {}
         elif "msg_fields" in patch:
             self._last_charge_source_is_rt = False
+            msg_f = patch.get("msg_fields")
+            if isinstance(msg_f, dict):
+                for k, v in msg_f.items():
+                    if k not in GEO_KEYS:
+                        self._recent_mqtt_charge_fields[k] = str(v)
         self.data = {**self.data, **patch}
         self._ingest_charging_stats_on_loop(patch)
         self.async_set_updated_data(self.data)
@@ -3265,6 +3393,129 @@ class LepasCoordinator(DataUpdateCoordinator):
             except asyncio.TimeoutError:
                 with self._state_lock:
                     return (not self._timers.closing) and (self._last_msg_ts > baseline_ts)
+
+    @callback
+    def _cancel_gps_realign_task(self) -> None:
+        """Cancel any pending GPS realignment task and clear deferred charge triggers."""
+        self._pending_realign_away_park = False
+        self._pending_realign_plug_in = False
+        if self._gps_realign_task is not None and not self._gps_realign_task.done():
+            self._gps_realign_task.cancel()
+
+    async def _wait_for_pos_fix(
+        self, baseline_mono: float, timeout: float = GPS_REALIGN_WAIT_S
+    ) -> bool:
+        """Wait on _mqtt_msg_event for an MQTT 1301 position fix newer than baseline_mono."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        while True:
+            if self._timers.closing or not self.poll_enabled:
+                return False
+            with self._state_lock:
+                if self._last_pos_fix_mono > baseline_mono:
+                    return True
+            self._mqtt_msg_event.clear()
+            with self._state_lock:
+                if self._last_pos_fix_mono > baseline_mono:
+                    return True
+            if self._timers.closing or not self.poll_enabled:
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            try:
+                await asyncio.wait_for(self._mqtt_msg_event.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                with self._state_lock:
+                    fix_mono = self._last_pos_fix_mono
+                return (
+                    not self._timers.closing
+                    and self.poll_enabled
+                    and fix_mono > baseline_mono
+                )
+
+    @callback
+    def _schedule_gps_realign_task(
+        self, *, defer_away_park: bool = False, defer_plug_in: bool = False
+    ) -> None:
+        """Schedule GPS realignment in background and merge deferred charge sync flags."""
+        if self._timers.closing or not self.poll_enabled:
+            return
+        if defer_away_park:
+            self._pending_realign_away_park = True
+        if defer_plug_in:
+            self._pending_realign_plug_in = True
+        if self._gps_realign_task is not None and not self._gps_realign_task.done():
+            return
+        coro = self._async_realign_gps_position()
+        task = (
+            self.hass.async_create_background_task(coro, f"{DOMAIN}_gps_realign")
+            if hasattr(self.hass, "async_create_background_task")
+            else self.hass.async_create_task(coro)
+        )
+        if not task.done():
+            self._gps_realign_task = task
+
+    async def _async_realign_gps_position(self) -> bool:
+        """Trigger cooldown-guarded localizza fallback, wait for 1301 fix, then sync charge."""
+        cur_task = asyncio.current_task()
+        if cur_task is not None and self._gps_realign_task is None:
+            self._gps_realign_task = cur_task
+        try:
+            if self._timers.closing or not self.poll_enabled:
+                return False
+            with self._state_lock:
+                baseline_fix = self._last_pos_fix_mono
+                now_mono = time.monotonic()
+                cooldown_ok = (
+                    self._last_gps_fallback_mono == 0.0
+                    or (now_mono - self._last_gps_fallback_mono)
+                    >= LOCATION_FALLBACK_COOLDOWN_S
+                )
+                if cooldown_ok:
+                    self._last_gps_fallback_mono = now_mono
+            got_fix = False
+            if cooldown_ok:
+                try:
+                    await self.async_assicura_sveglia()
+                    got_fix = await self._wait_for_pos_fix(
+                        baseline_fix, timeout=GPS_REALIGN_WAIT_S
+                    )
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "[gps] riallineamento fallito (%s)", type(err).__name__
+                    )
+            with self._state_lock:
+                self._trip_needs_gps_realign = False
+                fresh_pos = (
+                    dict(self.position) if isinstance(self.position, dict) else None
+                )
+            if fresh_pos is None:
+                fresh_pos = self._current_position()
+            want_plug = self._pending_realign_plug_in
+            want_away = self._pending_realign_away_park
+            self._pending_realign_plug_in = False
+            self._pending_realign_away_park = False
+            if (
+                self._timers.closing
+                or not self.poll_enabled
+                or self.car_in_use
+                or self._charge_window_mode == "off"
+            ):
+                return got_fix
+            in_home = self._safe_in_home_zone(fresh_pos)
+            if want_plug and self._is_plugged():
+                if in_home is True:
+                    self._arm_charge_plugin_debounce()
+                elif in_home is False:
+                    self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                    await self._run_charge_sync_task("away_plug_in")
+            elif want_away and in_home is False:
+                self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                await self._run_charge_sync_task("away_park")
+            return got_fix
+        finally:
+            if self._gps_realign_task is cur_task:
+                self._gps_realign_task = None
 
     def _should_wake_retry_on_a07900(
         self, key: str, err: Exception, allow_wake_retry: bool
@@ -3835,8 +4086,9 @@ class LepasCoordinator(DataUpdateCoordinator):
 
         from .entity import field_on
 
-        has_geo = "lat" in data and "lon" in data
-        geo = {k: data[k] for k in GEO_KEYS if k in data} if has_geo else None
+        geo = _extract_geo(data)
+        probe_odo = _positive_float(data.get("odometer"))
+        probe_speed = _positive_float(data.get("vehicleSpeed"))
         probe_fields: dict[str, str] = {}
         changed_fields: set[str] = set()
         now = time.time()
@@ -3886,8 +4138,31 @@ class LepasCoordinator(DataUpdateCoordinator):
             probe_seq = self._probe_seq
             fields_copy = dict(self._fields)
             if geo is not None:
-                self.position = {**(self.position or {}), **geo}
-                pos_copy = dict(self.position)
+                merged = dict(self.position or {})
+                if "lat" in geo:
+                    merged.pop("latitude", None)
+                    merged.pop("longitude", None)
+                else:
+                    merged.pop("lat", None)
+                    merged.pop("lon", None)
+                merged.update(geo)
+                self.position = merged
+                pos_copy = dict(merged)
+                self._last_pos_fix_mono = time.monotonic()
+                self._trip_needs_gps_realign = False
+                self._probe_missing_gps = False
+                if probe_odo is not None:
+                    self._last_gps_odo = probe_odo
+            else:
+                self._probe_missing_gps = True
+                odo_moved = probe_odo is not None and (
+                    (self._last_gps_odo is not None and probe_odo > self._last_gps_odo)
+                    or (self._last_probe_odo is not None and probe_odo > self._last_probe_odo)
+                )
+                if odo_moved or probe_speed is not None:
+                    self._trip_needs_gps_realign = True
+            if probe_odo is not None:
+                self._last_probe_odo = probe_odo
         patch["fields"] = fields_copy
         patch["probe_seq"] = probe_seq
         patch["probe_fields"] = probe_fields

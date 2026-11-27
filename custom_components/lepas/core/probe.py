@@ -26,7 +26,7 @@ un cooldown lungo (default 30 min) per non ripetere a ogni 5A02.
 
 Uso strettamente personale (auto/account di Rino). NON pubblicare token/cert.
 """
-import os, json, time, threading
+import os, json, math, time, threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -56,7 +56,33 @@ RICH_KEYS = ("lat", "lon", "altitude", "direction", "gpsSpeed", "vehicleSpeed",
 # quindi non si perde nulla: sparisce solo dal TESTO. Odometro/energia/autonomia/
 # temperatura restano, così il messaggio resta utile per la diagnostica e la scoperta.
 _GEO_KEYS = ("lat", "lon", "altitude", "direction")
+_COORD_KEYS = ("lat", "lon", "latitude", "longitude")
 _MSG_KEYS = tuple(k for k in RICH_KEYS if k not in _GEO_KEYS)
+
+
+def valid_coord(val, *, limit: float) -> float | None:
+    """Return finite float within [-limit, limit], rejecting bools and blanks."""
+    if val is None or isinstance(val, bool) or val == "":
+        return None
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(f) or not (-limit <= f <= limit):
+        return None
+    return f
+
+
+def has_valid_geo(data: dict) -> bool:
+    """True when either (lat, lon) or (latitude, longitude) is valid and not Null Island."""
+    if not isinstance(data, dict):
+        return False
+    for lat_k, lon_k in (("lat", "lon"), ("latitude", "longitude")):
+        lat = valid_coord(data.get(lat_k), limit=90.0)
+        lon = valid_coord(data.get(lon_k), limit=180.0)
+        if lat is not None and lon is not None and not (lat == 0.0 and lon == 0.0):
+            return True
+    return False
 
 
 def _log(rec: dict):
@@ -128,8 +154,12 @@ def probe_once(ctx, publish, force=False, on_data=None):
         for src, got in ((j2, got2), (j3, got3), (j1, got1)):
             payload = W._payload(src)
             if got and isinstance(payload, dict):
-                data.update(payload)
+                if has_valid_geo(data) and not has_valid_geo(payload):
+                    data.update({k: v for k, v in payload.items() if k not in _COORD_KEYS})
+                else:
+                    data.update(payload)
         rich = _rich(data)
+        has_geo = has_valid_geo(data)
         _log({"event": "probe", "ok": True, "realtime_code": c1, "location_code": c2,
               "travel_code": c3, "got_realtime": got1, "got_location": got2, "got_travel": got3,
               "rich": rich, "data": data or None,
@@ -145,16 +175,21 @@ def probe_once(ctx, publish, force=False, on_data=None):
         if got1 or got2:
             if rich:
                 bits = ", ".join(f"{k}={v}" for k, v in rich.items())
-                publish(f"🟢🛰️ SVOLTA: dati realtime ricevuti ad auto sveglia! {bits}")
+                suffix = "" if has_geo else ", GPS=assente"
+                publish(f"🟢🛰️ SVOLTA: dati realtime ricevuti ad auto sveglia! {bits}{suffix}")
             else:
-                publish("🟢🛰️ Sonda: dati ricevuti ad auto sveglia")
+                publish(
+                    "🟢🛰️ Sonda: dati ricevuti ad auto sveglia"
+                    + ("" if has_geo else " (GPS assente)")
+                )
             return {"ok": True, "online": True, "got_data": True,
-                    "codes": [c1, c2, c3], "rich": rich}
+                    "has_geo": has_geo, "codes": [c1, c2, c3], "rich": rich}
 
         publish(f"🟡 Sonda: ancora niente posizione ad auto sveglia "
                 f"(realtime={c1} [{codes.meaning(c1)}], location={c2}, travel={c3}). "
                 "Confermato: serve un altro passo")
-        return {"ok": True, "online": False, "got_data": False, "codes": [c1, c2, c3]}
+        return {"ok": True, "online": False, "got_data": False,
+                "has_geo": False, "codes": [c1, c2, c3]}
     except Exception as e:
         publish(f"⚠️ Sonda errore: {type(e).__name__}: {e}")
         return {"ok": False, "reason": "exception", "error": str(e)}

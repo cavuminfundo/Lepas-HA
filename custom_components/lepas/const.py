@@ -526,6 +526,10 @@ DEFAULT_BATTERY_CAPACITY_KWH = 18.4
 POLL_WAKE_WAIT = 25
 # cooldown minimo (secondi) tra due sveglie automatiche innescate da A07900 (evita tempeste)
 A07900_WAKE_COOLDOWN_S = 60
+# Anti-12V-drain guard: max 1 automatic localizza GPS fallback every 5 min.
+LOCATION_FALLBACK_COOLDOWN_S = 300
+# Max wait on _mqtt_msg_event for an MQTT 1301 push after localizza.
+GPS_REALIGN_WAIT_S = 15
 # Alta tensione (HV) e telemetria FRESCA. Scoperta verificata dal vivo 2026-06-22: il canale
 # /asr/manager/realtime riporta odometro/SOC/tensione/corrente VERI solo quando l'alta tensione
 # è accesa (hVoltageState=1: marcia, ricarica o clima acceso); ad HV spento ritorna uno snapshot
