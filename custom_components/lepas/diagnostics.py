@@ -255,6 +255,27 @@ async def async_get_config_entry_diagnostics(
         },
     }
 
+    hp = (
+        coordinator.home_power_profile()
+        if hasattr(coordinator, "home_power_profile")
+        else {}
+    )
+    last_plan = getattr(coordinator, "_last_desired_charge_plan", None)
+    diag["smart_charging"] = {
+        "window_mode": getattr(coordinator, "charge_window_mode", None),
+        "home_charge_power_auto": getattr(coordinator, "home_charge_power_auto", None),
+        "home_charge_power_kw": getattr(
+            coordinator,
+            "home_charge_power",
+            getattr(coordinator, "home_charge_power_kw", None),
+        ),
+        "learned_ac_kw": hp.get("learned_ac_kw"),
+        "learned_dc_kw": hp.get("learned_dc_kw"),
+        "home_ac_sessions": hp.get("home_ac_sessions", 0),
+        "home_dc_sessions": hp.get("home_dc_sessions", 0),
+        "last_plan_reason": getattr(last_plan, "reason", None),
+    }
+
     # Monitor diagnostico (diag.py), presente solo se attivo: ring buffer + contatori.
     # Gli eventi sono GIÀ redatti alla cattura; qui passano comunque dalla redazione
     # standard — difesa in profondità, come per realtime/fields sopra.

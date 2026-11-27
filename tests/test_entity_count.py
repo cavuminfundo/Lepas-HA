@@ -37,14 +37,14 @@ ATTESO = {
     "binary_sensor": 26,
     "sensor": 54,
     "button": 17,
-    "switch": 30,
+    "switch": 31,
     "cover": 3,
-    "number": 3,
+    "number": 4,
     "climate": 1,
     "lock": 1,
     "device_tracker": 1,
     "time": 10,
-    "select": 2,
+    "select": 3,
 }
 # 107 -> 110 il 2026-08-24: portati dalla linea fork i due contatori di energia di ricarica
 # (casa/fuori) e il binary sensor "A casa". Cambiamento DELIBERATO e annunciato: questo numero
@@ -82,7 +82,9 @@ ATTESO = {
 # i modelli (confermato `chargingPower` su Lepas L8 PHEV sotto carica) -> 142 attive.
 # 2026-11-19 (v1.30.0): +5 entità statistiche ricarica (+4 sensor periodici, +1 button reset) -> 147.
 # 2026-11-21: +1 entità durata preriscaldamento partenza (`number.lepas_departure_preclimate_duration`) -> 148.
-TOTALE_ATTESO = 148
+# 2026-11-26 (Fase 2 Smart Charging): +3 entità (`select.lepas_charge_window_mode`,
+# `switch.lepas_home_charge_power_auto`, `number.lepas_home_charge_power`) -> 151.
+TOTALE_ATTESO = 151
 
 
 def test_totale_dichiarato_coerente():

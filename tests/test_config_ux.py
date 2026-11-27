@@ -97,6 +97,8 @@ async def test_select_charge_days_options_restore_and_plan(
     )
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         st = hass.states.get("select.lepas_charge_days")
@@ -142,6 +144,8 @@ async def test_select_departure_climate_mode(
     _patch_io(monkeypatch)
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         st = hass.states.get("select.lepas_departure_climate_mode")
@@ -202,6 +206,8 @@ async def test_quick_departure_sync_and_time_updates_and_auto_reset(
 
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         # Existing entity_id preserved
@@ -270,6 +276,8 @@ async def test_weekly_departure_pairs_and_restore(
     )
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         for slug in DEPARTURE_DAY_SLUGS.values():
@@ -318,6 +326,8 @@ async def test_number_notify_schedule_and_climate_target_temp_sync(
 
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         # Restored climate target temperature pushed to coordinator
@@ -623,6 +633,8 @@ async def test_climate_target_temp_syncs_from_realtime_without_clobbering_ha_ove
     )
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         assert hass.states.get("climate.lepas_climate").attributes[ATTR_TEMPERATURE] == 21.0
@@ -679,6 +691,8 @@ async def test_scheduled_charging_realtime_fallback_and_priority(
     )
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         # Initially restored as ON when no telemetry present
@@ -711,6 +725,8 @@ async def test_apply_charging_schedule_button(
     hass.config.time_zone = "UTC"
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         reg = er.async_get(hass)
@@ -760,6 +776,8 @@ async def test_charging_window_and_next_departure_sensors_multilang_and_riepilog
 
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         # Scheduled charging window: 23:00 + 6h = 05:00 next day
@@ -899,6 +917,8 @@ async def test_services_validation_and_actions(
 
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         # Accepts datetime.time, "HH:MM", "HH:MM:SS"
@@ -921,6 +941,10 @@ async def test_services_validation_and_actions(
         )
         assert coord.quick_departure_minutes == 8 * 60 + 15
         assert coord.quick_departure_enabled is False
+        # No weekly departure remaining in smart_departure -> sends ricarica_prog_off (no_departure_24h)
+        assert len(sent) == 2
+        assert sent[-1][0] == "ricarica_prog_off"
+        before_manual = len(sent)
 
         await hass.services.async_call(
             DOMAIN,
@@ -931,7 +955,7 @@ async def test_services_validation_and_actions(
         assert coord.charge_start_minutes == 22 * 60 + 30
         assert coord.charge_duration_hours == 5
         assert coord.charge_days == [1, 2, 3, 4, 5]
-        assert len(sent) == 1  # apply=False did not send command
+        assert len(sent) == before_manual  # apply=False did not send command
         assert hass.states.get("time.lepas_charge_start_time").state == "22:30:00"
         assert hass.states.get("number.lepas_charge_duration").state == "5.0"
         assert hass.states.get("select.lepas_charge_days").state == "weekdays"
@@ -942,7 +966,7 @@ async def test_services_validation_and_actions(
             {"start_time": "23:15:00", "duration_hours": 4, "days": [1, 4], "apply": True},
             blocking=True,
         )
-        assert len(sent) == 2
+        assert len(sent) == before_manual + 1
         assert sent[-1][0] == "ricarica_prog_on"
         assert sent[-1][1]["chargeAppointPlans"][0]["cycleData"] == [1, 4]
         assert hass.states.get("select.lepas_charge_days").state == "custom"
@@ -1143,6 +1167,8 @@ async def test_native_departure_entities_restore_and_apply_button(
 
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         # Boot restore must NOT dispatch cloud sync commands
@@ -1229,6 +1255,8 @@ async def test_battery_pack_heat_switch_time_restore_telemetry_and_optimistic_re
 
     entry = await _setup_entry(hass)
     coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
 
     try:
         assert hass.states.get("switch.lepas_battery_pack_heat").state == "on"
@@ -1378,7 +1406,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
         )
         assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
 
-        # LepasWeeklyDepartureSwitch: sync_charge=enabled, sync_native=False (draft until Apply), sync_battery=True
+        # LepasWeeklyDepartureSwitch: sync_charge=True (allows smart_departure immediate off/re-plan), sync_native=False, sync_battery=True
         calls.clear()
         await hass.services.async_call(
             "switch",
@@ -1386,7 +1414,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
             {"entity_id": "switch.lepas_departure_mon_enabled"},
             blocking=True,
         )
-        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
+        assert calls == [{"sync_charge": True, "sync_native": False, "sync_battery": True}]
         calls.clear()
         await hass.services.async_call(
             "switch",
@@ -1406,7 +1434,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
         )
         assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
 
-        # quick_departure switch off/on + quick_departure_time set_value (draft until Apply/apply_native)
+        # quick_departure switch off propagates sync_charge=True so fixed/weekly window restores immediately
         calls.clear()
         await hass.services.async_call(
             "switch",
@@ -1414,7 +1442,7 @@ async def test_schedule_switches_and_times_notify_propagation_flags(
             {"entity_id": "switch.lepas_quick_departure"},
             blocking=True,
         )
-        assert calls == [{"sync_charge": False, "sync_native": False, "sync_battery": True}]
+        assert calls == [{"sync_charge": True, "sync_native": False, "sync_battery": True}]
         calls.clear()
         await hass.services.async_call(
             "time",

@@ -447,10 +447,21 @@ async def test_preclimate_failure_anti_storm_and_quick_reset_and_anti_rollover(h
         unsub()
 
 
+def _set_home(hass, coord: LepasCoordinator, *, plugged: bool = False) -> None:
+    hass.states.async_set("zone.home", "zoning", {"latitude": 45.0, "longitude": 9.0, "radius": 100})
+    coord.position = {"lat": 45.0, "lon": 9.0}
+    if plugged:
+        coord.data = dict(coord.data or {})
+        rt = dict(coord.data.get("realtime") or {})
+        rt["chargeGunState"] = "1"
+        coord.data["realtime"] = rt
+
+
 async def test_charge_sync_quick_immediate_and_notify_schedule_changed(hass, monkeypatch):
     tz = timezone.utc
     hass.config.time_zone = "UTC"
     coord = _make_coord(hass)
+    _set_home(hass, coord)
     coord.charge_duration_hours = 6
     sent: list[tuple[str, dict | None]] = []
 
@@ -497,6 +508,7 @@ async def test_charge_sync_weekly_window_dedup_failure_and_2131_fallback(hass, m
         data={DATA_VEHICLE_FEATURES: {"scheduled_charging": True, "scheduled_charging_custom_days": True}},
         entry_id="w_custom",
     )
+    _set_home(hass, coord, plugged=True)
     coord.departure_weekly[2] = (True, 7 * 60)  # Tuesday 07:00
     coord.charge_duration_hours = 6             # T_charge_start = Tuesday 01:00 (min=60)
     coord.sync_charge_to_departure = True
@@ -530,10 +542,12 @@ async def test_charge_sync_weekly_window_dedup_failure_and_2131_fallback(hass, m
     await coord._departure_tick_cb(_now=datetime(2026, 11, 17, 6, 30, tzinfo=tz))
     assert len(sent) == 2
 
-    # Tuesday 07:00 -> T_dep passed, rolls to next Tuesday (outside 60-min pre-window) -> no send
+    # Tuesday 07:00 -> T_dep passed, rolls to next Tuesday (>24h -> Phase 2 sends ricarica_prog_off)
     coord._last_synced_charge_sig = None
     await coord._departure_tick_cb(_now=datetime(2026, 11, 17, 7, 0, tzinfo=tz))
-    assert len(sent) == 2
+    assert len(sent) == 3
+    assert sent[2][0] == "ricarica_prog_off"
+    assert sent[2][1]["mainSwitch"] == 0
 
     # Failure anti-storm + 2131=0 fallback to [1..7]
     coord2 = _make_coord(
@@ -541,6 +555,7 @@ async def test_charge_sync_weekly_window_dedup_failure_and_2131_fallback(hass, m
         data={DATA_VEHICLE_FEATURES: {"scheduled_charging": True, "scheduled_charging_custom_days": False}},
         entry_id="w_2131",
     )
+    _set_home(hass, coord2, plugged=True)
     coord2.departure_weekly[2] = (True, 7 * 60)
     coord2.charge_duration_hours = 6
     coord2.sync_charge_to_departure = True

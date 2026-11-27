@@ -16,6 +16,24 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.34.0 — 2026-11-27
+
+### 🇬🇧 English
+
+- **Smart Dynamic Just-in-Time Charging Window & AC/DC Power Auto-Learning (`scheduler.py`, `charging_stats.py`, `coordinator.py`, `const.py`, `timers.py`, `diagnostics.py`, `naming.py`, `select.py`, `switch.py`, `number.py`, `sensor.py`, `strings.json`, `translations/{en,it,nl}.json`, `lepas-card.js`)**:
+  - **Just-in-Time Charging Window Engine (`scheduler.py`)**: Added three scheduling modes (`fixed`, `dynamic_window`, `immediate`) that automatically compute start time and `timeConsuming` duration aligned to 15-minute increments relative to the target window/departure, handling midnight rollovers, late plug-ins inside the window, and already-reached target SoC.
+  - **AC/DC Power Auto-Learning & Home Power Control (`charging_stats.py`, `switch.py`, `number.py`)**: Added backwards-compatible persistent AC/DC charging power estimation (`Store` v1), `switch.lepas_home_charge_power_auto` (with clean synchronization on `turn_off`), and `number.lepas_home_charge_power` (`1.4–40.0 kW`, `0.1 kW` step).
+  - **Coordinator Orchestration, Plug-In Debounce & Away Bypass (`coordinator.py`, `const.py`, `timers.py`, `diagnostics.py`)**: Added a `20s` home plug-in debounce (`CHARGE_PLUGIN_DEBOUNCE`), automatic away-from-home schedule bypass with restore on return (`chargeState == 1`), preservation of `charge_start_minutes` under `fixed + quick_override`, and a PII-free `smart_charging` section in diagnostics.
+  - **New HA Entities, Translations & Lovelace Card (`naming.py`, `select.py`, `switch.py`, `number.py`, `sensor.py`, `strings.json`, `translations/{en,it,nl}.json`, `lepas-card.js`)**: Added `select.lepas_charge_window_mode`, `switch.lepas_home_charge_power_auto`, and `number.lepas_home_charge_power` (`151` total entities) with full IT/EN/NL translations, mode selector, contextual badges, and Auto/Manual power controls in `LepasCard`, bumping card assets to `?v=1.34.0`.
+
+### 🇮🇹 Italiano
+
+- **Finestra di Ricarica Dinamica Smart Just-in-Time & Auto-Apprendimento Potenza AC/DC (`scheduler.py`, `charging_stats.py`, `coordinator.py`, `const.py`, `timers.py`, `diagnostics.py`, `naming.py`, `select.py`, `switch.py`, `number.py`, `sensor.py`, `strings.json`, `translations/{en,it,nl}.json`, `lepas-card.js`)**:
+  - **Motore Finestra di Ricarica Dinamica Smart Just-in-Time (`scheduler.py`)**: Introdotte tre modalità (`fixed`, `dynamic_window`, `immediate`) con calcolo automatico di inizio e durata `timeConsuming` allineato a scatti di `15` minuti rispetto alla finestra/partenza e gestione dei casi limite (scavalco mezzanotte, plug-in tardivo dentro la finestra, SoC già al target).
+  - **Auto-Apprendimento Potenza AC/DC & Controllo Potenza Domestica (`charging_stats.py`, `switch.py`, `number.py`)**: Aggiunta stima persistente retrocompatibile (`Store` v1) della potenza di ricarica AC/DC, interruttore `switch.lepas_home_charge_power_auto` (con sincronizzazione pulita su `turn_off`) e selettore `number.lepas_home_charge_power` (`1.4–40.0 kW`, step `0.1 kW`).
+  - **Orchestrazione Coordinator, Debounce Plug-In & Bypass Fuori Casa (`coordinator.py`, `const.py`, `timers.py`, `diagnostics.py`)**: Introdotti debounce `20s` (`CHARGE_PLUGIN_DEBOUNCE`) al plug-in domestico, bypass automatico della programmazione fuori casa con ripristino al rientro (`chargeState == 1`), preservazione di `charge_start_minutes` su `fixed + quick_override`, e sezione `smart_charging` priva di PII nella diagnostica.
+  - **Nuove Entità HA, Traduzioni & Card Lovelace (`naming.py`, `select.py`, `switch.py`, `number.py`, `sensor.py`, `strings.json`, `translations/{en,it,nl}.json`, `lepas-card.js`)**: Aggiunte `select.lepas_charge_window_mode`, `switch.lepas_home_charge_power_auto` e `number.lepas_home_charge_power` (`151` entità totali) con traduzioni complete IT/EN/NL, selettore modalità, badge contestuali e controlli potenza Auto/Manuale nella `LepasCard` con asset aggiornati a `?v=1.34.0`.
+
 ## v1.33.2 — 2026-11-26
 
 ### 🇬🇧 English

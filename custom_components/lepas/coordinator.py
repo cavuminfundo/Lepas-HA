@@ -10,6 +10,7 @@ DALL'entry prima di importarli (assunzione: una sola auto per istanza HA).
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 from collections.abc import Mapping, Sequence
 import functools
@@ -57,27 +58,36 @@ from .const import (
     AUTO_CLOSE_ON_LOCK_KEYS, CHARGE_PROBE_COMMANDS, CLOSURE_META_KEYS, CLOSURE_PROBE_COMMANDS,
     PROBE_MQTT_GRACE_S, CMD_PROBE_DELAYS_S,
 )
-from .charging_stats import ChargingStatsTracker
+from .charging_stats import (
+    ChargingStatsTracker,
+    classify_charge_kind,
+    select_effective_home_power,
+)
 from .consumption import ConsumptionTracker, is_degraded_battery_frame
 from .scheduler import (
+    CHARGE_WINDOW_MODES,
+    DEFAULT_HOME_CHARGE_POWER_KW,
     DEPARTURE_CLIMATE_EXTRAS_COMMANDS,
     DEPARTURE_CLIMATE_EXTRAS_FEATURES,
     DepartureOccurrence,
+    DesiredChargePlan,
     align_charge_start_minutes,
     compute_battery_heat_start_for_departure,
     compute_charge_start_datetime,
-    compute_charge_start_for_departure,
     compute_next_occurrence,
     local_schedule_to_utc,
     next_quick_departure_at,
     normalize_climate_extras,
     parse_days_input,
+    resolve_desired_charge_schedule,
     resolve_tzinfo,
+    select_charge_departure_occurrence,
     shift_minutes,
 )
 from .timers import (
     TimerRegistry, GRUPPO_POLL,
     KEEPALIVE, POLL, HV_POLL, STARTUP_PROBE, DRIVE_WATCH, AWAKE, DEPARTURE_TICK, CMD_PROBE,
+    CHARGE_PLUGIN_DEBOUNCE,
 )
 
 # Cert minimi per il mutual-TLS MQTT (il .cer del server non serve a tls_set, come nel bridge).
@@ -524,7 +534,15 @@ class LepasCoordinator(DataUpdateCoordinator):
             d: (False, 420) for d in range(1, 8)
         }
         self.departure_climate_mode: str = "at_home"
-        self.sync_charge_to_departure: bool = False
+        self._charge_window_mode: str = "off"
+        self._charge_window_mode_restored: bool = False
+        self.home_charge_power_auto: bool = True
+        self.home_charge_power: float = DEFAULT_HOME_CHARGE_POWER_KW
+        self._last_desired_charge_plan: DesiredChargePlan | None = None
+        self._prev_charge_plugged_loop: bool | None = None
+        self._prev_car_in_use_loop: bool | None = None
+        self._last_charge_source_is_rt: bool = True
+        self._last_seen_rt_ref: object | None = None
         self._probed_permessi: dict[int, int] | None = None
         self._departure_busy: bool = False
         self._quick_target_at: datetime | None = None
@@ -755,6 +773,11 @@ class LepasCoordinator(DataUpdateCoordinator):
         with self._charging_lock:
             return self._charging_tracker.period_stats(period, local_date)
 
+    def home_power_profile(self) -> dict[str, object]:
+        """Return learned home AC/DC charging power profile under _charging_lock."""
+        with self._charging_lock:
+            return self._charging_tracker.home_power_profile()
+
     async def async_reset_charging_from_start(self) -> None:
         """Reset cumulative From Start charging stats and notify HA listeners."""
         with self._charging_lock:
@@ -780,10 +803,26 @@ class LepasCoordinator(DataUpdateCoordinator):
         return res if isinstance(res, bool) else None
 
     def _ingest_charging_stats_on_loop(self, patch: dict) -> None:
-        """Ingest realtime or fields-only patch on the HA event loop under _charging_lock."""
+        """Ingest realtime/fields patch on the HA event loop and handle charge transitions."""
         if self._timers.closing:
             return
-        if "realtime" not in patch and "fields" not in patch:
+        has_telemetry = "realtime" in patch or "fields" in patch
+        if not has_telemetry:
+            if "car_in_use" in patch:
+                in_home = self._safe_in_home_zone(self._current_position())
+                car_in_use_now = self.car_in_use
+                prev_car_in_use = self._prev_car_in_use_loop
+                self._prev_car_in_use_loop = car_in_use_now
+                if (
+                    prev_car_in_use is True
+                    and not car_in_use_now
+                    and in_home is False
+                    and self._charge_window_mode != "off"
+                ):
+                    self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                    self._schedule_charge_sync_task("away_park")
+                if in_home is False:
+                    self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
             return
 
         if "realtime" in patch:
@@ -809,15 +848,16 @@ class LepasCoordinator(DataUpdateCoordinator):
         from .entity import field_on
 
         charge_state = _pick_field(sources, "chargeState")
+        fast_charging = field_on(_pick_field(sources, "fastChargingGunStatus")) is True
         plugged = (
             field_on(_pick_field(sources, "chargeGunState")) is True
-            or field_on(_pick_field(sources, "fastChargingGunStatus")) is True
+            or fast_charging
         )
         soc_raw = _safe_float(_pick_field(sources, "dumpEnergy"))
         soc_pct = soc_raw if (soc_raw is not None and 0.0 < soc_raw <= 100.0) else None
         odo_raw = _safe_float(_pick_field(sources, "odometer"))
         odometer = odo_raw if (odo_raw is not None and odo_raw >= 0.0) else None
-        pos = patch.get("position") if "position" in patch else self.data.get("position")
+        pos = patch.get("position") if "position" in patch else self._current_position()
         in_home = self._safe_in_home_zone(pos if isinstance(pos, dict) else None)
 
         now_dt = dt_util.utcnow()
@@ -836,9 +876,84 @@ class LepasCoordinator(DataUpdateCoordinator):
                 in_home_zone=in_home,
                 degraded_battery=degraded,
                 battery_capacity_kwh=self.battery_capacity_kwh,
+                fast_charging=fast_charging,
             )
         if changed and not self._timers.closing:
             self._schedule_charging_save()
+
+        car_in_use_now = self.car_in_use
+        prev_plugged = self._prev_charge_plugged_loop
+        self._prev_charge_plugged_loop = plugged
+        prev_car_in_use = self._prev_car_in_use_loop
+        self._prev_car_in_use_loop = car_in_use_now
+
+        if prev_plugged is False and plugged:
+            self._last_attempted_charge_sig = None
+            if self._charge_window_mode != "off":
+                if in_home is True and not car_in_use_now:
+                    self._arm_charge_plugin_debounce()
+                elif in_home is False and not car_in_use_now:
+                    self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                    self._schedule_charge_sync_task("away_plug_in")
+        elif prev_plugged is True and not plugged:
+            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+
+        if (
+            prev_car_in_use is True
+            and not car_in_use_now
+            and in_home is False
+            and self._charge_window_mode != "off"
+        ):
+            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+            self._schedule_charge_sync_task("away_park")
+
+        if in_home is False:
+            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+
+    @callback
+    def _arm_charge_plugin_debounce(self) -> None:
+        """Arm 20s plug-in debounce timer on the HA event loop."""
+        if self._timers.closing or self._charge_window_mode == "off":
+            return
+        self._timers.arm(
+            CHARGE_PLUGIN_DEBOUNCE,
+            lambda: async_call_later(
+                self.hass,
+                20,
+                self._charge_plugin_debounce_cb,
+            ),
+        )
+
+    async def _charge_plugin_debounce_cb(self, _now) -> None:
+        self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+        if self._timers.closing or self._charge_window_mode == "off":
+            return
+        await self._run_charge_sync_task("plug_in_home")
+
+    async def _run_charge_sync_task(self, trigger: str) -> None:
+        if self._timers.closing:
+            return
+        try:
+            await self._async_sync_charge_desired(trigger=trigger)
+        except Exception as err:  # noqa: BLE001 — background sync must never crash loop
+            _LOGGER.warning(
+                "[scheduler] sync ricarica (%s) fallita (%s)",
+                trigger,
+                type(err).__name__,
+            )
+
+    @callback
+    def _schedule_charge_sync_task(self, trigger: str) -> None:
+        if self._timers.closing:
+            return
+        coro = self._run_charge_sync_task(trigger)
+        if hasattr(self.hass, "async_create_background_task"):
+            self.hass.async_create_background_task(
+                coro,
+                f"{DOMAIN}_charge_{trigger}_sync",
+            )
+        else:
+            self.hass.async_create_task(coro)
 
     # ───────────────── ciclo di vita MQTT auto ─────────────────
     async def async_start(self) -> None:
@@ -1081,16 +1196,77 @@ class LepasCoordinator(DataUpdateCoordinator):
     def _local_tzinfo(self):
         return resolve_tzinfo(self.hass)
 
+    @property
+    def home_charge_power_kw(self) -> float:
+        """Primary home charging power preference in kW."""
+        return float(self.home_charge_power)
+
+    @home_charge_power_kw.setter
+    def home_charge_power_kw(self, value: float) -> None:
+        self.home_charge_power = float(value)
+
+    @property
+    def charge_window_mode(self) -> str:
+        """Current home charging window mode ('off', 'fixed', or 'smart_departure')."""
+        return self._charge_window_mode
+
+    def set_charge_window_mode(
+        self,
+        mode: str,
+        *,
+        from_restore: bool = False,
+        sync_charge: bool = True,
+    ) -> None:
+        """Update home charging window mode with safe boot restore and optional cloud sync."""
+        if mode not in CHARGE_WINDOW_MODES:
+            raise ValueError(f"Unsupported charge window mode: {mode!r}")
+        self._charge_window_mode = mode
+        if from_restore:
+            self._charge_window_mode_restored = True
+            if mode == "off":
+                self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+                self._last_attempted_charge_sig = None
+            if not self._timers.closing:
+                self.async_update_listeners()
+            return
+        self._last_attempted_charge_sig = None
+        if mode == "off":
+            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
+        self.notify_schedule_changed(sync_charge=sync_charge)
+
+    @property
+    def sync_charge_to_departure(self) -> bool:
+        """True when home charging window mode follows departure ('smart_departure')."""
+        return self._charge_window_mode == "smart_departure"
+
+    @sync_charge_to_departure.setter
+    def sync_charge_to_departure(self, enabled: bool) -> None:
+        if enabled:
+            self._charge_window_mode = "smart_departure"
+        elif self._charge_window_mode == "smart_departure":
+            self._charge_window_mode = "fixed"
+
     def build_charge_appoint_plan(
         self,
         *,
         local_start_minutes: int,
-        duration_hours: int,
+        duration_hours: int | None = None,
+        duration_minutes: int | None = None,
         local_days: Sequence[int],
         switch_status: int = 1,
         ref_date: date | None = None,
     ) -> dict:
         """Build a ``chargeAppointPlans[0]`` payload in aligned UTC wire format."""
+        if duration_minutes is not None:
+            if isinstance(duration_minutes, bool):
+                raise ValueError(f"duration_minutes cannot be bool: {duration_minutes!r}")
+            dur_min = int(duration_minutes)
+        elif duration_hours is not None:
+            if isinstance(duration_hours, bool):
+                raise ValueError(f"duration_hours cannot be bool: {duration_hours!r}")
+            dur_min = int(duration_hours) * 60
+        else:
+            raise ValueError("Either duration_minutes or duration_hours must be provided")
         aligned_min = align_charge_start_minutes(local_start_minutes)
         utc_min, utc_days = local_schedule_to_utc(
             aligned_min,
@@ -1102,7 +1278,7 @@ class LepasCoordinator(DataUpdateCoordinator):
             "cycleData": list(utc_days),
             "startTime": int(utc_min),
             "switchStatus": int(switch_status),
-            "timeConsuming": int(duration_hours) * 60,
+            "timeConsuming": dur_min,
         }
 
     def effective_departure_days(self, target_days=None) -> list[int]:
@@ -1578,22 +1754,238 @@ class LepasCoordinator(DataUpdateCoordinator):
         if anchored_min != q_min:
             self._quick_target_at = next_quick_departure_at(now, q_min)
 
-    def _sync_charge_start_local(self, occ: DepartureOccurrence | None) -> bool:
-        if not self.sync_charge_to_departure or occ is None:
-            return False
-        dur_h = int(self.charge_duration_hours or 6)
-        start_min = compute_charge_start_for_departure(occ.departure_at_minutes, dur_h)
-        if self.charge_start_minutes != start_min:
-            self.charge_start_minutes = start_min
-            return True
-        return False
+    def _charge_sources(self) -> tuple[dict | None, ...]:
+        """Build ordered telemetry source dicts without calling _auto_e_sveglia."""
+        data = self.data or {}
+        rt = data.get("realtime")
+        rt_dict = rt if isinstance(rt, dict) else {}
+        data_fields = data.get("fields")
+        msg_fields = data.get("msg_fields")
+        with self._state_lock:
+            fields_snapshot = dict(self._fields)
+        fields = {
+            **fields_snapshot,
+            **(data_fields if isinstance(data_fields, dict) else {}),
+        }
+        if (
+            not self._last_charge_source_is_rt
+            and rt is self._last_seen_rt_ref
+            and isinstance(msg_fields, dict)
+        ):
+            return (msg_fields, rt_dict, fields)
+        return (rt_dict, fields)
 
-    def _charge_sync_window_active(self, now: datetime, occ: DepartureOccurrence) -> bool:
-        if occ.source == "quick":
-            return True
-        dur_h = int(self.charge_duration_hours or 6)
-        charge_start_at = compute_charge_start_datetime(occ.departure_at, dur_h)
-        return shift_minutes(charge_start_at, -60) <= now < occ.departure_at
+    def _car_charge_schedule_is_on(self) -> bool | None:
+        """Read scheduled charge switchStatus from fields.chargeAppointPlans (AB-LEP-019)."""
+        from .entity import field_on
+
+        data = self.data or {}
+        data_fields = data.get("fields")
+        raw = data_fields.get("chargeAppointPlans") if isinstance(data_fields, dict) else None
+        if raw is None:
+            with self._state_lock:
+                raw = self._fields.get("chargeAppointPlans")
+        if not raw:
+            return None
+        try:
+            plans = ast.literal_eval(raw) if isinstance(raw, str) else raw
+            if isinstance(plans, list) and plans and isinstance(plans[0], dict):
+                return field_on(plans[0].get("switchStatus"))
+        except (ValueError, SyntaxError, AttributeError, IndexError, TypeError):
+            pass
+        return None
+
+    def _charge_telemetry_context(
+        self,
+    ) -> tuple[bool | None, bool, str, float | None, bool, int | None]:
+        from .entity import field_on
+
+        sources = self._charge_sources()
+        pos = self._current_position()
+        at_home = self._safe_in_home_zone(pos)
+        plugged = (
+            self._is_plugged()
+            or bool(field_on(_pick_field(sources, "chargeGunState")))
+            or bool(field_on(_pick_field(sources, "fastChargingGunStatus")))
+        )
+        fast_charging = field_on(_pick_field(sources, "fastChargingGunStatus")) is True
+        pwr_kw = _safe_float(_pick_field(sources, "chargingPower"))
+        charge_kind = classify_charge_kind(fast_charging, pwr_kw)
+        soc_raw = _safe_float(_pick_field(sources, "dumpEnergy"))
+        raw_rt = (self.data or {}).get("realtime")
+        degraded = is_degraded_battery_frame(raw_rt if isinstance(raw_rt, dict) else None)
+        cs_raw = _safe_float(_pick_field(sources, "chargeState"))
+        charge_state = int(cs_raw) if cs_raw is not None else None
+        return at_home, plugged, charge_kind, soc_raw, degraded, charge_state
+
+    def evaluate_charge_plan(self, now: datetime | None = None) -> DesiredChargePlan:
+        """Evaluate desired charge schedule without waking the vehicle."""
+        ref_now = now if now is not None else dt_util.now()
+        at_home, plugged, charge_kind, soc_raw, degraded, charge_state = (
+            self._charge_telemetry_context()
+        )
+        profile = self.home_power_profile()
+        manual_kw = float(self.home_charge_power or DEFAULT_HOME_CHARGE_POWER_KW)
+        effective_kw, power_source = select_effective_home_power(
+            auto_enabled=bool(self.home_charge_power_auto),
+            manual_kw=manual_kw,
+            charge_kind=charge_kind,
+            learned_ac_kw=profile.get("learned_ac_kw"),
+            learned_dc_kw=profile.get("learned_dc_kw"),
+        )
+        plan = resolve_desired_charge_schedule(
+            now=ref_now,
+            mode=self._charge_window_mode,
+            at_home=at_home,
+            is_plugged=plugged,
+            charge_state=charge_state,
+            charge_start_minutes=int(self.charge_start_minutes),
+            charge_duration_hours=int(self.charge_duration_hours or 6),
+            charge_days=list(self.charge_days),
+            weekly=self.departure_weekly,
+            quick_enabled=bool(self.quick_departure_enabled),
+            quick_minutes=int(self.quick_departure_minutes),
+            clima_duration_min=int(self.departure_preclimate_duration or 15),
+            soc_pct=soc_raw,
+            degraded_battery=degraded,
+            capacity_kwh=float(self.battery_capacity_kwh or DEFAULT_BATTERY_CAPACITY_KWH),
+            power_kw=effective_kw,
+            power_source=power_source,
+            charge_kind=charge_kind,
+        )
+        self._last_desired_charge_plan = plan
+        return plan
+
+    async def _async_sync_charge_desired(
+        self,
+        *,
+        trigger: str,
+        force: bool = False,
+        now: datetime | None = None,
+    ) -> bool:
+        """Acquire _departure_lock and synchronize the desired charge schedule."""
+        if self._timers.closing:
+            return False
+        async with self._departure_lock:
+            return await self._async_sync_charge_desired_locked(
+                trigger=trigger,
+                force=force,
+                now=now,
+            )
+
+    async def _async_sync_charge_desired_locked(
+        self,
+        *,
+        trigger: str,
+        force: bool = False,
+        now: datetime | None = None,
+    ) -> bool:
+        """Synchronize desired charge schedule; caller must hold _departure_lock."""
+        if self._timers.closing:
+            return False
+        ref_now = now if now is not None else dt_util.now()
+        _, _, _, _, _, charge_state = self._charge_telemetry_context()
+        plan = self.evaluate_charge_plan(ref_now)
+
+        if (
+            self._charge_window_mode == "smart_departure"
+            and plan.action == "enable"
+            and plan.start_minutes is not None
+            and self.charge_start_minutes != plan.start_minutes
+        ):
+            self.charge_start_minutes = plan.start_minutes
+            if not self._timers.closing:
+                self.async_update_listeners()
+
+        if self.car_in_use and not force:
+            return False
+        if plan.action == "noop":
+            return False
+
+        car_sched_on = self._car_charge_schedule_is_on()
+        last_is_disable = (
+            isinstance(self._last_synced_charge_sig, tuple)
+            and self._last_synced_charge_sig[0] == "disable"
+        )
+        if charge_state == 1 and not force:
+            allow_post_bypass_plugin = (
+                trigger == "plug_in_home"
+                and plan.action == "enable"
+                and (car_sched_on is False or last_is_disable)
+            )
+            if not allow_post_bypass_plugin:
+                return False
+
+        if plan.action == "enable":
+            if plan.start_minutes is None or plan.duration_minutes is None:
+                return False
+            eff_days = self.effective_charge_days(list(plan.days or self.charge_days))
+            sig: tuple = (
+                "enable",
+                plan.start_minutes,
+                plan.duration_minutes,
+                tuple(eff_days),
+                plan.target_key,
+            )
+            if not force and (
+                sig == self._last_synced_charge_sig
+                or sig == self._last_attempted_charge_sig
+            ):
+                return False
+            payload_plan = self.build_charge_appoint_plan(
+                local_start_minutes=plan.start_minutes,
+                duration_minutes=plan.duration_minutes,
+                local_days=eff_days,
+                switch_status=1,
+                ref_date=plan.ref_date,
+            )
+            cmd_key = "ricarica_prog_on"
+            body = {"mainSwitch": 1, "chargeAppointPlans": [payload_plan]}
+        elif plan.action == "disable":
+            last_is_enable = (
+                isinstance(self._last_synced_charge_sig, tuple)
+                and self._last_synced_charge_sig[0] == "enable"
+            )
+            sig = ("disable", None, None, (), plan.reason)
+            if not force:
+                if (
+                    sig == self._last_synced_charge_sig
+                    or sig == self._last_attempted_charge_sig
+                ):
+                    return False
+                if car_sched_on is False and not last_is_enable:
+                    return False
+                if car_sched_on is None and last_is_disable:
+                    return False
+            eff_days = self.effective_charge_days()
+            payload_off = self.build_charge_appoint_plan(
+                local_start_minutes=int(self.charge_start_minutes),
+                duration_hours=int(self.charge_duration_hours or 6),
+                local_days=eff_days,
+                switch_status=0,
+            )
+            cmd_key = "ricarica_prog_off"
+            body = {"mainSwitch": 0, "chargeAppointPlans": [payload_off]}
+        else:
+            return False
+
+        try:
+            await self.async_send_command(cmd_key, body)
+        except Exception as err:  # noqa: BLE001 — avoid 60s retry storm
+            if self._timers.closing:
+                return False
+            self._last_attempted_charge_sig = sig
+            _LOGGER.warning(
+                "[scheduler] sincronizzazione ricarica fallita (%s)",
+                type(err).__name__,
+            )
+            return False
+        if self._timers.closing:
+            return False
+        self._last_synced_charge_sig = sig
+        self._last_attempted_charge_sig = None
+        self.async_update_listeners()
+        return True
 
     @callback
     def notify_schedule_changed(
@@ -1614,20 +2006,25 @@ class LepasCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
         self._anchor_quick_target(now)
         occ = self.next_departure_occurrence(now)
-        self._sync_charge_start_local(occ)
+        plan = self.evaluate_charge_plan(now)
+        if (
+            self._charge_window_mode == "smart_departure"
+            and plan.action == "enable"
+            and plan.start_minutes is not None
+        ):
+            self.charge_start_minutes = plan.start_minutes
+        if self._charge_window_mode == "off":
+            self._timers.cancel(CHARGE_PLUGIN_DEBOUNCE)
         self._sync_battery_heat_start_local(occ)
         self.async_update_listeners()
         if (
             sync_charge
-            and self.sync_charge_to_departure
-            and occ is not None
+            and self._charge_window_mode != "off"
             and not self._timers.closing
-            and self._charge_sync_window_active(now, occ)
+            and self._safe_in_home_zone(self._current_position()) is True
+            and not self.car_in_use
         ):
-            self.hass.async_create_background_task(
-                self._async_sync_charge_for_occurrence(occ),
-                f"{DOMAIN}_charge_sync",
-            )
+            self._schedule_charge_sync_task("config_change")
         if sync_native and self.native_departure_sync and not self._timers.closing:
             self.hass.async_create_background_task(
                 self._async_sync_native_departure(occ),
@@ -1673,17 +2070,21 @@ class LepasCoordinator(DataUpdateCoordinator):
             now = dt_util.now()
             self._anchor_quick_target(now, force=True)
             occ = self.next_departure_occurrence(now)
-            self._sync_charge_start_local(occ)
+            plan = self.evaluate_charge_plan(now)
+            if (
+                self._charge_window_mode == "smart_departure"
+                and plan.action == "enable"
+                and plan.start_minutes is not None
+            ):
+                self.charge_start_minutes = plan.start_minutes
             self._sync_battery_heat_start_local(occ)
             self.async_update_listeners()
 
-            if (
-                self.sync_charge_to_departure
-                and occ is not None
-                and not self._timers.closing
-                and self._charge_sync_window_active(now, occ)
-            ):
-                await self._async_sync_charge_for_occurrence(occ)
+            if self._charge_window_mode != "off" and not self._timers.closing:
+                await self._async_sync_charge_desired_locked(
+                    trigger="quick_departure",
+                    now=now,
+                )
                 if self._timers.closing:
                     return
 
@@ -1745,16 +2146,33 @@ class LepasCoordinator(DataUpdateCoordinator):
         start_min = align_charge_start_minutes(self.charge_start_minutes)
         eff_days = self.effective_charge_days()
         now = dt_util.now()
-        occ = self.next_departure_occurrence(now)
+        eval_plan = self.evaluate_charge_plan(now)
         target_iso = "manual"
         ref_date: date | None = None
-        if self.sync_charge_to_departure and occ is not None:
-            occ_charge_start = compute_charge_start_datetime(occ.departure_at, dur_h)
-            occ_start_min = occ_charge_start.hour * 60 + occ_charge_start.minute
-            occ_days = self.effective_charge_days([occ_charge_start.isoweekday()])
-            if occ_start_min == start_min and tuple(occ_days) == tuple(eff_days):
-                target_iso = occ_charge_start.isoformat()
-                ref_date = occ_charge_start.date()
+        if (
+            eval_plan.action == "enable"
+            and eval_plan.start_minutes == start_min
+            and eval_plan.duration_minutes == dur_h * 60
+            and tuple(
+                self.effective_charge_days(list(eval_plan.days or self.charge_days))
+            )
+            == tuple(eff_days)
+        ):
+            target_iso = eval_plan.target_key
+            ref_date = eval_plan.ref_date
+        elif self._charge_window_mode == "fixed" and not self.quick_departure_enabled:
+            target_iso = "fixed"
+        elif self.sync_charge_to_departure:
+            occ = self.next_departure_occurrence(now)
+            if occ is not None:
+                occ_charge_start = compute_charge_start_datetime(occ.departure_at, dur_h)
+                occ_start_min = occ_charge_start.hour * 60 + occ_charge_start.minute
+                occ_days = self.effective_charge_days([occ_charge_start.isoweekday()])
+                if occ_start_min == start_min and tuple(occ_days) == tuple(eff_days):
+                    target_iso = occ.key
+                    ref_date = occ_charge_start.date()
+
+        self._last_attempted_charge_sig = None
         plan = self.build_charge_appoint_plan(
             local_start_minutes=start_min,
             duration_hours=dur_h,
@@ -1769,41 +2187,13 @@ class LepasCoordinator(DataUpdateCoordinator):
         if self._timers.closing:
             return
 
-        self._last_synced_charge_sig = (target_iso, start_min, dur_h, tuple(eff_days))
-        self._last_attempted_charge_sig = None
-
-    async def _async_sync_charge_for_occurrence(self, occ: DepartureOccurrence) -> None:
-        if self._timers.closing:
-            return
-        dur_h = int(self.charge_duration_hours or 6)
-        charge_start_at = compute_charge_start_datetime(occ.departure_at, dur_h)
-        start_min = charge_start_at.hour * 60 + charge_start_at.minute
-        days = self.effective_charge_days([charge_start_at.isoweekday()])
-        sig = (charge_start_at.isoformat(), start_min, dur_h, tuple(days))
-        if sig == self._last_synced_charge_sig or sig == self._last_attempted_charge_sig:
-            return
-
-        plan = self.build_charge_appoint_plan(
-            local_start_minutes=start_min,
-            duration_hours=dur_h,
-            local_days=days,
-            switch_status=1,
-            ref_date=charge_start_at.date(),
+        self._last_synced_charge_sig = (
+            "enable",
+            start_min,
+            dur_h * 60,
+            tuple(eff_days),
+            target_iso,
         )
-        try:
-            await self.async_send_command(
-                "ricarica_prog_on",
-                {"mainSwitch": 1, "chargeAppointPlans": [plan]},
-            )
-        except Exception as err:  # noqa: BLE001 — evita retry storm ogni 60s
-            if self._timers.closing:
-                return
-            self._last_attempted_charge_sig = sig
-            _LOGGER.warning("[scheduler] sincronizzazione ricarica fallita: %s", err)
-            return
-        if self._timers.closing:
-            return
-        self._last_synced_charge_sig = sig
         self._last_attempted_charge_sig = None
 
     def _current_position(self) -> dict | None:
@@ -1986,13 +2376,77 @@ class LepasCoordinator(DataUpdateCoordinator):
                     self._quick_native_until is not None and now < self._quick_native_until
                 )
 
-                if occ is not None and self.sync_charge_to_departure:
-                    if self._sync_charge_start_local(occ):
+                if self._charge_window_mode != "off":
+                    at_home = self._safe_in_home_zone(self._current_position())
+                    plugged = self._is_plugged()
+                    plan = self.evaluate_charge_plan(now)
+                    if (
+                        self._charge_window_mode == "smart_departure"
+                        and plan.action == "enable"
+                        and plan.start_minutes is not None
+                        and self.charge_start_minutes != plan.start_minutes
+                    ):
+                        self.charge_start_minutes = plan.start_minutes
                         self.async_update_listeners()
-                    if self._charge_sync_window_active(now, occ):
-                        await self._async_sync_charge_for_occurrence(occ)
-                        if self._timers.closing:
-                            return
+
+                    if quick_expired:
+                        self._last_attempted_charge_sig = None
+                        if not plugged:
+                            if (
+                                isinstance(self._last_synced_charge_sig, tuple)
+                                and len(self._last_synced_charge_sig) >= 5
+                                and str(self._last_synced_charge_sig[4]).startswith("quick:")
+                            ):
+                                self._last_synced_charge_sig = None
+                            self.async_update_listeners()
+                        elif at_home is True:
+                            await self._async_sync_charge_desired_locked(
+                                trigger="quick_expired",
+                                now=now,
+                            )
+                            if self._timers.closing:
+                                return
+                    elif at_home is True and plugged and not holding_quick:
+                        should_sync = False
+                        if (
+                            plan.action == "enable"
+                            and plan.reason in ("smart_home", "quick_override")
+                            and plan.start_minutes is not None
+                            and plan.ref_date is not None
+                        ):
+                            tz = now.tzinfo or self._local_tzinfo()
+                            hh, mm = divmod(int(plan.start_minutes) % 1440, 60)
+                            start_at = datetime(
+                                plan.ref_date.year,
+                                plan.ref_date.month,
+                                plan.ref_date.day,
+                                hh,
+                                mm,
+                                tzinfo=tz,
+                            )
+                            dep_occ, _ = select_charge_departure_occurrence(
+                                now,
+                                self.departure_weekly,
+                                bool(self.quick_departure_enabled),
+                                int(self.quick_departure_minutes),
+                                int(self.departure_preclimate_duration or 15),
+                            )
+                            if dep_occ is not None:
+                                should_sync = (
+                                    shift_minutes(start_at, -60) <= now < dep_occ.departure_at
+                                )
+                        elif (
+                            plan.action == "enable" and plan.reason == "fixed_home"
+                        ) or plan.action == "disable":
+                            should_sync = True
+
+                        if should_sync:
+                            await self._async_sync_charge_desired_locked(
+                                trigger="tick",
+                                now=now,
+                            )
+                            if self._timers.closing:
+                                return
 
                 if not holding_quick:
                     weekly_dirty = self._is_weekly_dirty()
@@ -2059,15 +2513,14 @@ class LepasCoordinator(DataUpdateCoordinator):
             self._poll_busy = False
 
     def _is_plugged(self) -> bool:
-        """True se la spina di ricarica è collegata (chargeGunState != 0). Legge il
-        valore più fresco: realtime se presente, altrimenti l'ultimo 5A02 via MQTT."""
+        """True if AC or DC charging gun is plugged, prioritizing newer MQTT pushes over stale realtime."""
         from .entity import field_on
-        rt = self.data.get("realtime") or {}
-        v = rt.get("chargeGunState")
-        if v is None:
-            with self._state_lock:
-                v = self._fields.get("chargeGunState")
-        return bool(field_on(v))
+
+        sources = self._charge_sources()
+        return (
+            field_on(_pick_field(sources, "chargeGunState")) is True
+            or field_on(_pick_field(sources, "fastChargingGunStatus")) is True
+        )
 
     def _schedule_next_poll(self) -> None:
         """Rischedula il prossimo poll in base allo stato spina attuale. Se lo stato
@@ -2582,6 +3035,11 @@ class LepasCoordinator(DataUpdateCoordinator):
         self.hass.loop.call_soon_threadsafe(self._apply_update, patch)
 
     def _apply_update(self, patch: dict) -> None:
+        if "realtime" in patch:
+            self._last_seen_rt_ref = patch.get("realtime")
+            self._last_charge_source_is_rt = True
+        elif "msg_fields" in patch:
+            self._last_charge_source_is_rt = False
         self.data = {**self.data, **patch}
         self._ingest_charging_stats_on_loop(patch)
         self.async_set_updated_data(self.data)
@@ -3107,6 +3565,11 @@ class LepasCoordinator(DataUpdateCoordinator):
                 self.hass, every, self._hv_followup_cb))
         else:
             self._hv_poll_count = 0
+
+    @property
+    def car_in_use(self) -> bool:
+        """True if the vehicle is in an active usage session."""
+        return bool((self.data or {}).get("car_in_use", False)) or self.is_car_in_use()
 
     def is_car_in_use(self) -> bool:
         """True se l'auto e' in una sessione di utilizzo attiva (latch di sessione HV)."""

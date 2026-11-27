@@ -41,12 +41,13 @@ DRIVE_WATCH = "drive_watch"      # battito di rilevamento marcia (sola lettura)
 AWAKE = "awake_expiry"           # scadenza dello stato «auto sveglia» (nessun contatto col cloud)
 DEPARTURE_TICK = "departure_tick"  # programmatore locale partenze/ricarica (sopravvive a poll OFF)
 CMD_PROBE = "cmd_probe"          # sonda passiva post-comando chiusure
+CHARGE_PLUGIN_DEBOUNCE = "charge_plugin_debounce"
 
 # Timer legati all'interruttore «Aggiornamento automatico»: si spengono TUTTI insieme.
 # Il keep-alive NON è del gruppo — tiene viva la sessione (nessun contatto con l'auto) e
 # deve continuare anche a poll spento, altrimenti il token scadrebbe e l'utente si
 # ritroverebbe a rifare un OTP senza motivo.
-GRUPPO_POLL = (POLL, HV_POLL, STARTUP_PROBE, DRIVE_WATCH, CMD_PROBE)
+GRUPPO_POLL = (POLL, HV_POLL, STARTUP_PROBE, DRIVE_WATCH, CMD_PROBE, CHARGE_PLUGIN_DEBOUNCE)
 
 
 class TimerRegistry:

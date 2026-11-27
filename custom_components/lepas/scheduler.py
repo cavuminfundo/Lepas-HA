@@ -1,11 +1,24 @@
 """Pure scheduling calculations for departure pre-climate and smart charging."""
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
+from .const import DEFAULT_BATTERY_CAPACITY_KWH
+from .consumption import _safe_float
+
 CHARGE_START_STEP_MINUTES = 15
+CHARGE_DURATION_STEP_MINUTES = 15
+CHARGE_WINDOW_MODES = ("off", "fixed", "smart_departure")
+SMART_AC_EFFICIENCY = 0.90
+SMART_AC_CV_MARGIN_MIN = 25
+SMART_DC_EFFICIENCY = 0.92
+SMART_DC_CV_MARGIN_MIN = 30
+SMART_MIN_DURATION_MIN = 30
+DEFAULT_HOME_CHARGE_POWER_KW = 2.3
+SMART_24H_WINDOW_MAX_MINUTES = 23 * 60 + 45
 
 CHARGE_DAYS_PRESETS: dict[str, list[int]] = {
     "all_days": [1, 2, 3, 4, 5, 6, 7],
@@ -156,6 +169,328 @@ def compute_next_occurrence(
     if quick_occ is not None and weekly_occ is not None:
         return quick_occ if quick_occ.departure_at <= weekly_occ.departure_at else weekly_occ
     return quick_occ or weekly_occ
+
+
+@dataclass(frozen=True)
+class SmartChargeEstimate:
+    """Estimated charging duration and intermediate energy metrics."""
+
+    duration_minutes: int
+    raw_minutes: float
+    missing_kwh: float
+    fallback_used: bool
+    soc_used: float | None
+    charge_kind: str
+
+
+@dataclass(frozen=True)
+class DesiredChargePlan:
+    """Resolved target charge schedule or bypass/immediate directive."""
+
+    action: str
+    reason: str
+    start_minutes: int | None
+    duration_minutes: int | None
+    days: tuple[int, ...] | None
+    ref_date: date | None
+    target_key: str
+    estimated_duration_min: int | None
+    soc_used: float | None
+    charge_kind: str
+    effective_power_kw: float
+    power_source: str
+    fallback_used: bool
+    away_bypass_active: bool
+    quick_override_active: bool
+
+
+def select_charge_departure_occurrence(
+    now: datetime,
+    weekly: Mapping[int, tuple[bool, int]] | None,
+    quick_enabled: bool,
+    quick_minutes: int,
+    clima_duration_min: int,
+) -> tuple[DepartureOccurrence | None, bool]:
+    """Return ``(occurrence, quick_override_active)`` with quick taking priority over weekly."""
+    if quick_enabled and not isinstance(quick_minutes, bool):
+        try:
+            q_min = int(quick_minutes)
+        except (TypeError, ValueError):
+            q_min = -1
+        if 0 <= q_min < 1440:
+            quick_dt = next_quick_departure_at(now, q_min)
+            return (_build_occurrence("quick", quick_dt, clima_duration_min), True)
+
+    weekly_occ = compute_next_occurrence(
+        now, weekly, False, quick_minutes, clima_duration_min
+    )
+    return (weekly_occ, False)
+
+
+def estimate_smart_charge_plan(
+    *,
+    soc_pct: float | None,
+    degraded_battery: bool,
+    capacity_kwh: float,
+    power_kw: float,
+    charge_kind: str,
+    max_duration_hours: int,
+    step_minutes: int = CHARGE_DURATION_STEP_MINUTES,
+) -> SmartChargeEstimate:
+    """Estimate duration in minutes to reach 100% SoC, falling back safely on bad SoC."""
+    kind = "dc" if charge_kind == "dc" else "ac"
+
+    if isinstance(max_duration_hours, bool):
+        max_hours = 6
+    else:
+        try:
+            max_hours = int(max_duration_hours)
+        except (TypeError, ValueError):
+            max_hours = 6
+    max_dur_min = max(SMART_MIN_DURATION_MIN, min(720, max_hours * 60))
+
+    if isinstance(step_minutes, bool):
+        step = CHARGE_DURATION_STEP_MINUTES
+    else:
+        try:
+            step = int(step_minutes)
+        except (TypeError, ValueError):
+            step = CHARGE_DURATION_STEP_MINUTES
+        if step <= 0:
+            step = CHARGE_DURATION_STEP_MINUTES
+
+    soc = None if degraded_battery else _safe_float(soc_pct)
+    if soc is None or not (0.0 <= soc <= 100.0):
+        return SmartChargeEstimate(
+            duration_minutes=max_dur_min,
+            raw_minutes=float(max_dur_min),
+            missing_kwh=0.0,
+            fallback_used=True,
+            soc_used=None,
+            charge_kind=kind,
+        )
+
+    cap_raw = _safe_float(capacity_kwh)
+    cap = (
+        cap_raw
+        if (cap_raw is not None and cap_raw > 0.0)
+        else DEFAULT_BATTERY_CAPACITY_KWH
+    )
+    pwr_raw = _safe_float(power_kw)
+    pwr = (
+        pwr_raw
+        if (pwr_raw is not None and pwr_raw > 0.0)
+        else DEFAULT_HOME_CHARGE_POWER_KW
+    )
+    missing_kwh = max(0.0, cap * ((100.0 - soc) / 100.0))
+
+    if soc >= 99.0:
+        rounded_min = math.ceil(round(SMART_MIN_DURATION_MIN / step, 9)) * step
+        duration_minutes = max(SMART_MIN_DURATION_MIN, min(max_dur_min, rounded_min))
+        return SmartChargeEstimate(
+            duration_minutes=duration_minutes,
+            raw_minutes=float(SMART_MIN_DURATION_MIN),
+            missing_kwh=missing_kwh,
+            fallback_used=False,
+            soc_used=soc,
+            charge_kind=kind,
+        )
+
+    eta = SMART_DC_EFFICIENCY if kind == "dc" else SMART_AC_EFFICIENCY
+    cv_margin = SMART_DC_CV_MARGIN_MIN if kind == "dc" else SMART_AC_CV_MARGIN_MIN
+    raw_min = (missing_kwh / (pwr * eta)) * 60.0 + cv_margin
+    # Round ratio before ceil so IEEE-754 representation jitter never bumps exact steps.
+    rounded_min = math.ceil(round(raw_min / step, 9)) * step
+    duration_minutes = max(SMART_MIN_DURATION_MIN, min(max_dur_min, rounded_min))
+    return SmartChargeEstimate(
+        duration_minutes=duration_minutes,
+        raw_minutes=raw_min,
+        missing_kwh=missing_kwh,
+        fallback_used=False,
+        soc_used=soc,
+        charge_kind=kind,
+    )
+
+
+def resolve_desired_charge_schedule(
+    *,
+    now: datetime,
+    mode: str,
+    at_home: bool | None,
+    is_plugged: bool,
+    charge_state: int | None,
+    charge_start_minutes: int,
+    charge_duration_hours: int,
+    charge_days: Sequence[int],
+    weekly: Mapping[int, tuple[bool, int]] | None,
+    quick_enabled: bool,
+    quick_minutes: int,
+    clima_duration_min: int,
+    soc_pct: float | None,
+    degraded_battery: bool,
+    capacity_kwh: float,
+    power_kw: float,
+    power_source: str,
+    charge_kind: str,
+    step_minutes: int = CHARGE_DURATION_STEP_MINUTES,
+) -> DesiredChargePlan:
+    """Resolve the desired charging schedule from mode, home presence, SoC, and departures."""
+    kind = "dc" if charge_kind == "dc" else "ac"
+    pwr_raw = _safe_float(power_kw)
+    eff_power = (
+        pwr_raw
+        if (pwr_raw is not None and pwr_raw > 0.0)
+        else DEFAULT_HOME_CHARGE_POWER_KW
+    )
+    pwr_src = (
+        power_source
+        if power_source in ("learned_ac", "learned_dc", "manual")
+        else "manual"
+    )
+    soc_raw = None if degraded_battery else _safe_float(soc_pct)
+    valid_soc = soc_raw if (soc_raw is not None and 0.0 <= soc_raw <= 100.0) else None
+
+    def _plan(
+        *,
+        action: str,
+        reason: str,
+        target_key: str,
+        start_minutes: int | None = None,
+        duration_minutes: int | None = None,
+        days: tuple[int, ...] | None = None,
+        ref_date: date | None = None,
+        estimated_duration_min: int | None = None,
+        soc_used: float | None = valid_soc,
+        fallback_used: bool = False,
+        away_bypass_active: bool = False,
+        quick_override_active: bool = False,
+    ) -> DesiredChargePlan:
+        return DesiredChargePlan(
+            action=action,
+            reason=reason,
+            start_minutes=start_minutes,
+            duration_minutes=duration_minutes,
+            days=days,
+            ref_date=ref_date,
+            target_key=target_key,
+            estimated_duration_min=estimated_duration_min,
+            soc_used=soc_used,
+            charge_kind=kind,
+            effective_power_kw=eff_power,
+            power_source=pwr_src,
+            fallback_used=fallback_used,
+            away_bypass_active=away_bypass_active,
+            quick_override_active=quick_override_active,
+        )
+
+    if mode not in ("fixed", "smart_departure"):
+        return _plan(action="noop", reason="mode_off", target_key="manual")
+
+    if at_home is None:
+        return _plan(action="noop", reason="unknown_location", target_key="manual")
+
+    if at_home is False:
+        return _plan(
+            action="disable",
+            reason="away_bypass",
+            target_key="bypass",
+            away_bypass_active=True,
+        )
+
+    use_smart = mode == "smart_departure"
+    occ: DepartureOccurrence | None = None
+    quick_override_active = False
+    if use_smart or quick_enabled:
+        occ, quick_override_active = select_charge_departure_occurrence(
+            now, weekly, quick_enabled, quick_minutes, clima_duration_min
+        )
+        if mode == "fixed" and not quick_override_active:
+            occ = None
+
+    if use_smart or quick_override_active:
+        if occ is None:
+            return _plan(
+                action="disable",
+                reason="no_departure_24h",
+                target_key="immediate",
+                quick_override_active=quick_override_active,
+            )
+
+        cs_val = _safe_float(charge_state)
+        if cs_val == 2.0 or (
+            valid_soc is not None and valid_soc >= 99.0 and is_plugged
+        ):
+            return _plan(
+                action="noop",
+                reason="already_charged",
+                target_key=occ.key,
+                quick_override_active=quick_override_active,
+            )
+
+        est = estimate_smart_charge_plan(
+            soc_pct=soc_pct,
+            degraded_battery=degraded_battery,
+            capacity_kwh=capacity_kwh,
+            power_kw=eff_power,
+            charge_kind=kind,
+            max_duration_hours=charge_duration_hours,
+            step_minutes=step_minutes,
+        )
+        raw_start = (
+            occ.departure_at.hour * 60 + occ.departure_at.minute - est.duration_minutes
+        ) % 1440
+        floor_delta = raw_start - align_charge_start_minutes(
+            raw_start, step=CHARGE_START_STEP_MINUTES
+        )
+        smart_start_at = shift_minutes(
+            occ.departure_at, -(est.duration_minutes + floor_delta)
+        )
+
+        if now >= smart_start_at and now < occ.departure_at:
+            return _plan(
+                action="disable",
+                reason="late_plug_in",
+                target_key="immediate",
+                estimated_duration_min=est.duration_minutes,
+                soc_used=est.soc_used,
+                fallback_used=est.fallback_used,
+                quick_override_active=quick_override_active,
+            )
+
+        if (smart_start_at - now) > timedelta(minutes=SMART_24H_WINDOW_MAX_MINUTES):
+            return _plan(
+                action="disable",
+                reason="no_departure_24h",
+                target_key="immediate",
+                estimated_duration_min=est.duration_minutes,
+                soc_used=est.soc_used,
+                fallback_used=est.fallback_used,
+                quick_override_active=quick_override_active,
+            )
+
+        return _plan(
+            action="enable",
+            reason="quick_override" if quick_override_active else "smart_home",
+            start_minutes=smart_start_at.hour * 60 + smart_start_at.minute,
+            duration_minutes=est.duration_minutes,
+            days=(smart_start_at.isoweekday(),),
+            ref_date=smart_start_at.date(),
+            target_key=f"{occ.source}:{occ.departure_at.isoformat()}",
+            estimated_duration_min=est.duration_minutes,
+            soc_used=est.soc_used,
+            fallback_used=est.fallback_used,
+            quick_override_active=quick_override_active,
+        )
+
+    return _plan(
+        action="enable",
+        reason="fixed_home",
+        start_minutes=align_charge_start_minutes(charge_start_minutes),
+        duration_minutes=int(charge_duration_hours) * 60,
+        days=tuple(int(d) for d in charge_days),
+        ref_date=now.date(),
+        target_key="fixed",
+    )
 
 
 def compute_charge_window(

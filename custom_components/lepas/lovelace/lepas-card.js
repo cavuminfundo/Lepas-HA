@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.33.2).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.34.0).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.33.2";
+  var CARD_VERSION = "1.34.0";
   var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -96,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.33.2",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.33.2",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.33.2",
-    black: "/lepas_card/lepas-hero-black.png?v=1.33.2",
-    white: "/lepas_card/lepas-hero-white.png?v=1.33.2",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.34.0",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.34.0",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.34.0",
+    black: "/lepas_card/lepas-hero-black.png?v=1.34.0",
+    white: "/lepas_card/lepas-hero-white.png?v=1.34.0",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.33.2";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.34.0";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -283,6 +283,16 @@
       stopCharging: "Ferma ricarica",
       chargeModeManual: "Orario manuale",
       chargeModeDeparture: "Segui partenza",
+      chargeWindowMode: "Modalità finestra",
+      awayBypassBadge: "Bypass fuori casa",
+      quickOverrideBadge: "Override Partenza rapida",
+      immediateChargeBadge: "Ricarica immediata",
+      homeChargePower: "Potenza domestica",
+      powerModeAuto: "Auto",
+      powerModeManual: "Manuale",
+      powerSourceAutoAc: "Auto AC",
+      powerSourceAutoDc: "Auto DC",
+      powerSourceManual: "Manuale",
       followDepartureTitle: "Avvio automatico per partenza",
       noDeparturePlanned: "Nessuna partenza attiva: abilita un giorno sotto.",
       closuresGroup: "Aperture e accessi",
@@ -346,6 +356,7 @@
       tpmsLabels: { front_left: "ANT SX", front_right: "ANT DX", rear_left: "POST SX", rear_right: "POST DX" },
       options: {
         departure_climate_mode: { at_home: "Solo a casa", anywhere: "Ovunque", off: "Disattivato" },
+        charge_window_mode: { off: "Spenta", fixed: "Orario fisso", smart_departure: "Partenza Smart" },
         charge_days: {
           all_days: "Tutti i giorni",
           weekdays: "Lun–Ven",
@@ -496,6 +507,16 @@
       stopCharging: "Stop charging",
       chargeModeManual: "Manual time",
       chargeModeDeparture: "Follow departure",
+      chargeWindowMode: "Window mode",
+      awayBypassBadge: "Away bypass",
+      quickOverrideBadge: "Quick departure override",
+      immediateChargeBadge: "Immediate charging",
+      homeChargePower: "Home power",
+      powerModeAuto: "Auto",
+      powerModeManual: "Manual",
+      powerSourceAutoAc: "Auto AC",
+      powerSourceAutoDc: "Auto DC",
+      powerSourceManual: "Manual",
       followDepartureTitle: "Auto-start before departure",
       noDeparturePlanned: "No active departure: enable a day below.",
       closuresGroup: "Closures and access",
@@ -559,6 +580,7 @@
       tpmsLabels: { front_left: "FL", front_right: "FR", rear_left: "RL", rear_right: "RR" },
       options: {
         departure_climate_mode: { at_home: "Home only", anywhere: "Anywhere", off: "Off" },
+        charge_window_mode: { off: "Off", fixed: "Fixed schedule", smart_departure: "Smart departure" },
         charge_days: {
           all_days: "Every day",
           weekdays: "Mon–Fri",
@@ -709,6 +731,16 @@
       stopCharging: "Laden stoppen",
       chargeModeManual: "Handmatige tijd",
       chargeModeDeparture: "Volg vertrek",
+      chargeWindowMode: "Laadvenstermodus",
+      awayBypassBadge: "Buitenshuis-bypass",
+      quickOverrideBadge: "Snel-vertrek override",
+      immediateChargeBadge: "Direct laden",
+      homeChargePower: "Thuisvermogen",
+      powerModeAuto: "Auto",
+      powerModeManual: "Handmatig",
+      powerSourceAutoAc: "Auto AC",
+      powerSourceAutoDc: "Auto DC",
+      powerSourceManual: "Handmatig",
       followDepartureTitle: "Automatische start voor vertrek",
       noDeparturePlanned: "Geen actief vertrek: schakel hieronder een dag in.",
       closuresGroup: "Sluitingen en toegang",
@@ -772,6 +804,7 @@
       tpmsLabels: { front_left: "LV", front_right: "RV", rear_left: "LA", rear_right: "RA" },
       options: {
         departure_climate_mode: { at_home: "Alleen thuis", anywhere: "Overal", off: "Uitgeschakeld" },
+        charge_window_mode: { off: "Uit", fixed: "Vast schema", smart_departure: "Slim vertrek" },
         charge_days: {
           all_days: "Elke dag",
           weekdays: "Ma–Vr",
@@ -2243,6 +2276,17 @@
       ".departure-charge-box { background: var(--lp-elevated); border: 1px solid rgba(52, 211, 153, 0.34); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }",
       ".dep-charge-title { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; color: var(--lp-emerald); }",
       ".dep-charge-val { font-size: 0.84rem; color: var(--lp-text); font-weight: 600; }",
+      ".charge-window-seg { grid-template-columns: repeat(3, minmax(0, 1fr)); }",
+      ".charge-window-seg .seg-btn { min-height: 36px; padding: 5px 6px; font-size: 0.74rem; line-height: 1.15; text-align: center; }",
+      ".charge-window-seg .seg-btn.is-pending, .home-power-seg .seg-btn.is-pending { opacity: 0.58; cursor: wait; }",
+      ".home-power-box { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--lp-border); padding-top: 8px; }",
+      ".home-power-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }",
+      ".home-power-seg { flex: 1 1 140px; min-width: 0; }",
+      ".home-power-seg .seg-btn { min-height: 36px; padding: 4px 8px; font-size: 0.76rem; }",
+      ".home-power-seg .seg-btn.is-emerald { border-color: rgba(52, 211, 153, 0.45); color: var(--lp-emerald); background: rgba(52, 211, 153, 0.12); }",
+      ".home-power-input-wrap { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }",
+      ".home-power-input { width: 78px; min-height: 36px; text-align: right; }",
+      ".home-power-unit { font-size: 0.78rem; font-weight: 600; color: var(--lp-text-secondary); }",
       ".timeline-track { position: relative; height: 14px; border-radius: 7px; background: var(--lp-elevated); border: 1px solid var(--lp-border); overflow: hidden; }",
       ".timeline-seg { position: absolute; top: 0; bottom: 0; background: var(--lp-emerald); opacity: 0.85; border-radius: 4px; }",
       ".timeline-axis { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--lp-text-muted); margin-top: 3px; }",
@@ -2609,6 +2653,8 @@
       this._currentChargeDaysBaseSig = "";
       this._chargeDaysEntityId = null;
       this._syncChargeState = null;
+      this._chargeWindowModeState = null;
+      this._homePowerAutoState = null;
       this._optimisticClimateExtras = null;
       this._currentClimateExtras = [];
       this._currentClimateExtrasBaseSig = "";
@@ -3125,6 +3171,34 @@
         return;
       }
 
+      var chgWinModeEl = target.closest("[data-charge-window-mode]");
+      if (chgWinModeEl) {
+        ev.stopPropagation();
+        if (chgWinModeEl.disabled) return;
+        var nextWinMode = chgWinModeEl.getAttribute("data-charge-window-mode");
+        var cwm = this._chargeWindowModeState;
+        if (cwm && cwm.id && nextWinMode && nextWinMode !== cwm.state) {
+          this._callService("select", "select_option", { entity_id: cwm.id, option: nextWinMode }, "charge_window_mode");
+        }
+        return;
+      }
+
+      var homePowerAutoEl = target.closest("[data-home-power-auto]");
+      if (homePowerAutoEl) {
+        ev.stopPropagation();
+        if (homePowerAutoEl.disabled) return;
+        var hpMode = homePowerAutoEl.getAttribute("data-home-power-auto");
+        var hpa = this._homePowerAutoState;
+        if (hpa && hpa.id) {
+          if (hpMode === "on" && hpa.on !== true) {
+            this._callService("switch", "turn_on", { entity_id: hpa.id }, "home_charge_power_auto");
+          } else if (hpMode === "off" && hpa.on !== false) {
+            this._callService("switch", "turn_off", { entity_id: hpa.id }, "home_charge_power_auto");
+          }
+        }
+        return;
+      }
+
       var cliExtraEl = target.closest("[data-climate-extra]");
       if (cliExtraEl) {
         ev.stopPropagation();
@@ -3211,6 +3285,25 @@
         this._callService("time", "set_value", { entity_id: entId, time: formatted }, "input:" + entId);
       } else if (domain === "select") {
         this._callService("select", "select_option", { entity_id: entId, option: rawVal }, "input:" + entId);
+      } else if (domain === "number") {
+        var numVal = Number(rawVal.replace(",", "."));
+        if (!Number.isFinite(numVal)) return;
+        var entSt = (this._hass.states && this._hass.states[entId]) || null;
+        var nAttrs = (entSt && entSt.attributes) || {};
+        var minV = (typeof nAttrs.min === "number" && Number.isFinite(nAttrs.min)) ? nAttrs.min : parseFloat(target.getAttribute("min"));
+        var maxV = (typeof nAttrs.max === "number" && Number.isFinite(nAttrs.max)) ? nAttrs.max : parseFloat(target.getAttribute("max"));
+        var stepV = (typeof nAttrs.step === "number" && Number.isFinite(nAttrs.step) && nAttrs.step > 0) ? nAttrs.step : parseFloat(target.getAttribute("step"));
+        if (Number.isFinite(minV) && numVal < minV) numVal = minV;
+        if (Number.isFinite(maxV) && numVal > maxV) numVal = maxV;
+        if (Number.isFinite(stepV) && stepV > 0) {
+          var baseV = Number.isFinite(minV) ? minV : 0;
+          var snapped = baseV + Math.round((numVal - baseV) / stepV) * stepV;
+          if (Number.isFinite(minV) && snapped < minV) snapped = minV;
+          if (Number.isFinite(maxV) && snapped > maxV) snapped = maxV;
+          numVal = Math.round(snapped * 1000) / 1000;
+        }
+        target.value = String(numVal);
+        this._callService("number", "set_value", { entity_id: entId, value: numVal }, "input:" + entId);
       }
     }
 
@@ -3538,6 +3631,9 @@
       var fastPort = this._findDomain(items, "sensor", "fast_charging_port");
       var schedSwitch = this._findDomain(items, "switch", "scheduled_charging");
       var schedWindow = this._findDomain(items, "sensor", "scheduled_charging_window");
+      var chargeWindowMode = this._findDomain(items, "select", "charge_window_mode");
+      var homePowerAuto = this._findDomain(items, "switch", "home_charge_power_auto");
+      var homePower = this._findDomain(items, "number", "home_charge_power");
       var chgStartTime = this._findDomain(items, "time", "charge_start_time");
       var chgDur = this._findDomain(items, "number", "charge_duration");
       var chgDays = this._findDomain(items, "select", "charge_days");
@@ -3807,6 +3903,10 @@
       this._latestActions = actions;
 
       // Structural signature: rebuild DOM only when structure/entities/lang change
+      var chargeWindowModeOpts = (chargeWindowMode && chargeWindowMode.s && chargeWindowMode.s.attributes && Array.isArray(chargeWindowMode.s.attributes.options) && chargeWindowMode.s.attributes.options.length)
+        ? chargeWindowMode.s.attributes.options
+        : ["off", "fixed", "smart_departure"];
+      var chargeWindowModeOptsSig = chargeWindowMode ? chargeWindowModeOpts.join(",") : "";
       var entityIdsSig = items.map(function (r) { return r.id; }).sort().join(",");
       var extraSig = Array.isArray(cfg.entities)
         ? cfg.entities.map(function (e) { return typeof e === "string" ? e : (e && e.entity ? e.entity : ""); }).join(",")
@@ -3822,6 +3922,7 @@
         allowedExtrasSig,
         cliDurOptsSig,
         depCliDurOptsSig,
+        chargeWindowModeOptsSig,
         entityIdsSig,
       ].join("#");
 
@@ -3881,6 +3982,10 @@
           fastPort: fastPort,
           schedSwitch: schedSwitch,
           schedWindow: schedWindow,
+          chargeWindowMode: chargeWindowMode,
+          chargeWindowModeOpts: chargeWindowModeOpts,
+          homePowerAuto: homePowerAuto,
+          homePower: homePower,
           chgStartTime: chgStartTime,
           chgDur: chgDur,
           chgDays: chgDays,
@@ -3991,6 +4096,9 @@
         fastPort: fastPort,
         schedSwitch: schedSwitch,
         schedWindow: schedWindow,
+        chargeWindowMode: chargeWindowMode,
+        homePowerAuto: homePowerAuto,
+        homePower: homePower,
         chgStartTime: chgStartTime,
         chgDur: chgDur,
         chgDays: chgDays,
@@ -4334,18 +4442,70 @@
         }).join("") + "</div>"
       ) : "";
 
-      var chargeModeSwitchHtml = ctx.syncCharge ? (
-        '<div class="seg-switch" role="group">' +
-          '<button type="button" class="seg-btn" data-charge-mode="manual" data-uid="chgmode:manual" aria-pressed="true">' + svgIcon("clock", "btn-ico") + "<span>" + self._h(t.chargeModeManual) + "</span></button>" +
-          '<button type="button" class="seg-btn" data-charge-mode="departure" data-uid="chgmode:departure" aria-pressed="false">' + svgIcon("calendar", "btn-ico") + "<span>" + self._h(t.chargeModeDeparture) + "</span></button>" +
+      var chargeModeSwitchHtml = "";
+      if (ctx.chargeWindowMode) {
+        var cwmOpts = Array.isArray(ctx.chargeWindowModeOpts) && ctx.chargeWindowModeOpts.length
+          ? ctx.chargeWindowModeOpts
+          : ["off", "fixed", "smart_departure"];
+        chargeModeSwitchHtml =
+          '<div class="seg-switch charge-window-seg" role="group" aria-label="' + self._h(t.chargeWindowMode) + '" data-bind="chargeWindowModeGroup">' +
+            cwmOpts.map(function (opt) {
+              return '<button type="button" class="seg-btn" data-charge-window-mode="' + self._h(opt) + '" data-uid="chgwin:' + self._h(opt) + '" aria-pressed="false">' +
+                "<span>" + self._h(translateOption("charge_window_mode", opt, ctx.lang)) + "</span></button>";
+            }).join("") +
+          "</div>";
+      } else if (ctx.syncCharge) {
+        chargeModeSwitchHtml =
+          '<div class="seg-switch" role="group">' +
+            '<button type="button" class="seg-btn" data-charge-mode="manual" data-uid="chgmode:manual" aria-pressed="true">' + svgIcon("clock", "btn-ico") + "<span>" + self._h(t.chargeModeManual) + "</span></button>" +
+            '<button type="button" class="seg-btn" data-charge-mode="departure" data-uid="chgmode:departure" aria-pressed="false">' + svgIcon("calendar", "btn-ico") + "<span>" + self._h(t.chargeModeDeparture) + "</span></button>" +
+          "</div>";
+      }
+
+      var chargeStatusBadgesHtml = ctx.schedWindow ? (
+        '<div class="chip-row charge-status-badges hidden" data-bind="chargeStatusBadges" hidden>' +
+          '<span class="badge is-glacier hidden" data-bind="awayBypassBadge" hidden></span>' +
+          '<span class="badge is-amber hidden" data-bind="quickOverrideBadge" hidden></span>' +
+          '<span class="badge is-emerald hidden" data-bind="immediateChargeBadge" hidden></span>' +
         "</div>"
       ) : "";
 
-      var schedChgHtml = (ctx.schedSwitch || ctx.schedWindow || ctx.chgStartTime || ctx.chgDur || ctx.chgDays || ctx.applySchedBtn) ? (
+      var homePowerHtml = "";
+      if (ctx.homePowerAuto || ctx.homePower) {
+        var hpAttrs = (ctx.homePower && ctx.homePower.s && ctx.homePower.s.attributes) || {};
+        var hpMin = (typeof hpAttrs.min === "number" && Number.isFinite(hpAttrs.min)) ? hpAttrs.min : 1.4;
+        var hpMax = (typeof hpAttrs.max === "number" && Number.isFinite(hpAttrs.max)) ? hpAttrs.max : 40;
+        var hpStep = (typeof hpAttrs.step === "number" && Number.isFinite(hpAttrs.step) && hpAttrs.step > 0) ? hpAttrs.step : 0.1;
+        homePowerHtml =
+          '<div class="home-power-box" data-bind="homePowerBox">' +
+            '<div class="field-subhdr">' +
+              '<span class="field-lbl">' + self._h(t.homeChargePower) + "</span>" +
+              '<span class="badge num hidden" data-bind="homePowerSummary" hidden></span>' +
+            "</div>" +
+            '<div class="home-power-controls">' +
+              (ctx.homePowerAuto
+                ? '<div class="seg-switch home-power-seg" role="group" aria-label="' + self._h(t.homeChargePower) + '">' +
+                    '<button type="button" class="seg-btn" data-home-power-auto="on" data-uid="hppwr:auto" aria-pressed="false">' + self._h(t.powerModeAuto) + "</button>" +
+                    '<button type="button" class="seg-btn" data-home-power-auto="off" data-uid="hppwr:manual" aria-pressed="false">' + self._h(t.powerModeManual) + "</button>" +
+                  "</div>"
+                : "") +
+              (ctx.homePower
+                ? '<div class="home-power-input-wrap">' +
+                    '<label class="sr-only" for="lp-home-charge-power">' + self._h(t.homeChargePower) + "</label>" +
+                    '<input id="lp-home-charge-power" type="number" inputmode="decimal" min="' + self._h(String(hpMin)) + '" max="' + self._h(String(hpMax)) + '" step="' + self._h(String(hpStep)) + '" class="ctrl-input num home-power-input" data-entity-input="' + self._h(ctx.homePower.id) + '" data-uid="input:' + self._h(ctx.homePower.id) + '" data-bind="homePowerInput">' +
+                    '<span class="home-power-unit">kW</span>' +
+                  "</div>"
+                : "") +
+            "</div>" +
+          "</div>";
+      }
+
+      var schedChgHtml = (ctx.schedSwitch || ctx.schedWindow || ctx.chargeWindowMode || ctx.homePowerAuto || ctx.homePower || ctx.chgStartTime || ctx.chgDur || ctx.chgDays || ctx.applySchedBtn) ? (
         '<div class="surface" data-bind="schedChgSurface" data-schedule-panel="charge">' +
           '<div class="sec-hdr"><span class="sec-hdr-title">' + svgIcon("calendar", "sec-ico") + "<span>" + self._h(t.scheduledCharging) + '</span></span><span class="badge hidden" data-bind="schedSyncBadge"></span></div>' +
           (ctx.schedSwitch ? '<button type="button" class="ctrl-btn" data-action-id="scheduled_charging_toggle" data-confirm-key="scheduled_charging_toggle" data-bind="schedToggleBtn"></button>' : "") +
           chargeModeSwitchHtml +
+          chargeStatusBadgesHtml +
           timelineHtml +
           '<div class="manual-charge-box" data-bind="manualChargeBox">' +
             (ctx.chgStartTime ? '<div class="field-row"><label class="field-lbl">' + self._h(t.startTime) + '</label><input type="time" inputmode="none" class="ctrl-input num" data-entity-input="' + self._h(ctx.chgStartTime.id) + '" data-uid="input:' + self._h(ctx.chgStartTime.id) + '"></div>' : "") +
@@ -4356,6 +4516,7 @@
             '<div class="dep-charge-title">' + svgIcon("clock", "stat-ico") + "<span>" + self._h(t.followDepartureTitle) + "</span></div>" +
             '<div class="dep-charge-val num" data-bind="depChargeStartText"></div>' +
           "</div>" +
+          homePowerHtml +
           '<span class="badge is-amber hidden" data-bind="fallback2131Badge">' + self._h(t.daysFallback2131) + "</span>" +
           (ctx.applySchedBtn ? '<button type="button" class="ctrl-btn is-primary" data-action-id="apply_charging_schedule" data-confirm-key="apply_charging_schedule">' + svgIcon("check", "btn-ico") + "<span>" + self._h(t.applySchedule) + "</span></button>" : "") +
         "</div>"
@@ -5388,8 +5549,9 @@
         this._applyBtnState(schedToggleBtn, t.scheduledCharging + ": " + (scOn ? t.on : t.off), "scheduled_charging_toggle", "scheduled_charging_toggle", scOn ? "is-emerald" : "", t, "calendar");
       }
 
+      var schedWinAlive = Boolean(vm.schedWindow && vm.schedWindow.s && !this._dead(vm.schedWindow.s));
+      var swAttrs = (vm.schedWindow && vm.schedWindow.s && vm.schedWindow.s.attributes) ? vm.schedWindow.s.attributes : {};
       if (vm.schedWindow && vm.schedWindow.s) {
-        var swAttrs = vm.schedWindow.s.attributes || {};
         var trackEl = root.querySelector('[data-bind="timelineTrack"]');
         if (trackEl) {
           var segKey = (swAttrs.start_time || "") + "|" + (swAttrs.end_time || "") + "|" + (swAttrs.next_day ? "1" : "0");
@@ -5438,23 +5600,82 @@
         }
       }
 
-      // Segmented mode: Orario manuale vs Segui partenza
-      this._syncChargeState = vm.syncCharge ? { id: vm.syncCharge.id, on: this._isOn(vm.syncCharge) } : null;
-      var isDepMode = Boolean(this._syncChargeState && this._syncChargeState.on);
-      var modeManualBtn = root.querySelector('[data-charge-mode="manual"]');
-      var modeDepBtn = root.querySelector('[data-charge-mode="departure"]');
-      if (modeManualBtn) {
-        modeManualBtn.classList.toggle("is-active", !isDepMode);
-        modeManualBtn.setAttribute("aria-pressed", !isDepMode ? "true" : "false");
+      // Contextual charging status badges
+      var awayBadge = root.querySelector('[data-bind="awayBypassBadge"]');
+      var quickBadge = root.querySelector('[data-bind="quickOverrideBadge"]');
+      var immBadge = root.querySelector('[data-bind="immediateChargeBadge"]');
+      var badgesRow = root.querySelector('[data-bind="chargeStatusBadges"]');
+      var showAway = Boolean(schedWinAlive && swAttrs.away_bypass_active === true);
+      var showQuick = Boolean(schedWinAlive && swAttrs.quick_override_active === true);
+      var showImmediate = Boolean(
+        schedWinAlive &&
+        swAttrs.effective_action === "disable" &&
+        (swAttrs.plan_reason === "no_departure_24h" || swAttrs.plan_reason === "late_plug_in")
+      );
+      if (awayBadge) {
+        awayBadge.textContent = t.awayBypassBadge;
+        awayBadge.classList.toggle("hidden", !showAway);
+        awayBadge.hidden = !showAway;
       }
-      if (modeDepBtn) {
-        modeDepBtn.classList.toggle("is-active", isDepMode);
-        modeDepBtn.setAttribute("aria-pressed", isDepMode ? "true" : "false");
+      if (quickBadge) {
+        quickBadge.textContent = t.quickOverrideBadge;
+        quickBadge.classList.toggle("hidden", !showQuick);
+        quickBadge.hidden = !showQuick;
       }
+      if (immBadge) {
+        immBadge.textContent = t.immediateChargeBadge;
+        immBadge.classList.toggle("hidden", !showImmediate);
+        immBadge.hidden = !showImmediate;
+      }
+      if (badgesRow) {
+        var anyChgBadge = showAway || showQuick || showImmediate;
+        badgesRow.classList.toggle("hidden", !anyChgBadge);
+        badgesRow.hidden = !anyChgBadge;
+      }
+
+      // Window mode selector (Phase 2 select) or legacy sync_charge_to_departure fallback
       var manualBox = root.querySelector('[data-bind="manualChargeBox"]');
       var depBox = root.querySelector('[data-bind="departureChargeBox"]');
-      if (manualBox) manualBox.classList.toggle("hidden", isDepMode);
-      if (depBox) depBox.classList.toggle("hidden", !isDepMode);
+      if (vm.chargeWindowMode) {
+        this._syncChargeState = null;
+        var curWinMode = !this._dead(vm.chargeWindowMode.s) ? String(vm.chargeWindowMode.s.state || "").trim() : "";
+        if (!curWinMode && schedWinAlive && typeof swAttrs.window_mode === "string") {
+          curWinMode = swAttrs.window_mode.trim();
+        }
+        if (!curWinMode && vm.syncCharge && !this._dead(vm.syncCharge.s)) {
+          curWinMode = this._isOn(vm.syncCharge) ? "smart_departure" : "off";
+        }
+        this._chargeWindowModeState = { id: vm.chargeWindowMode.id, state: curWinMode };
+        var isCwmPending = this._pendingKeys.has("charge_window_mode");
+        var cwmBtns = root.querySelectorAll("[data-charge-window-mode]");
+        for (var cwi = 0; cwi < cwmBtns.length; cwi += 1) {
+          var cwOpt = cwmBtns[cwi].getAttribute("data-charge-window-mode");
+          var cwActive = cwOpt === curWinMode;
+          cwmBtns[cwi].classList.toggle("is-active", cwActive);
+          cwmBtns[cwi].classList.toggle("is-pending", isCwmPending);
+          cwmBtns[cwi].setAttribute("aria-pressed", cwActive ? "true" : "false");
+        }
+        var isSmartMode = curWinMode === "smart_departure";
+        var showDepPreview = isSmartMode || showQuick;
+        if (manualBox) manualBox.classList.toggle("hidden", isSmartMode);
+        if (depBox) depBox.classList.toggle("hidden", !showDepPreview);
+      } else {
+        this._chargeWindowModeState = null;
+        this._syncChargeState = vm.syncCharge ? { id: vm.syncCharge.id, on: this._isOn(vm.syncCharge) } : null;
+        var isDepMode = Boolean(this._syncChargeState && this._syncChargeState.on);
+        var modeManualBtn = root.querySelector('[data-charge-mode="manual"]');
+        var modeDepBtn = root.querySelector('[data-charge-mode="departure"]');
+        if (modeManualBtn) {
+          modeManualBtn.classList.toggle("is-active", !isDepMode);
+          modeManualBtn.setAttribute("aria-pressed", !isDepMode ? "true" : "false");
+        }
+        if (modeDepBtn) {
+          modeDepBtn.classList.toggle("is-active", isDepMode);
+          modeDepBtn.setAttribute("aria-pressed", isDepMode ? "true" : "false");
+        }
+        if (manualBox) manualBox.classList.toggle("hidden", isDepMode);
+        if (depBox) depBox.classList.toggle("hidden", !isDepMode);
+      }
       var depChargeStartEl = root.querySelector('[data-bind="depChargeStartText"]');
       if (depChargeStartEl) {
         var pStartChg = vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes && vm.nextDep.s.attributes.planned_charge_start;
@@ -5463,6 +5684,67 @@
           depChargeStartEl.textContent = t.chargeStartHint + ": " + pStartChg + nextDepState;
         } else {
           depChargeStartEl.textContent = t.noDeparturePlanned;
+        }
+      }
+
+      // Home charging power row (Auto/Manual + decimal input + effective summary; never gated by car_in_use)
+      if (vm.homePowerAuto && vm.homePowerAuto.s) {
+        var hpaAlive = !this._dead(vm.homePowerAuto.s);
+        var hpaOn = hpaAlive ? this._isOn(vm.homePowerAuto) : null;
+        this._homePowerAutoState = { id: vm.homePowerAuto.id, on: hpaOn };
+        var isHpaPending = this._pendingKeys.has("home_charge_power_auto");
+        var autoPwrBtn = root.querySelector('[data-home-power-auto="on"]');
+        var manualPwrBtn = root.querySelector('[data-home-power-auto="off"]');
+        if (autoPwrBtn) {
+          autoPwrBtn.classList.toggle("is-active", hpaOn === true);
+          autoPwrBtn.classList.toggle("is-emerald", hpaOn === true);
+          autoPwrBtn.classList.toggle("is-pending", isHpaPending);
+          autoPwrBtn.setAttribute("aria-pressed", hpaOn === true ? "true" : "false");
+        }
+        if (manualPwrBtn) {
+          manualPwrBtn.classList.toggle("is-active", hpaOn === false);
+          manualPwrBtn.classList.toggle("is-pending", isHpaPending);
+          manualPwrBtn.setAttribute("aria-pressed", hpaOn === false ? "true" : "false");
+        }
+      } else {
+        this._homePowerAutoState = null;
+      }
+      var hpInputEl = root.querySelector('[data-bind="homePowerInput"]');
+      if (hpInputEl && vm.homePower && vm.homePower.s) {
+        var hpBindAttrs = vm.homePower.s.attributes || {};
+        if (typeof hpBindAttrs.min === "number" && Number.isFinite(hpBindAttrs.min)) {
+          hpInputEl.setAttribute("min", String(hpBindAttrs.min));
+        }
+        if (typeof hpBindAttrs.max === "number" && Number.isFinite(hpBindAttrs.max)) {
+          hpInputEl.setAttribute("max", String(hpBindAttrs.max));
+        }
+        if (typeof hpBindAttrs.step === "number" && Number.isFinite(hpBindAttrs.step) && hpBindAttrs.step > 0) {
+          hpInputEl.setAttribute("step", String(hpBindAttrs.step));
+        }
+        hpInputEl.disabled = false;
+      }
+      var homePowerSummary = root.querySelector('[data-bind="homePowerSummary"]');
+      if (homePowerSummary) {
+        var pSource = (schedWinAlive && typeof swAttrs.power_source === "string") ? swAttrs.power_source : "manual";
+        var effKwRaw = schedWinAlive ? swAttrs.effective_power_kw : null;
+        var effKw = (typeof effKwRaw === "number" && Number.isFinite(effKwRaw))
+          ? effKwRaw
+          : (typeof effKwRaw === "string" && effKwRaw.trim() !== "" && Number.isFinite(Number(effKwRaw)))
+            ? Number(effKwRaw)
+            : (vm.homePower && !this._dead(vm.homePower.s) ? this._num(vm.homePower.s) : null);
+        var srcLbl = pSource === "learned_ac"
+          ? t.powerSourceAutoAc
+          : (pSource === "learned_dc" ? t.powerSourceAutoDc : t.powerSourceManual);
+        homePowerSummary.classList.toggle("is-emerald", pSource === "learned_ac");
+        homePowerSummary.classList.toggle("is-glacier", pSource === "learned_dc");
+        if (effKw !== null) {
+          homePowerSummary.textContent = srcLbl + " · " + effKw.toFixed(1) + " kW";
+          homePowerSummary.classList.remove("hidden");
+          homePowerSummary.hidden = false;
+        } else {
+          homePowerSummary.textContent = "";
+          homePowerSummary.classList.add("hidden");
+          homePowerSummary.hidden = true;
         }
       }
 
@@ -5508,6 +5790,7 @@
       syncInputVal(vm.chgStartTime, true);
       syncInputVal(vm.quickDepTime, true);
       syncInputVal(vm.depCliMode, false);
+      syncInputVal(vm.homePower, false);
       bindDurationChips(vm.depCliDur, "depCliDurText", "departure_preclimate_duration", false);
 
       var chgDurEl = root.querySelector('[data-bind="chgDurText"]');

@@ -293,6 +293,9 @@
       },
       "charge_duration": {
         "name": "Ricarica prog. · durata"
+      },
+      "home_charge_power": {
+        "name": "Potenza di ricarica a casa"
       }
     },
     "select": {
@@ -305,6 +308,14 @@
           "mon_wed_fri": "Lun · Mer · Ven",
           "tue_thu_sat": "Mar · Gio · Sab",
           "custom": "Personalizzati"
+        }
+      },
+      "charge_window_mode": {
+        "name": "Modalità ricarica a casa",
+        "state": {
+          "off": "Spenta",
+          "fixed": "Orario fisso",
+          "smart_departure": "Partenza Smart"
         }
       },
       "departure_climate_mode": {
@@ -546,6 +557,9 @@
       },
       "sync_charge_to_departure": {
         "name": "Adatta ricarica alla partenza"
+      },
+      "home_charge_power_auto": {
+        "name": "Potenza ricarica casa · auto"
       },
       "departure_mon_enabled": {
         "name": "Partenza Lun · attiva"

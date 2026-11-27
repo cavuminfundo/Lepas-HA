@@ -13,7 +13,9 @@ from custom_components.lepas.charging_stats import (
     DAILY_HISTORY_LIMIT,
     MONTHLY_HISTORY_LIMIT,
     ChargingStatsTracker,
+    classify_charge_kind,
     compute_charge_delta_kwh,
+    select_effective_home_power,
 )
 from custom_components.lepas.const import (
     CHARGE_ENERGY_MAX_GAP,
@@ -1113,3 +1115,453 @@ async def test_charging_stats_sensors_and_reset_button(
     assert float(
         hass.states.get("sensor.lepas_charging_energy_year").state
     ) == pytest.approx(3.68, rel=1e-3)
+
+
+def test_classify_charge_kind_and_select_effective_home_power():
+    assert classify_charge_kind(None, 2.3) == "ac"
+    assert classify_charge_kind(False, 7.4) == "ac"
+    assert classify_charge_kind(False, 11.0) == "ac"
+    assert classify_charge_kind(False, 11.1) == "dc"
+    assert classify_charge_kind(True, 3.0) == "dc"
+    assert classify_charge_kind(True, None) == "dc"
+
+    assert select_effective_home_power(
+        auto_enabled=False,
+        manual_kw=3.7,
+        charge_kind="ac",
+        learned_ac_kw=2.2,
+        learned_dc_kw=24.0,
+    ) == (3.7, "manual")
+    assert select_effective_home_power(
+        auto_enabled=True,
+        manual_kw=3.7,
+        charge_kind="ac",
+        learned_ac_kw=None,
+        learned_dc_kw=24.0,
+    ) == (3.7, "manual")
+    assert select_effective_home_power(
+        auto_enabled=True,
+        manual_kw=3.7,
+        charge_kind="ac",
+        learned_ac_kw=2.2,
+        learned_dc_kw=24.0,
+    ) == (2.2, "learned_ac")
+    assert select_effective_home_power(
+        auto_enabled=True,
+        manual_kw=3.7,
+        charge_kind="dc",
+        learned_ac_kw=2.2,
+        learned_dc_kw=24.0,
+    ) == (24.0, "learned_dc")
+    assert select_effective_home_power(
+        auto_enabled=True,
+        manual_kw=3.7,
+        charge_kind="dc",
+        learned_ac_kw=2.2,
+        learned_dc_kw=None,
+    ) == (3.7, "manual")
+
+
+def test_home_cc_learning_ac_and_dc_separation():
+    tracker = ChargingStatsTracker()
+    ts = 1000.0
+    # Away / degraded / CV (>=85% AC) / standby (<0.5 kW) / not charging must be ignored
+    for kwargs in (
+        {"in_home_zone": False, "power_kw": 7.4, "soc_pct": 30.0, "charge_state": "1"},
+        {"in_home_zone": None, "power_kw": 7.4, "soc_pct": 30.0, "charge_state": "1"},
+        {"in_home_zone": True, "power_kw": 2.3, "soc_pct": 85.0, "charge_state": "1"},
+        {"in_home_zone": True, "power_kw": 0.4, "soc_pct": 30.0, "charge_state": "1"},
+        {"in_home_zone": True, "power_kw": 2.3, "soc_pct": 30.0, "charge_state": "0"},
+        {
+            "in_home_zone": True,
+            "power_kw": 2.3,
+            "soc_pct": 30.0,
+            "charge_state": "1",
+            "degraded_battery": True,
+        },
+    ):
+        ts += 60.0
+        tracker.ingest(
+            ts,
+            "2026-11-26",
+            plugged=True,
+            odometer=100.0,
+            fast_charging=False,
+            battery_capacity_kwh=18.4,
+            **{
+                "degraded_battery": False,
+                **kwargs,
+            },
+        )
+    assert tracker._cc_samples == []
+
+    # Session 1 AC at home with single outlier spike filtered by median
+    for pwr, soc in ((2.2, 30.0), (2.3, 40.0), (9.0, 50.0)):
+        ts += 60.0
+        tracker.ingest(
+            ts,
+            "2026-11-26",
+            power_kw=pwr,
+            charge_state="1",
+            plugged=True,
+            soc_pct=soc,
+            odometer=100.0,
+            in_home_zone=True,
+            degraded_battery=False,
+            fast_charging=False,
+        )
+    # CV tail >= 85% ignored even during same session
+    ts += 60.0
+    tracker.ingest(
+        ts,
+        "2026-11-26",
+        power_kw=0.9,
+        charge_state="1",
+        plugged=True,
+        soc_pct=86.0,
+        odometer=100.0,
+        in_home_zone=True,
+        degraded_battery=False,
+        fast_charging=False,
+    )
+    assert len(tracker._cc_samples) == 3
+
+    # Unplug closes session and updates AC profile with median=2.3
+    ts += 60.0
+    changed = tracker.ingest(
+        ts,
+        "2026-11-26",
+        power_kw=0.0,
+        charge_state="0",
+        plugged=False,
+        soc_pct=90.0,
+        odometer=100.0,
+        in_home_zone=True,
+        degraded_battery=False,
+        fast_charging=False,
+    )
+    assert changed is True
+    assert tracker.home_power_profile() == {
+        "learned_ac_kw": 2.3,
+        "learned_dc_kw": None,
+        "home_ac_sessions": 1,
+        "home_dc_sessions": 0,
+    }
+
+    # Session 2 AC at home -> EMA 0.7 * 2.3 + 0.3 * 2.0 = 2.21
+    for soc in (25.0, 30.0, 35.0):
+        ts += 60.0
+        tracker.ingest(
+            ts,
+            "2026-11-26",
+            power_kw=2.0,
+            charge_state="1",
+            plugged=True,
+            soc_pct=soc,
+            odometer=110.0,
+            in_home_zone=True,
+            degraded_battery=False,
+        )
+    ts += 60.0
+    tracker.ingest(
+        ts,
+        "2026-11-26",
+        power_kw=0.0,
+        charge_state="0",
+        plugged=False,
+        soc_pct=40.0,
+        odometer=110.0,
+        in_home_zone=True,
+        degraded_battery=False,
+    )
+    assert tracker.home_power_profile()["learned_ac_kw"] == 2.21
+    assert tracker.home_power_profile()["home_ac_sessions"] == 2
+
+    # Short session (<3 samples) discarded on unplug
+    for soc in (40.0, 42.0):
+        ts += 60.0
+        tracker.ingest(
+            ts,
+            "2026-11-26",
+            power_kw=3.7,
+            charge_state="1",
+            plugged=True,
+            soc_pct=soc,
+            odometer=120.0,
+            in_home_zone=True,
+            degraded_battery=False,
+        )
+    ts += 60.0
+    tracker.ingest(
+        ts,
+        "2026-11-26",
+        power_kw=0.0,
+        charge_state="0",
+        plugged=False,
+        soc_pct=44.0,
+        odometer=120.0,
+        in_home_zone=True,
+        degraded_battery=False,
+    )
+    assert tracker.home_power_profile()["home_ac_sessions"] == 2
+    assert tracker.home_power_profile()["learned_ac_kw"] == 2.21
+
+    # DC session at home: CV starts at 75% (so 75% rejected)
+    for pwr, soc in ((23.5, 30.0), (24.0, 50.0), (24.5, 70.0)):
+        ts += 60.0
+        tracker.ingest(
+            ts,
+            "2026-11-26",
+            power_kw=pwr,
+            charge_state="1",
+            plugged=True,
+            soc_pct=soc,
+            odometer=130.0,
+            in_home_zone=True,
+            degraded_battery=False,
+            fast_charging=True,
+        )
+    ts += 60.0
+    tracker.ingest(
+        ts,
+        "2026-11-26",
+        power_kw=12.0,
+        charge_state="1",
+        plugged=True,
+        soc_pct=75.0,
+        odometer=130.0,
+        in_home_zone=True,
+        degraded_battery=False,
+        fast_charging=True,
+    )
+    ts += 60.0
+    tracker.ingest(
+        ts,
+        "2026-11-26",
+        power_kw=0.0,
+        charge_state="0",
+        plugged=False,
+        soc_pct=80.0,
+        odometer=130.0,
+        in_home_zone=True,
+        degraded_battery=False,
+        fast_charging=False,
+    )
+    assert tracker.home_power_profile() == {
+        "learned_ac_kw": 2.21,
+        "learned_dc_kw": 24.0,
+        "home_ac_sessions": 2,
+        "home_dc_sessions": 1,
+    }
+
+
+def test_home_cc_learning_flush_on_mqtt_none_power_frame():
+    # (a) Unplug delivered as fields-only MQTT frame (power_kw=None)
+    tracker = ChargingStatsTracker()
+    for i, pwr in enumerate((2.3, 2.4, 2.5)):
+        tracker.ingest(
+            1000.0 + i * 60.0,
+            "2026-11-26",
+            power_kw=pwr,
+            charge_state="1",
+            plugged=True,
+            soc_pct=30.0 + i * 2.0,
+            odometer=100.0,
+            in_home_zone=True,
+            degraded_battery=False,
+            fast_charging=False,
+        )
+    assert len(tracker._cc_samples) == 3
+
+    changed = tracker.ingest(
+        1300.0,
+        "2026-11-26",
+        power_kw=None,
+        charge_state="0",
+        plugged=False,
+        soc_pct=None,
+        odometer=100.0,
+        in_home_zone=True,
+        degraded_battery=False,
+    )
+    assert changed is True
+    assert tracker._cc_samples == []
+    assert tracker.home_power_profile()["learned_ac_kw"] == 2.4
+    assert tracker.home_power_profile()["home_ac_sessions"] == 1
+
+    # (b) Odometer advance delivered with power_kw=None flushes DC session without leak
+    for i in range(3):
+        tracker.ingest(
+            2000.0 + i * 60.0,
+            "2026-11-26",
+            power_kw=24.0,
+            charge_state="1",
+            plugged=True,
+            soc_pct=20.0 + i * 5.0,
+            odometer=100.0,
+            in_home_zone=True,
+            degraded_battery=False,
+            fast_charging=True,
+        )
+    changed_odo = tracker.ingest(
+        2300.0,
+        "2026-11-26",
+        power_kw=None,
+        charge_state="1",
+        plugged=True,
+        soc_pct=None,
+        odometer=100.5,
+        in_home_zone=True,
+        degraded_battery=False,
+    )
+    assert changed_odo is True
+    assert tracker._cc_samples == []
+    assert tracker.home_power_profile()["learned_dc_kw"] == 24.0
+    assert tracker.home_power_profile()["home_dc_sessions"] == 1
+
+    # (c) Mid-session charge_kind switch (AC -> DC) and memory cap (120 samples)
+    cap_tracker = ChargingStatsTracker()
+    for i in range(130):
+        cap_tracker.ingest(
+            3000.0 + i * 30.0,
+            "2026-11-26",
+            power_kw=2.3,
+            charge_state="1",
+            plugged=True,
+            soc_pct=20.0 + (i % 50) * 0.5,
+            odometer=200.0,
+            in_home_zone=True,
+            degraded_battery=False,
+            fast_charging=False,
+        )
+    assert len(cap_tracker._cc_samples) == 120
+    # Switch to DC mid-session flushes AC and resets buffer for DC
+    switched = cap_tracker.ingest(
+        9000.0,
+        "2026-11-26",
+        power_kw=24.0,
+        charge_state="1",
+        plugged=True,
+        soc_pct=30.0,
+        odometer=200.0,
+        in_home_zone=True,
+        degraded_battery=False,
+        fast_charging=True,
+    )
+    assert switched is True
+    assert cap_tracker.home_power_profile()["learned_ac_kw"] == 2.3
+    assert cap_tracker.home_power_profile()["home_ac_sessions"] == 1
+    assert cap_tracker._cc_samples == [24.0]
+    assert cap_tracker._cc_kind == "dc"
+
+    # (d) Leaving home with power_kw=None flushes buffered samples
+    away_tracker = ChargingStatsTracker()
+    for i in range(3):
+        away_tracker.ingest(
+            1000.0 + i * 60.0,
+            "2026-11-26",
+            power_kw=3.6,
+            charge_state="1",
+            plugged=True,
+            soc_pct=30.0 + i,
+            odometer=300.0,
+            in_home_zone=True,
+            degraded_battery=False,
+        )
+    flushed_away = away_tracker.ingest(
+        1300.0,
+        "2026-11-26",
+        power_kw=None,
+        charge_state="1",
+        plugged=True,
+        soc_pct=33.0,
+        odometer=300.0,
+        in_home_zone=False,
+        degraded_battery=False,
+    )
+    assert flushed_away is True
+    assert away_tracker._cc_samples == []
+    assert away_tracker.home_power_profile()["learned_ac_kw"] == 3.6
+
+
+def test_home_power_profile_backward_compatible_store_v1():
+    legacy_v1 = {
+        "version": 1,
+        "today_key": "2026-11-26",
+        "month_key": "2026-11",
+        "year_key": "2026",
+        "today": {
+            "total_kwh": 5.0,
+            "home_kwh": 5.0,
+            "away_kwh": 0.0,
+            "sessions_count": 1,
+        },
+        "from_start": {
+            "total_kwh": 5.0,
+            "home_kwh": 5.0,
+            "away_kwh": 0.0,
+            "sessions_count": 1,
+        },
+    }
+    restored = ChargingStatsTracker.from_dict(legacy_v1)
+    assert restored.period_stats("today", "2026-11-26")["total_kwh"] == 5.0
+    assert restored.home_power_profile() == {
+        "learned_ac_kw": None,
+        "learned_dc_kw": None,
+        "home_ac_sessions": 0,
+        "home_dc_sessions": 0,
+    }
+
+    for i in range(3):
+        restored.ingest(
+            1000.0 + i * 60.0,
+            "2026-11-26",
+            power_kw=2.2,
+            charge_state="1",
+            plugged=True,
+            soc_pct=30.0 + i,
+            odometer=100.0,
+            in_home_zone=True,
+            degraded_battery=False,
+        )
+    restored.ingest(
+        1300.0,
+        "2026-11-26",
+        power_kw=0.0,
+        charge_state="0",
+        plugged=False,
+        soc_pct=34.0,
+        odometer=100.0,
+        in_home_zone=True,
+        degraded_battery=False,
+    )
+    payload = restored.to_dict()
+    assert payload["version"] == 1
+    assert payload["home_power"]["learned_ac_kw"] == 2.2
+    assert payload["home_power"]["home_ac_sessions"] == 1
+
+    roundtrip = ChargingStatsTracker.from_dict(payload)
+    assert roundtrip.home_power_profile() == {
+        "learned_ac_kw": 2.2,
+        "learned_dc_kw": None,
+        "home_ac_sessions": 1,
+        "home_dc_sessions": 0,
+    }
+
+    malformed = ChargingStatsTracker.from_dict(
+        {
+            "version": 1,
+            "home_power": {
+                "learned_ac_kw": True,
+                "learned_dc_kw": -10.0,
+                "home_ac_sessions": True,
+                "home_dc_sessions": -3,
+            },
+        }
+    )
+    assert malformed.home_power_profile() == {
+        "learned_ac_kw": None,
+        "learned_dc_kw": None,
+        "home_ac_sessions": 0,
+        "home_dc_sessions": 0,
+    }

@@ -55,6 +55,8 @@ from .coordinator import SENSORS, _pick_field
 from .entity import LepasEntity, field_on, in_zona_casa
 from .naming import ID_PREFIX
 from .scheduler import (
+    DEFAULT_HOME_CHARGE_POWER_KW,
+    DesiredChargePlan,
     align_charge_start_minutes,
     compute_battery_heat_start_for_departure,
     compute_charge_start_for_departure,
@@ -1200,18 +1202,73 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
             translation_key="scheduled_charging_window",
         )
 
-    def _window_params(self) -> tuple[int, int, list[int]]:
+    def _evaluate_plan(self) -> DesiredChargePlan | None:
+        eval_fn = getattr(self.coordinator, "evaluate_charge_plan", None)
+        if not callable(eval_fn):
+            return None
+        try:
+            plan = eval_fn(dt_util.now())
+        except Exception:  # noqa: BLE001
+            return None
+        return plan if isinstance(plan, DesiredChargePlan) else None
+
+    def _power_profile(self) -> dict[str, object]:
+        prof_fn = getattr(self.coordinator, "home_power_profile", None)
+        if callable(prof_fn):
+            try:
+                prof = prof_fn()
+                if isinstance(prof, Mapping):
+                    return dict(prof)
+            except Exception:  # noqa: BLE001
+                return {
+                    "learned_ac_kw": None,
+                    "learned_dc_kw": None,
+                    "home_ac_sessions": 0,
+                    "home_dc_sessions": 0,
+                }
+        return {
+            "learned_ac_kw": None,
+            "learned_dc_kw": None,
+            "home_ac_sessions": 0,
+            "home_dc_sessions": 0,
+        }
+
+    def _window_params(self, plan: DesiredChargePlan | None = None) -> tuple[int, int, list[int]]:
+        eff_fn = getattr(self.coordinator, "effective_charge_days", None)
+        if (
+            plan is not None
+            and plan.action == "enable"
+            and plan.start_minutes is not None
+            and plan.duration_minutes is not None
+        ):
+            start_min = align_charge_start_minutes(plan.start_minutes)
+            dur_min = int(plan.duration_minutes)
+            if callable(eff_fn):
+                days = list(eff_fn(list(plan.days) if plan.days else None))
+            elif plan.days:
+                days = list(plan.days)
+            else:
+                days = list(getattr(self.coordinator, "charge_days", [1, 2, 3, 4, 5, 6, 7]))
+            return start_min, dur_min, days
+
         raw_start = int(getattr(self.coordinator, "charge_start_minutes", 480) or 0)
         start_min = align_charge_start_minutes(raw_start)
         dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
-        eff_fn = getattr(self.coordinator, "effective_charge_days", None)
         if callable(eff_fn):
             days = list(eff_fn())
         else:
             days = list(getattr(self.coordinator, "charge_days", [1, 2, 3, 4, 5, 6, 7]))
-        return start_min, dur_h, days
+        return start_min, dur_h * 60, days
 
-    def _synced_with_car(self, start_min: int, dur_h: int, days: list[int]) -> bool | None:
+    def _synced_with_car(
+        self,
+        start_min: int,
+        dur_h: float,
+        days: list[int],
+        *,
+        dur_min: int | None = None,
+        ref_date=None,
+    ) -> bool | None:
         raw = (self.coordinator.data or {}).get("fields", {}).get("chargeAppointPlans")
         if not raw:
             return None
@@ -1223,7 +1280,7 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
         if piano is None:
             return None
         tz = resolve_tzinfo(getattr(self, "hass", None) or getattr(self.coordinator, "hass", None))
-        decoded = decode_charge_appoint_plan(piano, tz)
+        decoded = decode_charge_appoint_plan(piano, tz, ref_date=ref_date)
         if (
             decoded is None
             or decoded["start_minutes"] is None
@@ -1231,9 +1288,10 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
             or decoded["days"] is None
         ):
             return None
+        expected_dur_min = int(dur_min) if dur_min is not None else round(float(dur_h) * 60)
         return (
             decoded["start_minutes"] == start_min
-            and decoded["duration_minutes"] == dur_h * 60
+            and decoded["duration_minutes"] == expected_dur_min
             and decoded["days"] == sorted(days)
         )
 
@@ -1241,8 +1299,9 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
     def native_value(self) -> str:
         lang = _ux_lang(getattr(self, "hass", None))
         txt = _UX_TEXT[lang]
-        start_min, dur_h, days = self._window_params()
-        start_hhmm, end_hhmm, next_day = compute_charge_window(start_min, dur_h, days)
+        plan = self._evaluate_plan()
+        start_min, dur_min, days = self._window_params(plan)
+        start_hhmm, end_hhmm, next_day = compute_charge_window(start_min, dur_min / 60.0, days)
         end_part = f"{txt['next_day']}{end_hhmm}" if next_day else end_hhmm
         days_lbl = _format_days(days, lang)
         base = f"{start_hhmm} → {end_part}"
@@ -1250,15 +1309,49 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
-        start_min, dur_h, days = self._window_params()
-        start_hhmm, end_hhmm, next_day = compute_charge_window(start_min, dur_h, days)
+        plan = self._evaluate_plan()
+        prof = self._power_profile()
+        start_min, dur_min, days = self._window_params(plan)
+        dur_hours_val: int | float = (
+            dur_min // 60 if dur_min % 60 == 0 else round(dur_min / 60.0, 2)
+        )
+        start_hhmm, end_hhmm, next_day = compute_charge_window(start_min, dur_min / 60.0, days)
+        window_mode = getattr(self.coordinator, "charge_window_mode", "off")
+        if not isinstance(window_mode, str) or window_mode not in ("off", "fixed", "smart_departure"):
+            window_mode = "off"
+        default_kw = float(
+            getattr(self.coordinator, "home_charge_power", DEFAULT_HOME_CHARGE_POWER_KW)
+            or DEFAULT_HOME_CHARGE_POWER_KW
+        )
+        ref_date = plan.ref_date if plan is not None else None
         return {
             "start_time": start_hhmm,
             "end_time": end_hhmm,
             "next_day": next_day,
-            "duration_hours": dur_h,
+            "duration_hours": dur_hours_val,
             "days": days,
-            "synced_with_car": self._synced_with_car(start_min, dur_h, days),
+            "synced_with_car": self._synced_with_car(
+                start_min,
+                dur_hours_val,
+                days,
+                dur_min=dur_min,
+                ref_date=ref_date,
+            ),
+            "window_mode": window_mode,
+            "effective_action": plan.action if plan is not None else "noop",
+            "plan_reason": plan.reason if plan is not None else "mode_off",
+            "estimated_duration_min": plan.estimated_duration_min if plan is not None else None,
+            "soc_used": plan.soc_used if plan is not None else None,
+            "charge_kind": plan.charge_kind if plan is not None else "ac",
+            "effective_power_kw": plan.effective_power_kw if plan is not None else default_kw,
+            "power_source": plan.power_source if plan is not None else "manual",
+            "learned_ac_kw": prof.get("learned_ac_kw"),
+            "learned_dc_kw": prof.get("learned_dc_kw"),
+            "home_ac_sessions": int(prof.get("home_ac_sessions", 0) or 0),
+            "home_dc_sessions": int(prof.get("home_dc_sessions", 0) or 0),
+            "fallback_used": bool(plan.fallback_used) if plan is not None else False,
+            "away_bypass_active": bool(plan.away_bypass_active) if plan is not None else False,
+            "quick_override_active": bool(plan.quick_override_active) if plan is not None else False,
         }
 
 
@@ -1330,7 +1423,7 @@ class LepasNextDepartureSensor(LepasEntity, SensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
-        _, occ = self._snapshot()
+        now, occ = self._snapshot()
         climate_mode = getattr(self.coordinator, "departure_climate_mode", "at_home")
         sync_charging = bool(getattr(self.coordinator, "sync_charge_to_departure", False))
         sync_battery = bool(getattr(self.coordinator, "sync_battery_heat_to_departure", False))
@@ -1351,7 +1444,24 @@ class LepasNextDepartureSensor(LepasEntity, SensorEntity, RestoreEntity):
                 "battery_heat_start": None,
             }
         planned_charge = None
-        if sync_charging:
+        eval_fn = getattr(self.coordinator, "evaluate_charge_plan", None)
+        plan: DesiredChargePlan | None = None
+        if callable(eval_fn):
+            try:
+                cand = eval_fn(now)
+                if isinstance(cand, DesiredChargePlan):
+                    plan = cand
+            except Exception:  # noqa: BLE001
+                plan = None
+        if plan is not None:
+            if (
+                plan.action == "enable"
+                and plan.start_minutes is not None
+                and (sync_charging or plan.quick_override_active)
+            ):
+                c_min = align_charge_start_minutes(plan.start_minutes)
+                planned_charge = f"{c_min // 60:02d}:{c_min % 60:02d}"
+        elif sync_charging:
             dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
             c_min = compute_charge_start_for_departure(occ.departure_at_minutes, dur_h)
             planned_charge = f"{c_min // 60:02d}:{c_min % 60:02d}"

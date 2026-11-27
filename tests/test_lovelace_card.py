@@ -172,3 +172,56 @@ def test_independent_duration_labels_and_bindings() -> None:
         '"Voorverwarmingsduur"',
     ):
         assert expected in source, f"Missing {expected} in lepas-card.js"
+
+
+def test_smart_charging_window_controls_labels_and_antibodies() -> None:
+    """Verify Smart Charging Window entities, I18N labels, AB-LEP-008, and AB-LEP-016 invariants."""
+    source = CARD_JS.read_text(encoding="utf-8")
+
+    # AB-LEP-008: window.customCards must NEVER push type: "custom:..."
+    assert not re.search(r"customCards\.push\(\{[^}]*type:\s*[\"']custom:", source), (
+        "AB-LEP-008 violation: window.customCards entry must not use 'custom:' prefix"
+    )
+    assert 'type: "lepas-card"' in source
+
+    for expected in (
+        '"charge_window_mode"',
+        '"home_charge_power_auto"',
+        '"home_charge_power"',
+        "away_bypass_active",
+        "quick_override_active",
+        "no_departure_24h",
+        "late_plug_in",
+        "learned_ac",
+        "learned_dc",
+        '"Spenta"',
+        '"Orario fisso"',
+        '"Partenza Smart"',
+        '"Fixed schedule"',
+        '"Smart departure"',
+        '"Bypass fuori casa"',
+        '"Override Partenza rapida"',
+        '"Ricarica immediata"',
+        '"Auto AC"',
+        '"Auto DC"',
+    ):
+        assert expected in source, f"Missing {expected} in lepas-card.js"
+
+    # AB-LEP-016: applyCarInUseState must never disable smart charging window or home power controls
+    apply_block_match = re.search(
+        r"var applyCarInUseState\s*=\s*function[\s\S]{0,600}?\};",
+        source,
+    )
+    assert apply_block_match is not None, (
+        "applyCarInUseState helper missing in lepas-card.js"
+    )
+    for forbidden in (
+        "charge_window_mode",
+        "home_charge_power_auto",
+        "home_charge_power",
+        "homePower",
+        "chargeWindowMode",
+    ):
+        assert forbidden not in apply_block_match.group(0), (
+            f"AB-LEP-016 violation: applyCarInUseState must not reference {forbidden}"
+        )

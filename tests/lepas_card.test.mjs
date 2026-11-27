@@ -5203,7 +5203,394 @@ test("Independent departure_preclimate_duration selector, I18N labels, runtime a
   assert.ok(onlyDepDurCard.shadowRoot.querySelector('[data-bind="depCliDurBox"]'));
 });
 
+test("Smart charging window mode selector, contextual badges, home power row, and AB-LEP-016 car_in_use invariance", async () => {
+  const h = LepasCard._helpers;
 
+  // I18N options and labels across IT / EN / NL
+  assert.equal(h.translateOption("charge_window_mode", "off", "it"), "Spenta");
+  assert.equal(h.translateOption("charge_window_mode", "fixed", "it"), "Orario fisso");
+  assert.equal(h.translateOption("charge_window_mode", "smart_departure", "it"), "Partenza Smart");
+  assert.equal(h.translateOption("charge_window_mode", "off", "en"), "Off");
+  assert.equal(h.translateOption("charge_window_mode", "fixed", "en"), "Fixed schedule");
+  assert.equal(h.translateOption("charge_window_mode", "smart_departure", "en"), "Smart departure");
+  assert.equal(h.translateOption("charge_window_mode", "off", "nl"), "Uit");
+  assert.equal(h.translateOption("charge_window_mode", "fixed", "nl"), "Vast schema");
+  assert.equal(h.translateOption("charge_window_mode", "smart_departure", "nl"), "Slim vertrek");
 
+  const makeSmartHass = (overrides = {}, lang = "it") => makeFullHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "smart_departure", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "switch.lepas_home_charge_power_auto": makeState("switch.lepas_home_charge_power_auto", "on"),
+    "number.lepas_home_charge_power": makeState("number.lepas_home_charge_power", "2.3", {
+      min: 1.4,
+      max: 40.0,
+      step: 0.1,
+      unit_of_measurement: "kW",
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "01:30 → 07:30 · Tutti i giorni", {
+      start_time: "01:30",
+      end_time: "07:30",
+      next_day: false,
+      duration_hours: 6,
+      days: [1, 2, 3, 4, 5, 6, 7],
+      synced_with_car: true,
+      window_mode: "smart_departure",
+      effective_action: "enable",
+      plan_reason: "smart_home",
+      charge_kind: "ac",
+      effective_power_kw: 2.2,
+      power_source: "learned_ac",
+      away_bypass_active: false,
+      quick_override_active: false,
+    }),
+    ...overrides,
+  }, lang);
 
+  // 1. Replaces legacy 2-button syncCharge toggle cleanly without duplication
+  const hassIt = makeSmartHass({}, "it");
+  const card = createCard({ layout: "compact", default_tab: "charging" }, hassIt);
+  const root = card.shadowRoot;
+  assert.equal(root.querySelectorAll("[data-charge-mode]").length, 0, "Legacy 2-button sync toggle must be replaced when charge_window_mode exists");
+  const modeBtns = root.querySelectorAll("[data-charge-window-mode]");
+  assert.deepEqual(
+    modeBtns.map((b) => b.getAttribute("data-charge-window-mode")),
+    ["off", "fixed", "smart_departure"]
+  );
+  assert.deepEqual(
+    modeBtns.map((b) => b.textContent.trim()),
+    ["Spenta", "Orario fisso", "Partenza Smart"]
+  );
+  assert.equal(root.querySelector('[data-charge-window-mode="smart_departure"]').classList.contains("is-active"), true);
+  assert.equal(root.querySelector('[data-charge-window-mode="smart_departure"]').getAttribute("aria-pressed"), "true");
+  assert.equal(root.querySelector('[data-charge-window-mode="fixed"]').classList.contains("is-active"), false);
+  assert.equal(root.querySelector('[data-bind="manualChargeBox"]').classList.contains("hidden"), true);
+  assert.equal(root.querySelector('[data-bind="departureChargeBox"]').classList.contains("hidden"), false);
 
+  // Clicking "fixed" calls select.select_option without confirmation dialog
+  const confirmDlg = root.querySelector('dialog[data-bind="confirmDialog"]');
+  root.querySelector('[data-charge-window-mode="fixed"]').click();
+  await Promise.resolve();
+  assert.equal(confirmDlg.open, false);
+  assert.deepEqual(hassIt.calls[0], {
+    domain: "select",
+    service: "select_option",
+    data: { entity_id: "select.lepas_charge_window_mode", option: "fixed" },
+  });
+
+  // Switching state to "fixed" shows manualChargeBox and hides departureChargeBox (when no quick_override_active)
+  card.hass = makeSmartHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "fixed", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "23:00 → (+1g) 05:00", {
+      start_time: "23:00",
+      end_time: "05:00",
+      next_day: true,
+      window_mode: "fixed",
+      effective_action: "enable",
+      plan_reason: "fixed_home",
+      charge_kind: "ac",
+      effective_power_kw: 2.2,
+      power_source: "learned_ac",
+      away_bypass_active: false,
+      quick_override_active: false,
+    }),
+  }, "it");
+  assert.equal(root.querySelector('[data-charge-window-mode="fixed"]').classList.contains("is-active"), true);
+  assert.equal(root.querySelector('[data-bind="manualChargeBox"]').classList.contains("hidden"), false);
+  assert.equal(root.querySelector('[data-bind="departureChargeBox"]').classList.contains("hidden"), true);
+
+  // Clicking "off" calls select.select_option with option: "off"
+  card._hass.calls.length = 0;
+  root.querySelector('[data-charge-window-mode="off"]').click();
+  await Promise.resolve();
+  assert.deepEqual(card._hass.calls[0], {
+    domain: "select",
+    service: "select_option",
+    data: { entity_id: "select.lepas_charge_window_mode", option: "off" },
+  });
+
+  // 2. Contextual badges: hidden when inactive, shown per attribute condition (IT + EN)
+  const badgesRow = root.querySelector('[data-bind="chargeStatusBadges"]');
+  const awayBadge = root.querySelector('[data-bind="awayBypassBadge"]');
+  const quickBadge = root.querySelector('[data-bind="quickOverrideBadge"]');
+  const immBadge = root.querySelector('[data-bind="immediateChargeBadge"]');
+  assert.ok(badgesRow && awayBadge && quickBadge && immBadge);
+  assert.equal(root.querySelector('[data-bind="chargeStatusBadges"]').hidden, true);
+  assert.equal(root.querySelector('[data-bind="awayBypassBadge"]').hidden, true);
+  assert.equal(root.querySelector('[data-bind="quickOverrideBadge"]').hidden, true);
+  assert.equal(root.querySelector('[data-bind="immediateChargeBadge"]').hidden, true);
+
+  // 2a. away_bypass_active === true -> Bypass fuori casa (must NOT trigger immediateChargeBadge)
+  card.hass = makeSmartHass({
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "Bypass fuori casa", {
+      window_mode: "smart_departure",
+      effective_action: "disable",
+      plan_reason: "away_bypass",
+      charge_kind: "ac",
+      effective_power_kw: 2.2,
+      power_source: "learned_ac",
+      away_bypass_active: true,
+      quick_override_active: false,
+    }),
+  }, "it");
+  assert.equal(badgesRow.hidden, false);
+  assert.equal(awayBadge.hidden, false);
+  assert.equal(awayBadge.textContent, "Bypass fuori casa");
+  assert.equal(quickBadge.hidden, true);
+  assert.equal(immBadge.hidden, true);
+
+  // 2b. quick_override_active === true (on fixed shows departureChargeBox too)
+  card.hass = makeSmartHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "fixed", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "02:15 → 07:30", {
+      start_time: "02:15",
+      end_time: "07:30",
+      window_mode: "fixed",
+      effective_action: "enable",
+      plan_reason: "quick_override",
+      charge_kind: "ac",
+      effective_power_kw: 2.2,
+      power_source: "learned_ac",
+      away_bypass_active: false,
+      quick_override_active: true,
+    }),
+  }, "it");
+  assert.equal(awayBadge.hidden, true);
+  assert.equal(quickBadge.hidden, false);
+  assert.equal(quickBadge.textContent, "Override Partenza rapida");
+  assert.equal(immBadge.hidden, true);
+  assert.equal(root.querySelector('[data-bind="departureChargeBox"]').classList.contains("hidden"), false);
+
+  // 2c. effective_action === "disable" with no_departure_24h -> Ricarica immediata
+  card.hass = makeSmartHass({
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "Immediata", {
+      window_mode: "smart_departure",
+      effective_action: "disable",
+      plan_reason: "no_departure_24h",
+      charge_kind: "ac",
+      effective_power_kw: 2.2,
+      power_source: "learned_ac",
+      away_bypass_active: false,
+      quick_override_active: false,
+    }),
+  }, "it");
+  assert.equal(awayBadge.hidden, true);
+  assert.equal(quickBadge.hidden, true);
+  assert.equal(immBadge.hidden, false);
+  assert.equal(immBadge.textContent, "Ricarica immediata");
+
+  // 2d. effective_action === "disable" with late_plug_in (EN labels)
+  card.hass = makeSmartHass({
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "Immediate", {
+      window_mode: "smart_departure",
+      effective_action: "disable",
+      plan_reason: "late_plug_in",
+      charge_kind: "dc",
+      effective_power_kw: 24.0,
+      power_source: "learned_dc",
+      away_bypass_active: false,
+      quick_override_active: false,
+    }),
+  }, "en");
+  const immBadgeEn = root.querySelector('[data-bind="immediateChargeBadge"]');
+  assert.equal(immBadgeEn.hidden, false);
+  assert.equal(immBadgeEn.textContent, "Immediate charging");
+  assert.equal(root.querySelector('[data-bind="homePowerSummary"]').textContent, "Auto DC · 24.0 kW");
+
+  // 3. Home charging power row: Auto AC summary, Auto/Manual toggle, decimal input enabled even when Auto is ON
+  card.hass = makeSmartHass({}, "it");
+  assert.equal(root.querySelector('[data-bind="homePowerSummary"]').textContent, "Auto AC · 2.2 kW");
+  const hpInput = root.querySelector('[data-entity-input="number.lepas_home_charge_power"]');
+  assert.ok(hpInput, "number.lepas_home_charge_power input must exist");
+  assert.equal(hpInput.getAttribute("type"), "number");
+  assert.equal(hpInput.getAttribute("min"), "1.4");
+  assert.equal(hpInput.getAttribute("max"), "40");
+  assert.equal(hpInput.getAttribute("step"), "0.1");
+  assert.equal(hpInput.value, "2.3");
+  assert.equal(hpInput.disabled, false, "home_charge_power input must stay enabled even when Auto is ON");
+
+  // Toggle Auto -> Manuale calls switch.turn_off
+  const autoBtn = root.querySelector('[data-home-power-auto="on"]');
+  const manualBtn = root.querySelector('[data-home-power-auto="off"]');
+  assert.ok(autoBtn && manualBtn);
+  assert.equal(autoBtn.classList.contains("is-emerald"), true);
+  assert.equal(manualBtn.classList.contains("is-active"), false);
+  manualBtn.click();
+  await Promise.resolve();
+  assert.deepEqual(card._hass.calls[0], {
+    domain: "switch",
+    service: "turn_off",
+    data: { entity_id: "switch.lepas_home_charge_power_auto" },
+  });
+
+  // Set decimal power value 3.7 while Manual is active -> summary "Manuale · 3.7 kW"
+  card.hass = makeSmartHass({
+    "switch.lepas_home_charge_power_auto": makeState("switch.lepas_home_charge_power_auto", "off"),
+    "number.lepas_home_charge_power": makeState("number.lepas_home_charge_power", "3.7", {
+      min: 1.4,
+      max: 40.0,
+      step: 0.1,
+      unit_of_measurement: "kW",
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "01:30 → 07:30", {
+      start_time: "01:30",
+      end_time: "07:30",
+      window_mode: "smart_departure",
+      effective_action: "enable",
+      plan_reason: "smart_home",
+      charge_kind: "ac",
+      effective_power_kw: 3.7,
+      power_source: "manual",
+      away_bypass_active: false,
+      quick_override_active: false,
+    }),
+  }, "it");
+  assert.equal(root.querySelector('[data-bind="homePowerSummary"]').textContent, "Manuale · 3.7 kW");
+  assert.equal(root.querySelector('[data-home-power-auto="off"]').classList.contains("is-active"), true);
+
+  // Changing numeric input calls number.set_value with 0.1 step decimal + clamping
+  card._hass.calls.length = 0;
+  hpInput.value = "7.4";
+  hpInput.dispatchEvent(new Event("change", { bubbles: true }));
+  await Promise.resolve();
+  assert.deepEqual(card._hass.calls[0], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_home_charge_power", value: 7.4 },
+  });
+  hpInput.value = "3.74";
+  hpInput.dispatchEvent(new Event("change", { bubbles: true }));
+  await Promise.resolve();
+  assert.deepEqual(card._hass.calls[1], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_home_charge_power", value: 3.7 },
+  });
+  hpInput.value = "0.5";
+  hpInput.dispatchEvent(new Event("change", { bubbles: true }));
+  await Promise.resolve();
+  assert.deepEqual(card._hass.calls[2], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_home_charge_power", value: 1.4 },
+  });
+  hpInput.value = "55";
+  hpInput.dispatchEvent(new Event("change", { bubbles: true }));
+  await Promise.resolve();
+  assert.deepEqual(card._hass.calls[3], {
+    domain: "number",
+    service: "set_value",
+    data: { entity_id: "number.lepas_home_charge_power", value: 40 },
+  });
+
+  // Toggle Manual -> Auto calls switch.turn_on
+  root.querySelector('[data-home-power-auto="on"]').click();
+  await Promise.resolve();
+  assert.deepEqual(card._hass.calls[4], {
+    domain: "switch",
+    service: "turn_on",
+    data: { entity_id: "switch.lepas_home_charge_power_auto" },
+  });
+
+  // Unavailable scheduled_charging_window hides contextual badges cleanly
+  card.hass = makeSmartHass({
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "unavailable", {
+      away_bypass_active: true,
+      quick_override_active: true,
+      effective_action: "disable",
+      plan_reason: "no_departure_24h",
+    }),
+  }, "it");
+  assert.equal(root.querySelector('[data-bind="chargeStatusBadges"]').hidden, true);
+  assert.equal(root.querySelector('[data-bind="awayBypassBadge"]').hidden, true);
+  assert.equal(root.querySelector('[data-bind="quickOverrideBadge"]').hidden, true);
+  assert.equal(root.querySelector('[data-bind="immediateChargeBadge"]').hidden, true);
+
+  // English summary for manual mode
+  card.hass = makeSmartHass({
+    "switch.lepas_home_charge_power_auto": makeState("switch.lepas_home_charge_power_auto", "off"),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "01:30 → 07:30", {
+      window_mode: "smart_departure",
+      effective_action: "enable",
+      plan_reason: "smart_home",
+      charge_kind: "ac",
+      effective_power_kw: 3.7,
+      power_source: "manual",
+      away_bypass_active: false,
+      quick_override_active: false,
+    }),
+  }, "en");
+  assert.equal(root.querySelector('[data-bind="homePowerSummary"]').textContent, "Manual · 3.7 kW");
+
+  // 4. AB-LEP-016: car_in_use true -> false MUST NEVER disable charge_window_mode, home_charge_power_auto, or home_charge_power
+  const carInUseHass = makeSmartHass({
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", {
+      temperature: 21.0,
+      min_temp: 16,
+      max_temp: 30,
+      target_temperature_step: 0.5,
+      hvac_modes: ["off", "heat_cool"],
+      car_in_use: true,
+    }),
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "on", {
+      car_in_use: true,
+    }),
+  }, "it");
+  card.hass = carInUseHass;
+  for (const btn of root.querySelectorAll("[data-charge-window-mode]")) {
+    assert.equal(btn.disabled, false, "charge_window_mode button must stay enabled when car_in_use is true");
+    assert.equal(btn.classList.contains("is-car-in-use"), false);
+  }
+  for (const btn of root.querySelectorAll("[data-home-power-auto]")) {
+    assert.equal(btn.disabled, false, "home_charge_power_auto toggle must stay enabled when car_in_use is true");
+    assert.equal(btn.classList.contains("is-car-in-use"), false);
+  }
+  // Transition en -> it rebuilds DOM: query live hpInput node
+  const liveHpInput = root.querySelector('[data-entity-input="number.lepas_home_charge_power"]');
+  assert.equal(liveHpInput.disabled, false, "home_charge_power input must stay enabled when car_in_use is true");
+  assert.equal(liveHpInput.classList.contains("is-car-in-use"), false);
+
+  // Interactive even while car_in_use is true
+  root.querySelector('[data-charge-window-mode="fixed"]').click();
+  root.querySelector('[data-home-power-auto="off"]').click();
+  liveHpInput.value = "3.7";
+  liveHpInput.dispatchEvent(new Event("change", { bubbles: true }));
+  await Promise.resolve();
+  assert.equal(carInUseHass.calls.length, 3);
+
+  // Transition car_in_use: true -> false on SAME rendered instance keeps controls enabled and working
+  const parkedAfterDriveHass = makeSmartHass({
+    "climate.lepas_climate": makeState("climate.lepas_climate", "off", {
+      temperature: 21.0,
+      min_temp: 16,
+      max_temp: 30,
+      target_temperature_step: 0.5,
+      hvac_modes: ["off", "heat_cool"],
+      car_in_use: false,
+    }),
+    "binary_sensor.lepas_high_voltage_active": makeState("binary_sensor.lepas_high_voltage_active", "off", {
+      car_in_use: false,
+    }),
+  }, "it");
+  card.hass = parkedAfterDriveHass;
+  for (const btn of root.querySelectorAll("[data-charge-window-mode]")) {
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.classList.contains("is-car-in-use"), false);
+  }
+  for (const btn of root.querySelectorAll("[data-home-power-auto]")) {
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.classList.contains("is-car-in-use"), false);
+  }
+  assert.equal(root.querySelector('[data-entity-input="number.lepas_home_charge_power"]').disabled, false);
+  root.querySelector('[data-charge-window-mode="off"]').click();
+  await Promise.resolve();
+  assert.deepEqual(parkedAfterDriveHass.calls[0], {
+    domain: "select",
+    service: "select_option",
+    data: { entity_id: "select.lepas_charge_window_mode", option: "off" },
+  });
+});

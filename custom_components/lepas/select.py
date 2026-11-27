@@ -11,7 +11,12 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .const import DOMAIN, entity_allowed
 from .entity import LepasEntity
 from .naming import ID_PREFIX
-from .scheduler import CHARGE_DAYS_PRESETS, parse_days_input, preset_for_days
+from .scheduler import (
+    CHARGE_DAYS_PRESETS,
+    CHARGE_WINDOW_MODES,
+    parse_days_input,
+    preset_for_days,
+)
 
 _CLIMATE_MODES = ["at_home", "anywhere", "off"]
 
@@ -24,6 +29,8 @@ async def async_setup_entry(
     ents: list[SelectEntity] = []
     if entity_allowed(coord, "select", "charge_days"):
         ents.append(LepasChargeDaysSelect(coord))
+    if entity_allowed(coord, "select", "charge_window_mode"):
+        ents.append(LepasChargeWindowModeSelect(coord))
     if entity_allowed(coord, "select", "departure_climate_mode"):
         ents.append(LepasDepartureClimateModeSelect(coord))
     add(ents)
@@ -119,4 +126,43 @@ class LepasDepartureClimateModeSelect(LepasEntity, SelectEntity, RestoreEntity):
         self.coordinator.departure_climate_mode = option
         if hasattr(self.coordinator, "notify_schedule_changed"):
             self.coordinator.notify_schedule_changed()
+        self.async_write_ha_state()
+
+
+class LepasChargeWindowModeSelect(LepasEntity, SelectEntity, RestoreEntity):
+    """Select home charging window automation mode ('off', 'fixed', 'smart_departure')."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:ev-station"
+
+    def __init__(self, coord) -> None:
+        super().__init__(
+            coord,
+            "Lepas Charge window mode",
+            "charge_window_mode",
+            object_id=f"{ID_PREFIX}_charge_window_mode",
+            entity_id_format=ENTITY_ID_FORMAT,
+            translation_key="charge_window_mode",
+        )
+        self._attr_options = list(CHARGE_WINDOW_MODES)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state in CHARGE_WINDOW_MODES:
+            self.coordinator.set_charge_window_mode(
+                last.state, from_restore=True, sync_charge=False
+            )
+
+    @property
+    def current_option(self) -> str:
+        mode = getattr(self.coordinator, "charge_window_mode", "off")
+        return mode if mode in CHARGE_WINDOW_MODES else "off"
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in CHARGE_WINDOW_MODES:
+            raise ValueError(f"Unsupported charge window mode: {option!r}")
+        self.coordinator.set_charge_window_mode(
+            option, from_restore=False, sync_charge=True
+        )
         self.async_write_ha_state()

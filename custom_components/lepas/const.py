@@ -208,8 +208,11 @@ ENTITY_FEATURE_MAP: dict[tuple[str, str], str] = {
     # scheduled_charging
     ("switch", "ricarica_programmata"): "scheduled_charging",
     ("select", "charge_days"): "scheduled_charging",
+    ("select", "charge_window_mode"): "scheduled_charging",
     ("button", "apply_charging_schedule"): "scheduled_charging",
     ("switch", "sync_charge_to_departure"): "scheduled_charging",
+    ("switch", "home_charge_power_auto"): "scheduled_charging",
+    ("number", "home_charge_power"): "scheduled_charging",
     ("sensor", "scheduled_charging_window"): "scheduled_charging",
     # scheduled_departure_control
     ("switch", "native_departure_sync"): "scheduled_departure_control",

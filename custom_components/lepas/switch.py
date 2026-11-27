@@ -130,6 +130,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         coord, "Lepas Sync charging to departure", "sync_charge_to_departure",
         "sync_charge_to_departure", "mdi:battery-sync", sync_mode="charge",
     )
+    home_power_auto = LepasScheduleSwitch(
+        coord, "Lepas Home charge power auto", "home_charge_power_auto",
+        "home_charge_power_auto", "mdi:flash-auto", sync_mode="charge_power", default=True,
+    )
     native_dep_sync = LepasScheduleSwitch(
         coord, "Lepas Native departure sync", "native_departure_sync",
         "native_departure_sync", "mdi:calendar-sync", sync_mode="native",
@@ -159,6 +163,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         (polling, "polling_auto"),
         (quick_dep, "quick_departure"),
         (sync_charge, "sync_charge_to_departure"),
+        (home_power_auto, "home_charge_power_auto"),
         (native_dep_sync, "native_departure_sync"),
         (battery_heat, "battery_pack_heat"),
         (sync_battery, "sync_battery_heat_to_departure"),
@@ -933,10 +938,11 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
     _attr_device_class = SwitchDeviceClass.SWITCH
     _attr_entity_category = EntityCategory.CONFIG
     _SYNC_MODES = {
-        "charge": lambda en: {"sync_charge": en},
+        "charge": lambda _en: {"sync_charge": True},
+        "charge_power": lambda _en: {"sync_charge": True},
         "native": lambda en: {"sync_native": en},
         "battery": lambda en: {"sync_battery": en},
-        "departure": lambda en: {"sync_charge": en, "sync_native": False, "sync_battery": True},
+        "departure": lambda _en: {"sync_charge": True, "sync_native": False, "sync_battery": True},
     }
 
     def __init__(
@@ -948,6 +954,7 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         icon: str,
         *,
         sync_mode: str = "charge",
+        default: bool = False,
     ) -> None:
         super().__init__(
             coord,
@@ -960,20 +967,35 @@ class LepasScheduleSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         self._attr = attr
         self._attr_icon = icon
         self._sync_mode = sync_mode
+        self._default = bool(default)
+        self._restored = self._default
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
+        # Restored charge_window_mode select takes precedence over legacy sync switch.
+        if (
+            self._attr == "sync_charge_to_departure"
+            and getattr(self.coordinator, "_charge_window_mode_restored", False)
+        ):
+            self._restored = bool(getattr(self.coordinator, self._attr, self._default))
+            return
         last = await self.async_get_last_state()
         if last is not None and last.state in ("on", "off"):
-            setattr(self.coordinator, self._attr, last.state == "on")
+            enabled = last.state == "on"
+            self._restored = enabled
+            setattr(self.coordinator, self._attr, enabled)
             if hasattr(self.coordinator, "notify_schedule_changed"):
                 self.coordinator.notify_schedule_changed(
                     sync_charge=False, sync_native=False, sync_battery=False
                 )
+        else:
+            self._restored = self._default
+            if not hasattr(self.coordinator, self._attr) or self._default:
+                setattr(self.coordinator, self._attr, self._default)
 
     @property
     def is_on(self) -> bool:
-        return bool(getattr(self.coordinator, self._attr, False))
+        return bool(getattr(self.coordinator, self._attr, self._default))
 
     async def _set_enabled(self, enabled: bool) -> None:
         setattr(self.coordinator, self._attr, enabled)
@@ -1095,7 +1117,7 @@ class LepasWeeklyDepartureSwitch(LepasEntity, SwitchEntity, RestoreEntity):
         self.coordinator.departure_weekly[self._day] = (enabled, mins)
         if hasattr(self.coordinator, "notify_schedule_changed"):
             self.coordinator.notify_schedule_changed(
-                sync_charge=enabled, sync_native=False, sync_battery=True
+                sync_charge=True, sync_native=False, sync_battery=True
             )
         self.async_write_ha_state()
 

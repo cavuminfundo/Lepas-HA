@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import statistics
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,10 +14,59 @@ DAILY_HISTORY_LIMIT = 30
 MONTHLY_HISTORY_LIMIT = 12
 MIN_VALID_SOC_STEP_PCT = 0.5
 MAX_SOC_JUMP_PCT = 100.0
+DC_POWER_THRESHOLD_KW = 11.0
+CC_MIN_POWER_KW = 0.5
+CC_AC_MAX_POWER_KW = 15.0
+CC_DC_MAX_POWER_KW = 120.0
+CC_AC_SOC_MAX_PCT = 85.0
+CC_DC_SOC_MAX_PCT = 75.0
+CC_MIN_SAMPLES = 3
+CC_MAX_SAMPLES = 120
+CC_EMA_OLD_WEIGHT = 0.7
+CC_EMA_NEW_WEIGHT = 0.3
+DEFAULT_MANUAL_HOME_POWER_KW = 2.3
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 _YEAR_RE = re.compile(r"^\d{4}$")
+
+
+def classify_charge_kind(fast_charging: bool | None, power_kw: float | None) -> str:
+    """Classify connector type as 'dc' or 'ac' from fast-charging flag or power."""
+    if fast_charging is True:
+        return "dc"
+    pwr = _safe_float(power_kw)
+    if pwr is not None and pwr > DC_POWER_THRESHOLD_KW:
+        return "dc"
+    return "ac"
+
+
+def select_effective_home_power(
+    *,
+    auto_enabled: bool,
+    manual_kw: float,
+    charge_kind: str,
+    learned_ac_kw: float | None,
+    learned_dc_kw: float | None,
+) -> tuple[float, str]:
+    """Select effective home power in kW and its source ('learned_ac', 'learned_dc', 'manual')."""
+    man_raw = _safe_float(manual_kw)
+    manual = (
+        man_raw
+        if (man_raw is not None and man_raw > 0.0)
+        else DEFAULT_MANUAL_HOME_POWER_KW
+    )
+    if not auto_enabled:
+        return (manual, "manual")
+    if charge_kind == "dc":
+        dc_kw = _safe_float(learned_dc_kw)
+        if dc_kw is not None and dc_kw > 0.0:
+            return (dc_kw, "learned_dc")
+        return (manual, "manual")
+    ac_kw = _safe_float(learned_ac_kw)
+    if ac_kw is not None and ac_kw > 0.0:
+        return (ac_kw, "learned_ac")
+    return (manual, "manual")
 
 
 def _is_charging_state(charge_state: object) -> bool:
@@ -179,6 +229,48 @@ class ChargingStatsTracker:
         self._prev_charging: bool = False
         self._session_active: bool = False
         self._session_counted: bool = False
+        self._home_learned_ac_kw: float | None = None
+        self._home_learned_dc_kw: float | None = None
+        self._home_ac_sessions: int = 0
+        self._home_dc_sessions: int = 0
+        self._cc_kind: str | None = None
+        self._cc_samples: list[float] = []
+
+    def _flush_cc_learning(self) -> bool:
+        """Finalize buffered CC home power samples into the learned AC/DC EMA profile."""
+        if len(self._cc_samples) < CC_MIN_SAMPLES or self._cc_kind not in ("ac", "dc"):
+            self._cc_samples.clear()
+            self._cc_kind = None
+            return False
+        med = float(statistics.median(self._cc_samples))
+        if self._cc_kind == "dc":
+            old = self._home_learned_dc_kw
+            self._home_learned_dc_kw = (
+                round(med, 2)
+                if old is None
+                else round(CC_EMA_OLD_WEIGHT * old + CC_EMA_NEW_WEIGHT * med, 2)
+            )
+            self._home_dc_sessions += 1
+        else:
+            old = self._home_learned_ac_kw
+            self._home_learned_ac_kw = (
+                round(med, 2)
+                if old is None
+                else round(CC_EMA_OLD_WEIGHT * old + CC_EMA_NEW_WEIGHT * med, 2)
+            )
+            self._home_ac_sessions += 1
+        self._cc_samples.clear()
+        self._cc_kind = None
+        return True
+
+    def home_power_profile(self) -> dict[str, Any]:
+        """Return learned AC/DC home charging power and session counts."""
+        return {
+            "learned_ac_kw": self._home_learned_ac_kw,
+            "learned_dc_kw": self._home_learned_dc_kw,
+            "home_ac_sessions": self._home_ac_sessions,
+            "home_dc_sessions": self._home_dc_sessions,
+        }
 
     def _rollover(self, local_date: str) -> bool:
         local_month = local_date[:7]
@@ -285,6 +377,7 @@ class ChargingStatsTracker:
         in_home_zone: bool | None,
         degraded_battery: bool,
         battery_capacity_kwh: float = DEFAULT_BATTERY_CAPACITY_KWH,
+        fast_charging: bool | None = None,
     ) -> bool:
         """Ingest one realtime or fields-only update. Returns True if persisted state changed."""
         if degraded_battery:
@@ -305,6 +398,8 @@ class ChargingStatsTracker:
         cap = cap_raw if cap_raw is not None else 0.0
 
         changed = self._rollover(local_date)
+        if in_home_zone is not True and self._flush_cc_learning():
+            changed = True
 
         if power_kw is None:
             # MQTT fields-only push: preserve trapezoid anchor unless session clearly stopped.
@@ -370,6 +465,8 @@ class ChargingStatsTracker:
                     changed = True
                 self._prev_odo_km = odo
             if (not plugged) or odo_advanced:
+                if self._flush_cc_learning():
+                    changed = True
                 if was_active:
                     changed = True
                 self._session_active = False
@@ -397,8 +494,30 @@ class ChargingStatsTracker:
         )
 
         if reset_cont:
+            if self._flush_cc_learning():
+                changed = True
             self._session_active = False
             self._session_counted = False
+
+        if in_home_zone is True and charging:
+            kind = classify_charge_kind(fast_charging, pwr)
+            if (
+                self._cc_kind is not None
+                and self._cc_kind != kind
+                and self._flush_cc_learning()
+            ):
+                changed = True
+            max_pwr = CC_DC_MAX_POWER_KW if kind == "dc" else CC_AC_MAX_POWER_KW
+            max_soc = CC_DC_SOC_MAX_PCT if kind == "dc" else CC_AC_SOC_MAX_PCT
+            # Only collect constant-current phase samples so CV taper does not skew learned power.
+            if (
+                CC_MIN_POWER_KW <= pwr <= max_pwr
+                and soc is not None
+                and 0.0 <= soc < max_soc
+            ):
+                self._cc_kind = kind
+                if len(self._cc_samples) < CC_MAX_SAMPLES:
+                    self._cc_samples.append(pwr)
 
         if self._record_delta_if_positive(local_date, delta_kwh, in_home_zone):
             changed = True
@@ -433,6 +552,9 @@ class ChargingStatsTracker:
         self._prev_soc_pct = new_prev_soc
         self._prev_odo_km = new_prev_odo
 
+        if not plugged and not charging:
+            if self._flush_cc_learning():
+                changed = True
         if (not plugged and not charging) or reset_cont:
             if self._session_active or self._session_counted:
                 changed = True
@@ -521,6 +643,7 @@ class ChargingStatsTracker:
                 "session_active": self._session_active,
                 "session_counted": self._session_counted,
             },
+            "home_power": self.home_power_profile(),
         }
 
     @classmethod
@@ -581,5 +704,23 @@ class ChargingStatsTracker:
                 tracker._session_active = base["session_active"]
             if isinstance(base.get("session_counted"), bool):
                 tracker._session_counted = base["session_counted"]
+
+        hp = raw.get("home_power")
+        if isinstance(hp, dict):
+            ac_kw = _safe_float(hp.get("learned_ac_kw"))
+            if ac_kw is not None and CC_MIN_POWER_KW <= ac_kw <= CC_AC_MAX_POWER_KW:
+                tracker._home_learned_ac_kw = round(ac_kw, 2)
+            dc_kw = _safe_float(hp.get("learned_dc_kw"))
+            if dc_kw is not None and CC_MIN_POWER_KW <= dc_kw <= CC_DC_MAX_POWER_KW:
+                tracker._home_learned_dc_kw = round(dc_kw, 2)
+            for raw_key, attr in (
+                ("home_ac_sessions", "_home_ac_sessions"),
+                ("home_dc_sessions", "_home_dc_sessions"),
+            ):
+                sc = hp.get(raw_key)
+                if not isinstance(sc, bool) and isinstance(sc, (int, float)):
+                    sc_f = _safe_float(sc)
+                    if sc_f is not None and sc_f >= 0.0 and float(int(sc_f)) == sc_f:
+                        setattr(tracker, attr, int(sc_f))
 
         return tracker

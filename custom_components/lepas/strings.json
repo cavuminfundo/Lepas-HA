@@ -293,6 +293,9 @@
       },
       "charge_duration": {
         "name": "Scheduled charge · duration"
+      },
+      "home_charge_power": {
+        "name": "Home charge power"
       }
     },
     "select": {
@@ -305,6 +308,14 @@
           "mon_wed_fri": "Mon · Wed · Fri",
           "tue_thu_sat": "Tue · Thu · Sat",
           "custom": "Custom"
+        }
+      },
+      "charge_window_mode": {
+        "name": "Home charging window mode",
+        "state": {
+          "off": "Off",
+          "fixed": "Fixed schedule",
+          "smart_departure": "Smart departure"
         }
       },
       "departure_climate_mode": {
@@ -546,6 +557,9 @@
       },
       "sync_charge_to_departure": {
         "name": "Sync charge to departure"
+      },
+      "home_charge_power_auto": {
+        "name": "Home charge power · auto"
       },
       "departure_mon_enabled": {
         "name": "Departure Mon · enabled"

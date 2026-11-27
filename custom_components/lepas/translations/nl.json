@@ -293,6 +293,9 @@
       },
       "charge_duration": {
         "name": "Gepland laden · duur"
+      },
+      "home_charge_power": {
+        "name": "Laadvermogen thuis"
       }
     },
     "select": {
@@ -305,6 +308,14 @@
           "mon_wed_fri": "Ma · Wo · Vr",
           "tue_thu_sat": "Di · Do · Za",
           "custom": "Aangepast"
+        }
+      },
+      "charge_window_mode": {
+        "name": "Laadvenster thuismodus",
+        "state": {
+          "off": "Uit",
+          "fixed": "Vast tijdschema",
+          "smart_departure": "Slimme vertrektijd"
         }
       },
       "departure_climate_mode": {
@@ -546,6 +557,9 @@
       },
       "sync_charge_to_departure": {
         "name": "Laadtijd afstemmen op vertrek"
+      },
+      "home_charge_power_auto": {
+        "name": "Laadvermogen thuis · auto"
       },
       "departure_mon_enabled": {
         "name": "Vertrek Ma · ingeschakeld"

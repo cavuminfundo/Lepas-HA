@@ -21,7 +21,7 @@ from homeassistant.components.number import (
     RestoreNumber,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfPower, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -42,6 +42,8 @@ NUMBERS = [
     # vecchio cursore 0–23 perché l'auto accetta i minuti. Qui resta solo la DURATA.
     ("Lepas Ricarica · durata", "ricarica_durata_ore", "charge_duration_hours",
      1, 12, 1, 6, UnitOfTime.HOURS, "mdi:battery-clock"),
+    ("Lepas Home charge power", "home_charge_power", "home_charge_power",
+     1.4, 40.0, 0.1, 2.3, UnitOfPower.KILO_WATT, "mdi:flash-auto"),
 ]
 
 
@@ -105,7 +107,15 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
         if not math.isfinite(num):
             return fallback
         if not self._allowed_durations:
-            return num
+            vmin = float(self._attr_native_min_value)
+            vmax = float(self._attr_native_max_value)
+            step = float(self._attr_native_step)
+            clamped = min(vmax, max(vmin, num))
+            if step < 1.0:
+                decimals = len(f"{step:g}".split(".")[1]) if "." in f"{step:g}" else 1
+                snapped = round(round((clamped - vmin) / step) * step + vmin, decimals)
+                return min(vmax, max(vmin, float(snapped)))
+            return float(int(clamped))
         corrected = durata_ammessa(num, self._allowed_durations)
         return float(corrected) if corrected is not None else float(int(num))
 
@@ -166,15 +176,18 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
             self._push()
         if (
             (restored or synced_from_twin)
-            and self._attr in ("charge_duration_hours", *_SYNCED_CLIMATE_DURATION_ATTRS)
+            and self._attr in ("charge_duration_hours", "home_charge_power", *_SYNCED_CLIMATE_DURATION_ATTRS)
             and hasattr(self.coordinator, "notify_schedule_changed")
         ):
-            self.coordinator.notify_schedule_changed()
+            self.coordinator.notify_schedule_changed(sync_charge=False)
 
     def _push(self, *, sync_twin: bool = False) -> None:
-        # mantieni il valore come int quando è intero (orari/giorni), così i body comando
-        # non finiscono con "8.0" dove l'app usa interi.
-        v = int(self._value) if float(self._value).is_integer() else self._value
+        # Preserve float for sub-unit steps (e.g. kW with 0.1 step); cast int for integer steps.
+        v = (
+            int(self._value)
+            if self._attr_native_step >= 1 and float(self._value).is_integer()
+            else float(self._value)
+        )
         setattr(self.coordinator, self._attr, v)
         if sync_twin and self._attr in _SYNCED_CLIMATE_DURATION_ATTRS:
             for attr in _SYNCED_CLIMATE_DURATION_ATTRS:
@@ -194,10 +207,10 @@ class LepasConfigNumber(LepasEntity, RestoreNumber):
         self._value = self._snap_value(value)
         self._push(sync_twin=True)
         if (
-            self._attr in ("charge_duration_hours", *_SYNCED_CLIMATE_DURATION_ATTRS)
+            self._attr in ("charge_duration_hours", "home_charge_power", *_SYNCED_CLIMATE_DURATION_ATTRS)
             and hasattr(self.coordinator, "notify_schedule_changed")
         ):
             self.coordinator.notify_schedule_changed(
-                sync_charge=(self._attr == "charge_duration_hours")
+                sync_charge=(self._attr in ("charge_duration_hours", "home_charge_power"))
             )
         self.async_write_ha_state()
