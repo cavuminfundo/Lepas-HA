@@ -204,6 +204,13 @@ def test_smart_charging_window_controls_labels_and_antibodies() -> None:
         '"Ricarica immediata"',
         '"Auto AC"',
         '"Auto DC"',
+        '"Auto (base)"',
+        '"Auto (fallback)"',
+        '"Auto (basis)"',
+        '"Nessuna partenza attiva: abilita un giorno in Partenze."',
+        '"No active departure: enable a day in Departures."',
+        '"Geen actief vertrek: schakel een dag in bij Vertrek."',
+        "OPTIMISTIC_TTL_MS = 10000",
     ):
         assert expected in source, f"Missing {expected} in lepas-card.js"
 

@@ -1268,7 +1268,10 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
         *,
         dur_min: int | None = None,
         ref_date=None,
+        plan: DesiredChargePlan | None = None,
     ) -> bool | None:
+        if plan is not None and plan.action == "noop":
+            return None
         raw = (self.coordinator.data or {}).get("fields", {}).get("chargeAppointPlans")
         if not raw:
             return None
@@ -1279,6 +1282,12 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
             return None
         if piano is None:
             return None
+        sw_on = field_on(piano.get("switchStatus"))
+        if plan is not None:
+            if plan.action == "disable":
+                return (sw_on is False) if sw_on is not None else None
+            if plan.action == "enable" and sw_on is False:
+                return False
         tz = resolve_tzinfo(getattr(self, "hass", None) or getattr(self.coordinator, "hass", None))
         decoded = decode_charge_appoint_plan(piano, tz, ref_date=ref_date)
         if (
@@ -1336,6 +1345,7 @@ class LepasScheduledChargingWindowSensor(LepasEntity, SensorEntity):
                 days,
                 dur_min=dur_min,
                 ref_date=ref_date,
+                plan=plan,
             ),
             "window_mode": window_mode,
             "effective_action": plan.action if plan is not None else "noop",

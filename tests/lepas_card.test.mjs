@@ -5594,3 +5594,492 @@ test("Smart charging window mode selector, contextual badges, home power row, an
     data: { entity_id: "select.lepas_charge_window_mode", option: "off" },
   });
 });
+
+test("Contextual depChargeStartText for all plan_reason values and updated noDeparturePlanned (IT/EN/NL)", () => {
+  const cases = [
+    ["already_charged", "Batteria già carica", "Battery already charged", "Accu al vol"],
+    ["late_plug_in", "Ricarica immediata (partenza vicina)", "Immediate charging (departure soon)", "Direct laden (vertrek dichtbij)"],
+    ["away_bypass", "Fuori casa: ricarica immediata", "Away from home: immediate charging", "Niet thuis: direct laden"],
+    ["no_departure_24h", "Partenza oltre 24h: ricarica immediata", "Departure >24h away: immediate charging", "Vertrek >24u: direct laden"],
+    ["unknown_location", "Posizione non nota: in attesa", "Location unknown: waiting", "Locatie onbekend: wachtend"],
+  ];
+  const makeDepHass = ({ lang, depState, departureAt, plannedStart, planReason }) => makeFullHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "smart_departure", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", depState, {
+      departure_at: departureAt,
+      planned_charge_start: plannedStart,
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "Immediata", {
+      window_mode: "smart_departure",
+      plan_reason: planReason,
+    }),
+  }, lang);
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, makeDepHass({
+    lang: "it",
+    depState: "Domani mer 07:30",
+    departureAt: "2026-11-18T07:30:00+01:00",
+    plannedStart: null,
+    planReason: "already_charged",
+  }));
+  const getDepTxt = () => card.shadowRoot.querySelector('[data-bind="depChargeStartText"]').textContent;
+
+  for (const [reason, itLbl, enLbl, nlLbl] of cases) {
+    for (const [lang, lbl, depState] of [
+      ["it", itLbl, "Domani mer 07:30"],
+      ["en", enLbl, "Tomorrow Wed 07:30"],
+      ["nl", nlLbl, "Morgen wo 07:30"],
+    ]) {
+      card.hass = makeDepHass({
+        lang,
+        depState,
+        departureAt: "2026-11-18T07:30:00+01:00",
+        plannedStart: null,
+        planReason: reason,
+      });
+      const txt = getDepTxt();
+      assert.equal(txt, `${lbl} · ${depState}`);
+      assert.equal(txt.includes("·  ·") || txt.includes("··"), false, "Must never produce double separator");
+      assert.equal(txt.includes("Nessuna partenza"), false);
+      assert.equal(txt.includes("No active departure"), false);
+      assert.equal(txt.includes("Geen actief vertrek"), false);
+    }
+
+    // Dead nextDep (unavailable / whitespace) with stale departure_at must fall back to noDeparturePlanned
+    card.hass = makeDepHass({
+      lang: "it",
+      depState: "unavailable",
+      departureAt: "2026-11-18T07:30:00+01:00",
+      plannedStart: null,
+      planReason: reason,
+    });
+    assert.equal(getDepTxt(), "Nessuna partenza attiva: abilita un giorno in Partenze.");
+  }
+
+  // Missing or unmapped plan_reason (e.g. mode_off) with departure_at -> explicit fallback, never noDeparturePlanned
+  for (const [lang, depState, expected] of [
+    ["it", "Domani mer 07:30", "Avvio carica: — · Domani mer 07:30"],
+    ["en", "Tomorrow Wed 07:30", "Charge start: — · Tomorrow Wed 07:30"],
+    ["nl", "Morgen wo 07:30", "Start laden: — · Morgen wo 07:30"],
+  ]) {
+    card.hass = makeDepHass({
+      lang,
+      depState,
+      departureAt: "2026-11-18T07:30:00+01:00",
+      plannedStart: null,
+      planReason: "mode_off",
+    });
+    assert.equal(getDepTxt(), expected);
+    card.hass = makeDepHass({
+      lang,
+      depState,
+      departureAt: "2026-11-18T07:30:00+01:00",
+      plannedStart: null,
+      planReason: null,
+    });
+    assert.equal(getDepTxt(), expected);
+  }
+
+  // departure_at: null -> updated noDeparturePlanned across IT / EN / NL
+  for (const [lang, expected] of [
+    ["it", "Nessuna partenza attiva: abilita un giorno in Partenze."],
+    ["en", "No active departure: enable a day in Departures."],
+    ["nl", "Geen actief vertrek: schakel een dag in bij Vertrek."],
+  ]) {
+    card.hass = makeDepHass({
+      lang,
+      depState: "Disattivata",
+      departureAt: null,
+      plannedStart: null,
+      planReason: "no_departure_24h",
+    });
+    assert.equal(getDepTxt(), expected);
+  }
+});
+
+test("homePowerSummary Auto fallback labels (IT/EN/NL) and optimistic Auto <-> Manual flash-free rollback", async () => {
+  const makePowerHass = ({ lang = "it", autoState = "on", manualKw = "2.3", powerSource = "manual", effectiveKw = 2.3 } = {}) => makeFullHass({
+    "switch.lepas_home_charge_power_auto": makeState("switch.lepas_home_charge_power_auto", autoState),
+    "number.lepas_home_charge_power": makeState("number.lepas_home_charge_power", manualKw, {
+      min: 1.4,
+      max: 40.0,
+      step: 0.1,
+      unit_of_measurement: "kW",
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "01:30 → 07:30", {
+      window_mode: "smart_departure",
+      power_source: powerSource,
+      effective_power_kw: effectiveKw,
+    }),
+  }, lang);
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, makePowerHass({ lang: "it", autoState: "on", manualKw: "2.3", powerSource: "manual", effectiveKw: 2.3 }));
+  const getSummary = () => card.shadowRoot.querySelector('[data-bind="homePowerSummary"]');
+
+  // Auto ON + power_source: "manual" -> Auto fallback label without emerald/glacier across IT / EN / NL
+  for (const [lang, expected] of [
+    ["it", "Auto (base) · 2.3 kW"],
+    ["en", "Auto (fallback) · 2.3 kW"],
+    ["nl", "Auto (basis) · 2.3 kW"],
+  ]) {
+    card.hass = makePowerHass({ lang, autoState: "on", manualKw: "2.3", powerSource: "manual", effectiveKw: 2.3 });
+    const summary = getSummary();
+    assert.equal(summary.textContent, expected);
+    assert.equal(summary.classList.contains("is-emerald"), false);
+    assert.equal(summary.classList.contains("is-glacier"), false);
+  }
+
+  // Auto OFF + manual -> Manuale · 3.7 kW
+  card.hass = makePowerHass({ lang: "it", autoState: "off", manualKw: "3.7", powerSource: "manual", effectiveKw: 3.7 });
+  assert.equal(getSummary().textContent, "Manuale · 3.7 kW");
+
+  // Optimistic Auto -> Manual while backend still reports learned_ac 2.2 kW (manual input is 3.7 kW)
+  let rejectToggle;
+  const autoAcHass = makePowerHass({ lang: "it", autoState: "on", manualKw: "3.7", powerSource: "learned_ac", effectiveKw: 2.2 });
+  autoAcHass.callService = (domain, service, data) => {
+    autoAcHass.calls.push({ domain, service, data });
+    return new Promise((_, reject) => {
+      rejectToggle = reject;
+    });
+  };
+  card.hass = autoAcHass;
+  assert.equal(getSummary().textContent, "Auto AC · 2.2 kW");
+  assert.equal(getSummary().classList.contains("is-emerald"), true);
+
+  const root = card.shadowRoot;
+  const autoBtn = root.querySelector('[data-home-power-auto="on"]');
+  const manualBtn = root.querySelector('[data-home-power-auto="off"]');
+  manualBtn.click();
+
+  // Immediately shows Manuale · 3.7 kW (no "Auto AC" or 2.2 kW flash), pending on both buttons
+  assert.equal(getSummary().textContent, "Manuale · 3.7 kW");
+  assert.equal(getSummary().classList.contains("is-emerald"), false);
+  assert.equal(getSummary().classList.contains("is-glacier"), false);
+  assert.equal(manualBtn.classList.contains("is-active"), true);
+  assert.equal(autoBtn.classList.contains("is-active"), false);
+  assert.equal(manualBtn.classList.contains("is-pending"), true);
+
+  // Double-click guard while in-flight
+  autoBtn.click();
+  assert.equal(autoAcHass.calls.length, 1, "Pending guard must block double-click on home_charge_power_auto");
+
+  // Reject -> rolls back to Auto AC · 2.2 kW and clears pending
+  rejectToggle(new Error("Switch failed"));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(getSummary().textContent, "Auto AC · 2.2 kW");
+  assert.equal(getSummary().classList.contains("is-emerald"), true);
+  assert.equal(autoBtn.classList.contains("is-active"), true);
+  assert.equal(manualBtn.classList.contains("is-active"), false);
+  assert.equal(manualBtn.classList.contains("is-pending"), false);
+  assert.ok(root.querySelector('[role="alert"].error-banner').textContent.includes("Switch failed"));
+});
+
+test("focusout resync and syncInputVal pending guard for time and number inputs", async () => {
+  const makeInputHass = (timeVal = "23:00:00", powerVal = "2.3") => makeFullHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "fixed", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "number.lepas_home_charge_power": makeState("number.lepas_home_charge_power", powerVal, {
+      min: 1.4,
+      max: 40.0,
+      step: 0.1,
+      unit_of_measurement: "kW",
+    }),
+    "time.lepas_charge_start_time": makeState("time.lepas_charge_start_time", timeVal),
+  }, "it");
+
+  const card = createCard({ layout: "compact", default_tab: "charging" }, makeInputHass("23:00:00", "2.3"));
+  const root = card.shadowRoot;
+  const timeInput = root.querySelector('[data-entity-input="time.lepas_charge_start_time"]');
+  const hpInput = root.querySelector('[data-entity-input="number.lepas_home_charge_power"]');
+
+  // 1. Aborted edit on time input: protected while focused, resyncs on focusout without pending
+  timeInput.focus();
+  timeInput.value = "04:15";
+  card.hass = makeInputHass("23:00:00", "2.3");
+  assert.equal(timeInput.value, "04:15");
+  root.activeElement = null;
+  timeInput.dispatchEvent(new Event("focusout", { bubbles: true, composed: true }));
+  assert.equal(timeInput.value, "23:00");
+
+  // 2. Aborted edit on number input: protected while focused, resyncs on focusout without pending
+  hpInput.focus();
+  hpInput.value = "9.9";
+  card.hass = makeInputHass("23:00:00", "2.3");
+  assert.equal(hpInput.value, "9.9");
+  root.activeElement = null;
+  hpInput.dispatchEvent(new Event("focusout", { bubbles: true, composed: true }));
+  assert.equal(hpInput.value, "2.3");
+
+  // 3. Committed edit in-flight: focusout + intermediate render must NOT overwrite, then settle resyncs
+  let resolveTime;
+  let resolveNum;
+  const pendingHass = makeInputHass("23:00:00", "2.3");
+  pendingHass.callService = (domain, service, data) => {
+    pendingHass.calls.push({ domain, service, data });
+    return new Promise((resolve) => {
+      if (domain === "time") resolveTime = resolve;
+      else if (domain === "number") resolveNum = resolve;
+    });
+  };
+  card.hass = pendingHass;
+
+  timeInput.focus();
+  timeInput.value = "04:15";
+  timeInput.dispatchEvent(new Event("change", { bubbles: true }));
+  hpInput.focus();
+  hpInput.value = "7.4";
+  hpInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+  // Blur both while still in-flight: _handleFocusOut must preserve pending values
+  root.activeElement = null;
+  timeInput.dispatchEvent(new Event("focusout", { bubbles: true, composed: true }));
+  hpInput.dispatchEvent(new Event("focusout", { bubbles: true, composed: true }));
+  assert.equal(timeInput.value, "04:15", "focusout must not clobber pending time input");
+  assert.equal(hpInput.value, "7.4", "focusout must not clobber pending number input");
+
+  // Intermediate hass push with stale states must NOT overwrite pending inputs
+  const staleHass = makeInputHass("23:00:00", "2.3");
+  staleHass.callService = pendingHass.callService;
+  card.hass = staleHass;
+  assert.equal(timeInput.value, "04:15", "syncInputVal must preserve pending time input across renders");
+  assert.equal(hpInput.value, "7.4", "syncInputVal must preserve pending number input across renders");
+
+  // Settle both -> resyncs from current hass states
+  const settledHass = makeInputHass("04:15:00", "7.4");
+  card._hass = settledHass;
+  resolveTime();
+  resolveNum();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(timeInput.value, "04:15");
+  assert.equal(hpInput.value, "7.4");
+
+  // Verify settle rollback when backend did not change (e.g. stale state after reject/no-op)
+  let rejectTime;
+  const rollbackHass = makeInputHass("23:00:00", "2.3");
+  rollbackHass.callService = (domain, service, data) => {
+    rollbackHass.calls.push({ domain, service, data });
+    return new Promise((_, reject) => {
+      rejectTime = reject;
+    });
+  };
+  card.hass = rollbackHass;
+  timeInput.focus();
+  timeInput.value = "05:30";
+  timeInput.dispatchEvent(new Event("change", { bubbles: true }));
+  root.activeElement = null;
+  timeInput.dispatchEvent(new Event("focusout", { bubbles: true, composed: true }));
+  assert.equal(timeInput.value, "05:30");
+  rejectTime(new Error("Time rejected"));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(timeInput.value, "23:00", "Failed time commit must resync to entity state on settle");
+});
+
+test("Pending guards, charge_days fallback rollback, optimistic 10s TTL expiration, and disconnectedCallback cleanup", async () => {
+  // 1. Double-click pending guards on charge_window_mode and charge_days + missing-hass guard
+  const cardNoCall = createCard({ layout: "compact", default_tab: "charging" }, makeFullHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "smart_departure", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+  }, "it"));
+  cardNoCall._hass = { states: cardNoCall._hass.states, locale: { language: "it" } };
+  cardNoCall.shadowRoot.querySelector('[data-charge-window-mode="fixed"]').click();
+  assert.equal(cardNoCall._optimisticChargeWindowMode, null, "Must not set optimistic buffer when callService is missing");
+
+  let rejectCwm;
+  const cwmHass = makeFullHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "smart_departure", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+  }, "it");
+  cwmHass.callService = (domain, service, data) => {
+    cwmHass.calls.push({ domain, service, data });
+    return new Promise((_, reject) => {
+      rejectCwm = reject;
+    });
+  };
+  const cwmCard = createCard({ layout: "compact", default_tab: "charging" }, cwmHass);
+  cwmCard.shadowRoot.querySelector('[data-charge-window-mode="fixed"]').click();
+  assert.equal(cwmCard.shadowRoot.querySelector('[data-charge-window-mode="fixed"]').classList.contains("is-active"), true);
+  assert.equal(cwmCard.shadowRoot.querySelector('[data-charge-window-mode="fixed"]').classList.contains("is-pending"), true);
+  // Second click while pending is ignored
+  cwmCard.shadowRoot.querySelector('[data-charge-window-mode="off"]').click();
+  assert.equal(cwmHass.calls.length, 1);
+  rejectCwm(new Error("CWM failed"));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(cwmCard.shadowRoot.querySelector('[data-charge-window-mode="smart_departure"]').classList.contains("is-active"), true);
+  assert.equal(cwmCard.shadowRoot.querySelector('[data-charge-window-mode="fixed"]').classList.contains("is-pending"), false);
+
+  // Double-click guard on charge_days
+  let resolveDays;
+  const daysHass = makeFullHass({
+    "select.lepas_charge_days": makeState("select.lepas_charge_days", "weekdays", {
+      options: ["all_days", "weekdays", "weekend", "mon_wed_fri", "tue_thu_sat", "custom"],
+      days: [1, 2, 3, 4, 5],
+    }),
+  }, "it");
+  daysHass.callService = (domain, service, data) => {
+    daysHass.calls.push({ domain, service, data });
+    return new Promise((resolve) => {
+      resolveDays = resolve;
+    });
+  };
+  const daysCard = createCard({ layout: "compact", default_tab: "charging" }, daysHass);
+  daysCard.shadowRoot.querySelector('[data-charge-day="6"]').click();
+  daysCard.shadowRoot.querySelector('[data-charge-day="7"]').click();
+  assert.equal(daysHass.calls.length, 1, "Pending guard must prevent duplicate charge_days service calls");
+  resolveDays();
+  await Promise.resolve();
+
+  // 2. Fallback rollback when set_charging_schedule is missing AND fallback select.select_option fails
+  const fbFailHass = makeFullHass({
+    "select.lepas_charge_days": makeState("select.lepas_charge_days", "custom", {
+      options: ["all_days", "weekdays", "weekend", "mon_wed_fri", "tue_thu_sat", "custom"],
+      days: [6],
+    }),
+  }, "it");
+  fbFailHass.callService = (domain, service, data) => {
+    fbFailHass.calls.push({ domain, service, data });
+    if (domain === "lepas" && service === "set_charging_schedule") {
+      return Promise.reject(new Error("Service lepas.set_charging_schedule not found"));
+    }
+    return Promise.reject(new Error("Fallback select failed"));
+  };
+  const fbFailCard = createCard({ layout: "compact", default_tab: "charging" }, fbFailHass);
+  fbFailCard.shadowRoot.querySelector('[data-charge-day="7"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(fbFailHass.calls.length, 2);
+  assert.equal(fbFailCard.shadowRoot.querySelector('[data-charge-day="7"]').classList.contains("is-active"), false, "Day 7 must roll back when fallback select_option rejects");
+  assert.equal(fbFailCard.shadowRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), true);
+  assert.ok(fbFailCard.shadowRoot.querySelector('[role="alert"].error-banner').textContent.includes("Fallback select failed"));
+
+  // 3. Optimistic 10s TTL timer expiration (staggered buffers) and disconnectedCallback() cleanup
+  const origSetTimeout = globalThis.setTimeout;
+  const origClearTimeout = globalThis.clearTimeout;
+  const origDateNow = Date.now;
+  let fakeNow = Date.parse("2026-11-27T10:00:00.000Z");
+  let nextTimerId = 1;
+  const scheduled = new Map();
+  const clearedIds = [];
+
+  Date.now = () => fakeNow;
+  globalThis.setTimeout = (fn, ms) => {
+    const id = nextTimerId++;
+    scheduled.set(id, { fn, ms });
+    return {
+      id,
+      unref() {},
+      valueOf() { return id; },
+    };
+  };
+  globalThis.clearTimeout = (handle) => {
+    const id = (handle && typeof handle === "object" && "id" in handle) ? handle.id : handle;
+    clearedIds.push(id);
+    scheduled.delete(id);
+  };
+
+  try {
+    const ttlHass = makeFullHass({
+      "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "smart_departure", {
+        options: ["off", "fixed", "smart_departure"],
+      }),
+      "switch.lepas_home_charge_power_auto": makeState("switch.lepas_home_charge_power_auto", "on"),
+      "select.lepas_charge_days": makeState("select.lepas_charge_days", "weekdays", {
+        options: ["all_days", "weekdays", "weekend", "mon_wed_fri", "tue_thu_sat", "custom"],
+        days: [1, 2, 3, 4, 5],
+      }),
+      "sensor.lepas_next_departure": makeState("sensor.lepas_next_departure", "Domani mer 07:30", {
+        departure_at: "2026-11-18T07:30:00+01:00",
+        allowed_climate_extras: ["driver_seat_heating", "steering_wheel_heating"],
+        climate_extras: ["driver_seat_heating"],
+      }),
+    }, "it");
+    const ttlCard = createCard({ layout: "compact", default_tab: "charging" }, ttlHass);
+    const tRoot = ttlCard.shadowRoot;
+    const optTimers = () => (ttlCard._optimisticTimer && scheduled.has(ttlCard._optimisticTimer.id)
+      ? [[ttlCard._optimisticTimer.id, scheduled.get(ttlCard._optimisticTimer.id)]]
+      : []);
+
+    // t = 0: set charge_window_mode optimistically -> arms 10000ms timer
+    tRoot.querySelector('[data-charge-window-mode="fixed"]').click();
+    await Promise.resolve();
+    assert.equal(tRoot.querySelector('[data-charge-window-mode="fixed"]').classList.contains("is-active"), true);
+    assert.equal(optTimers().length, 1);
+    const [tId1, entry1] = optTimers()[0];
+    assert.equal(entry1.ms, 10000);
+
+    // t = 4000ms: set charge_days optimistically -> clears timer 1 and re-arms with min remaining 6000ms
+    fakeNow += 4000;
+    tRoot.querySelector('[data-charge-day="6"]').click();
+    await Promise.resolve();
+    assert.ok(clearedIds.includes(tId1));
+    assert.equal(optTimers().length, 1);
+    assert.equal(tRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), true);
+    const [tId2, entry2] = optTimers()[0];
+    assert.equal(entry2.ms, 6000);
+
+    // Early check at t = 9000ms: neither expired, re-arms for 1000ms without expiring buffers
+    fakeNow += 5000;
+    scheduled.delete(tId2);
+    entry2.fn();
+    assert.equal(tRoot.querySelector('[data-charge-window-mode="fixed"]').classList.contains("is-active"), true);
+    assert.equal(tRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), true);
+    assert.equal(optTimers().length, 1);
+    const [tId3, entry3] = optTimers()[0];
+    assert.equal(entry3.ms, 1000);
+
+    // t = 10000ms: charge_window_mode expires and rolls back; charge_days remains active and re-arms for 4000ms
+    fakeNow += 1000;
+    scheduled.delete(tId3);
+    entry3.fn();
+    assert.equal(tRoot.querySelector('[data-charge-window-mode="smart_departure"]').classList.contains("is-active"), true);
+    assert.equal(tRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), true);
+    assert.equal(optTimers().length, 1);
+    const [tId4, entry4] = optTimers()[0];
+    assert.equal(entry4.ms, 4000);
+
+    // t = 14000ms: charge_days expires and rolls back, no optimistic timers remain
+    fakeNow += 4000;
+    scheduled.delete(tId4);
+    entry4.fn();
+    assert.equal(tRoot.querySelector('[data-charge-day="6"]').classList.contains("is-active"), false);
+    assert.equal(optTimers().length, 0);
+
+    // Inline TTL expiry check in _applyBindingsInner when Date.now advances >= 10000ms before timer fires
+    tRoot.querySelector('[data-home-power-auto="off"]').click();
+    await Promise.resolve();
+    assert.equal(tRoot.querySelector('[data-home-power-auto="off"]').classList.contains("is-active"), true);
+    fakeNow += 10000;
+    ttlCard.hass = ttlHass;
+    assert.equal(tRoot.querySelector('[data-home-power-auto="on"]').classList.contains("is-active"), true);
+    assert.equal(optTimers().length, 0, "Inline reconciliation must clear idle optimistic timer");
+
+    // Arm all 4 optimistic buffers, then verify disconnectedCallback() clears timer and all 4 buffers
+    tRoot.querySelector('[data-charge-window-mode="fixed"]').click();
+    tRoot.querySelector('[data-home-power-auto="off"]').click();
+    tRoot.querySelector('[data-charge-day="6"]').click();
+    tRoot.querySelector('[data-climate-extra="steering_wheel_heating"]').click();
+    await Promise.resolve();
+    assert.equal(optTimers().length, 1);
+    const [activeTimerId] = optTimers()[0];
+    ttlCard.disconnectedCallback();
+    assert.ok(clearedIds.includes(activeTimerId), "disconnectedCallback must clear active _optimisticTimer");
+    assert.equal(scheduled.size, 0);
+    assert.equal(ttlCard._optimisticChargeWindowMode, null);
+    assert.equal(ttlCard._optimisticHomePowerAuto, null);
+    assert.equal(ttlCard._optimisticChargeDays, null);
+    assert.equal(ttlCard._optimisticClimateExtras, null);
+  } finally {
+    globalThis.setTimeout = origSetTimeout;
+    globalThis.clearTimeout = origClearTimeout;
+    Date.now = origDateNow;
+  }
+});

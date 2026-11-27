@@ -913,3 +913,247 @@ async def test_schedule_switch_turn_off_syncs_restore_in_fixed_and_smart_modes(
     finally:
         await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
+
+
+async def test_window_sensor_synced_with_car_plan_modes(
+    hass: HomeAssistant, cloud, monkeypatch
+) -> None:
+    """synced_with_car handles noop, disable, and enable/switchStatus across plan modes."""
+    _patch_io(monkeypatch)
+    rome = ZoneInfo("Europe/Rome")
+    hass.config.time_zone = "Europe/Rome"
+    current_now = [datetime(2026, 11, 16, 22, 0, tzinfo=rome)]  # Monday CET (UTC+1)
+    monkeypatch.setattr(dt_util, "now", lambda: current_now[0])
+    monkeypatch.setattr(dt_util, "utcnow", lambda: current_now[0].astimezone(UTC))
+
+    entry = await _setup_entry(
+        hass, vin="L8SYNCSTATUS00001", entry_id="sync_status_modes"
+    )
+    coord = hass.data[DOMAIN][entry.entry_id]
+    hass.states.async_set(
+        "zone.home",
+        "zoning",
+        {"latitude": HOME_LAT, "longitude": HOME_LON, "radius": 200},
+    )
+
+    try:
+        coord.departure_weekly[2] = (True, 7 * 60)  # Tue 07:00 CET
+        coord.charge_start_minutes = 23 * 60  # 23:00 CET == 22:00 UTC (1320)
+        coord.charge_duration_hours = 6
+        coord.charge_days = [1, 2, 3, 4, 5, 6, 7]
+        coord.home_charge_power = 2.3
+        coord.home_charge_power_auto = False
+        coord.position = {"lat": HOME_LAT, "lon": HOME_LON}
+
+        # 1. mode_off -> None even when chargeAppointPlans matches manual fallback
+        coord.set_charge_window_mode("off", sync_charge=False)
+        coord._update(
+            {
+                "position": {"lat": HOME_LAT, "lon": HOME_LON},
+                "realtime": {
+                    "dumpEnergy": "80",
+                    "chargeGunState": "1",
+                    "chargeState": "0",
+                },
+                "fields": {
+                    "chargeGunState": "1",
+                    "chargeAppointPlans": [
+                        {
+                            "switchStatus": "1",
+                            "startTime": "1320",
+                            "timeConsuming": "360",
+                            "cycleData": [1, 2, 3, 4, 5, 6, 7],
+                        }
+                    ],
+                },
+            }
+        )
+        await hass.async_block_till_done()
+        win_off = hass.states.get("sensor.lepas_scheduled_charging_window")
+        assert win_off.attributes["effective_action"] == "noop"
+        assert win_off.attributes["plan_reason"] == "mode_off"
+        assert win_off.attributes["synced_with_car"] is None
+
+        # 2. fixed_home: switchStatus="1" + matching fields -> True; switchStatus="0" -> False
+        coord.set_charge_window_mode("fixed", sync_charge=False)
+        await hass.async_block_till_done()
+        win_fixed_ok = hass.states.get("sensor.lepas_scheduled_charging_window")
+        assert win_fixed_ok.attributes["plan_reason"] == "fixed_home"
+        assert win_fixed_ok.attributes["synced_with_car"] is True
+
+        coord._update(
+            {
+                "fields": {
+                    "chargeGunState": "1",
+                    "chargeAppointPlans": [{"switchStatus": "0"}],
+                }
+            }
+        )
+        await hass.async_block_till_done()
+        win_fixed_off_min = hass.states.get("sensor.lepas_scheduled_charging_window")
+        assert win_fixed_off_min.attributes["plan_reason"] == "fixed_home"
+        assert win_fixed_off_min.attributes["synced_with_car"] is False
+
+        coord._update(
+            {
+                "fields": {
+                    "chargeGunState": "1",
+                    "chargeAppointPlans": [
+                        {
+                            "switchStatus": "0",
+                            "startTime": "1320",
+                            "timeConsuming": "360",
+                            "cycleData": [1, 2, 3, 4, 5, 6, 7],
+                        }
+                    ],
+                }
+            }
+        )
+        await hass.async_block_till_done()
+        assert (
+            hass.states.get("sensor.lepas_scheduled_charging_window").attributes[
+                "synced_with_car"
+            ]
+            is False
+        )
+
+        # 3. smart_home (80% SoC @ 2.3kW => 135m => 04:45 CET = 225 UTC):
+        # switchStatus="0" (without startTime) -> False; switchStatus="1" coherent -> True
+        coord.set_charge_window_mode("smart_departure", sync_charge=False)
+        coord._update(
+            {
+                "fields": {
+                    "chargeGunState": "1",
+                    "chargeAppointPlans": [{"switchStatus": "0"}],
+                }
+            }
+        )
+        await hass.async_block_till_done()
+        win_smart_off = hass.states.get("sensor.lepas_scheduled_charging_window")
+        assert win_smart_off.attributes["plan_reason"] == "smart_home"
+        assert win_smart_off.attributes["synced_with_car"] is False
+
+        coord._update(
+            {
+                "fields": {
+                    "chargeGunState": "1",
+                    "chargeAppointPlans": [
+                        {
+                            "switchStatus": "1",
+                            "startTime": "225",
+                            "timeConsuming": "135",
+                            "cycleData": [2],
+                        }
+                    ],
+                }
+            }
+        )
+        await hass.async_block_till_done()
+        win_smart_ok = hass.states.get("sensor.lepas_scheduled_charging_window")
+        assert win_smart_ok.attributes["plan_reason"] == "smart_home"
+        assert win_smart_ok.attributes["synced_with_car"] is True
+
+        # 4. already_charged (soc=100, plugged=True) -> None even with matching fallback plan
+        coord._update(
+            {
+                "realtime": {
+                    "dumpEnergy": "100",
+                    "chargeGunState": "1",
+                    "chargeState": "0",
+                },
+                "fields": {
+                    "chargeGunState": "1",
+                    "chargeAppointPlans": [
+                        {
+                            "switchStatus": "1",
+                            "startTime": "1320",
+                            "timeConsuming": "360",
+                            "cycleData": [1, 2, 3, 4, 5, 6, 7],
+                        }
+                    ],
+                },
+            }
+        )
+        await hass.async_block_till_done()
+        win_full = hass.states.get("sensor.lepas_scheduled_charging_window")
+        assert win_full.attributes["effective_action"] == "noop"
+        assert win_full.attributes["plan_reason"] == "already_charged"
+        assert win_full.attributes["synced_with_car"] is None
+
+        # 5. away_bypass -> switchStatus="0": True, "1": False, absent: None
+        coord.position = {"lat": AWAY_LAT, "lon": AWAY_LON}
+        for raw_plan, expected in (
+            ([{"switchStatus": "0"}], True),
+            (
+                [
+                    {
+                        "switchStatus": "1",
+                        "startTime": "225",
+                        "timeConsuming": "135",
+                        "cycleData": [2],
+                    }
+                ],
+                False,
+            ),
+            ([{"startTime": "225", "timeConsuming": "135", "cycleData": [2]}], None),
+        ):
+            coord._update(
+                {
+                    "position": {"lat": AWAY_LAT, "lon": AWAY_LON},
+                    "realtime": {
+                        "dumpEnergy": "80",
+                        "chargeGunState": "1",
+                        "chargeState": "0",
+                    },
+                    "fields": {
+                        "chargeGunState": "1",
+                        "chargeAppointPlans": raw_plan,
+                    },
+                }
+            )
+            await hass.async_block_till_done()
+            win_away = hass.states.get("sensor.lepas_scheduled_charging_window")
+            assert win_away.attributes["effective_action"] == "disable"
+            assert win_away.attributes["plan_reason"] == "away_bypass"
+            assert win_away.attributes["synced_with_car"] is expected
+
+        # 6. late_plug_in -> switchStatus="0": True, "1": False, absent: None
+        coord.position = {"lat": HOME_LAT, "lon": HOME_LON}
+        current_now[0] = datetime(2026, 11, 17, 5, 30, tzinfo=rome)
+        for raw_plan, expected in (
+            ([{"switchStatus": "0"}], True),
+            (
+                [
+                    {
+                        "switchStatus": "1",
+                        "startTime": "225",
+                        "timeConsuming": "135",
+                        "cycleData": [2],
+                    }
+                ],
+                False,
+            ),
+            ([{"startTime": "225"}], None),
+        ):
+            coord._update(
+                {
+                    "position": {"lat": HOME_LAT, "lon": HOME_LON},
+                    "realtime": {
+                        "dumpEnergy": "80",
+                        "chargeGunState": "1",
+                        "chargeState": "0",
+                    },
+                    "fields": {
+                        "chargeGunState": "1",
+                        "chargeAppointPlans": raw_plan,
+                    },
+                }
+            )
+            await hass.async_block_till_done()
+            win_late = hass.states.get("sensor.lepas_scheduled_charging_window")
+            assert win_late.attributes["effective_action"] == "disable"
+            assert win_late.attributes["plan_reason"] == "late_plug_in"
+            assert win_late.attributes["synced_with_car"] is expected
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()

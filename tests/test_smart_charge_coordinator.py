@@ -645,3 +645,138 @@ async def test_mode_validation_restore_legacy_sync_and_dc_plan(
     assert coord._last_attempted_charge_sig is None
     assert coord._last_synced_charge_sig == ("enable", 60, 360, (1, 2, 3, 4, 5, 6, 7), "manual")
     coord.async_stop()
+
+
+async def test_departure_tick_ui_sig_notifications_and_dedup(
+    hass: HomeAssistant, monkeypatch
+) -> None:
+    """_departure_tick_cb notifies real listeners on UI state changes without duplicates."""
+    rome = ZoneInfo("Europe/Rome")
+    hass.config.time_zone = "Europe/Rome"
+    current_now = [datetime(2026, 11, 16, 23, 58, tzinfo=rome)]
+    monkeypatch.setattr(dt_util, "now", lambda: current_now[0])
+    monkeypatch.setattr(dt_util, "utcnow", lambda: current_now[0].astimezone(UTC))
+
+    _entry, coord, sent = _make_coord(hass, monkeypatch, entry_id="tick_ui_sig")
+    coord.departure_climate_mode = "off"
+    coord.departure_weekly[3] = (True, 7 * 60)  # Wednesday 07:00 CET
+    coord.charge_duration_hours = 6
+    coord.home_charge_power = 2.3
+    coord.home_charge_power_auto = False
+    # Align charge_start_minutes to 02:00 CET so no_departure_24h -> smart_home
+    # proves tick_ui_sig drives the UI update even without charge_start_minutes change.
+    coord.charge_start_minutes = 2 * 60
+    coord.set_charge_window_mode("smart_departure", sync_charge=False)
+
+    _send_1301(coord, HOME_LAT, HOME_LON)
+    _send_5a02(coord, chargeGunState="0", chargeState="0", dumpEnergy="50")
+    await hass.async_block_till_done()
+    sent.clear()
+
+    hits: list[tuple[str | None, str | None, str | None]] = []
+
+    def _on_update() -> None:
+        plan = coord._last_desired_charge_plan
+        occ = coord.next_departure_occurrence(current_now[0])
+        hits.append(
+            (
+                plan.action if plan is not None else None,
+                plan.reason if plan is not None else None,
+                occ.key if occ is not None else None,
+            )
+        )
+
+    unsub = coord.async_add_listener(_on_update)
+    try:
+        # Initial tick seeds _last_tick_ui_sig without spurious notification
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert hits == []
+
+        # (a) Stable tick emits no redundant notification
+        current_now[0] = datetime(2026, 11, 16, 23, 59, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert hits == []
+
+        # (b) Midnight rollover (now.date() change) notifies once
+        current_now[0] = datetime(2026, 11, 17, 0, 0, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 1
+        assert hits[-1][:2] == ("disable", "no_departure_24h")
+
+        current_now[0] = datetime(2026, 11, 17, 0, 1, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 1
+
+        # (c) Transition no_departure_24h -> smart_home (smart_start 02:00 CET Wed)
+        current_now[0] = datetime(2026, 11, 17, 2, 14, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 1
+
+        current_now[0] = datetime(2026, 11, 17, 2, 15, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 2
+        assert hits[-1][:2] == ("enable", "smart_home")
+
+        # Midnight rollover into Wednesday notifies once
+        current_now[0] = datetime(2026, 11, 18, 1, 59, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 3
+        assert hits[-1][:2] == ("enable", "smart_home")
+
+        # (d) Transition smart_home -> late_plug_in at 02:00 CET while unplugged
+        current_now[0] = datetime(2026, 11, 18, 2, 0, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 4
+        assert hits[-1][:2] == ("disable", "late_plug_in")
+
+        current_now[0] = datetime(2026, 11, 18, 6, 59, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 4
+
+        # (e) Occurrence expiration at 07:00 CET with departure_climate_mode="off" notifies once
+        prev_occ_key = hits[-1][2]
+        current_now[0] = datetime(2026, 11, 18, 7, 0, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 5
+        assert hits[-1][:2] == ("disable", "no_departure_24h")
+        assert hits[-1][2] != prev_occ_key
+
+        # Also verify occ expiration notifies when charge_window_mode="off" (only occ.key changes)
+        coord.set_charge_window_mode("off", sync_charge=False)
+        coord.departure_weekly[3] = (False, 7 * 60)
+        coord.departure_weekly[4] = (True, 9 * 60)
+        coord._last_tick_ui_sig = None
+        hits.clear()
+
+        current_now[0] = datetime(2026, 11, 19, 8, 59, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert hits == []
+
+        current_now[0] = datetime(2026, 11, 19, 9, 0, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 1
+        assert hits[-1][:2] == ("noop", "mode_off")
+
+        # Verify Sentinel #5 dedup: when charge_start_minutes mutates during smart_home transition,
+        # listener is notified once (not twice).
+        coord.departure_weekly[4] = (False, 9 * 60)
+        coord.departure_weekly[5] = (True, 7 * 60)  # Friday 07:00 CET
+        coord.charge_start_minutes = 8 * 60
+        coord.set_charge_window_mode("smart_departure", sync_charge=False)
+        coord._last_tick_ui_sig = None
+        hits.clear()
+
+        current_now[0] = datetime(2026, 11, 19, 2, 14, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert hits == []
+
+        current_now[0] = datetime(2026, 11, 19, 2, 15, tzinfo=rome)
+        await coord._departure_tick_cb(_now=current_now[0])
+        assert len(hits) == 1
+        assert hits[-1][:2] == ("enable", "smart_home")
+        assert coord.charge_start_minutes == 2 * 60
+
+        assert sent == []
+    finally:
+        unsub()
+        coord.async_stop()

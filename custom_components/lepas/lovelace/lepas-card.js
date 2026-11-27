@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.34.0).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.34.1).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.34.0";
+  var CARD_VERSION = "1.34.1";
   var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -96,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.34.0",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.34.0",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.34.0",
-    black: "/lepas_card/lepas-hero-black.png?v=1.34.0",
-    white: "/lepas_card/lepas-hero-white.png?v=1.34.0",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.34.1",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.34.1",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.34.1",
+    black: "/lepas_card/lepas-hero-black.png?v=1.34.1",
+    white: "/lepas_card/lepas-hero-white.png?v=1.34.1",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.34.0";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.34.1";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -127,6 +127,7 @@
   });
 
   var CMD_SUCCESS_TTL_MS = 5 * 60 * 1000;
+  var OPTIMISTIC_TTL_MS = 10000;
   var CMD_WAITING_STATES = ["in attesa", "waiting", "wachten"];
   var CMD_ERROR_PATTERNS = [
     "❌",
@@ -293,8 +294,14 @@
       powerSourceAutoAc: "Auto AC",
       powerSourceAutoDc: "Auto DC",
       powerSourceManual: "Manuale",
+      powerSourceAutoFallback: "Auto (base)",
       followDepartureTitle: "Avvio automatico per partenza",
-      noDeparturePlanned: "Nessuna partenza attiva: abilita un giorno sotto.",
+      noDeparturePlanned: "Nessuna partenza attiva: abilita un giorno in Partenze.",
+      smartAlreadyCharged: "Batteria già carica",
+      smartLatePlugIn: "Ricarica immediata (partenza vicina)",
+      smartAwayBypass: "Fuori casa: ricarica immediata",
+      smartDepartureOver24h: "Partenza oltre 24h: ricarica immediata",
+      smartUnknownLocation: "Posizione non nota: in attesa",
       closuresGroup: "Aperture e accessi",
       securityGroup: "Sicurezza e posizione",
       applyDeparture: "Applica su auto",
@@ -517,8 +524,14 @@
       powerSourceAutoAc: "Auto AC",
       powerSourceAutoDc: "Auto DC",
       powerSourceManual: "Manual",
+      powerSourceAutoFallback: "Auto (fallback)",
       followDepartureTitle: "Auto-start before departure",
-      noDeparturePlanned: "No active departure: enable a day below.",
+      noDeparturePlanned: "No active departure: enable a day in Departures.",
+      smartAlreadyCharged: "Battery already charged",
+      smartLatePlugIn: "Immediate charging (departure soon)",
+      smartAwayBypass: "Away from home: immediate charging",
+      smartDepartureOver24h: "Departure >24h away: immediate charging",
+      smartUnknownLocation: "Location unknown: waiting",
       closuresGroup: "Closures and access",
       securityGroup: "Security and location",
       applyDeparture: "Apply to car",
@@ -741,8 +754,14 @@
       powerSourceAutoAc: "Auto AC",
       powerSourceAutoDc: "Auto DC",
       powerSourceManual: "Handmatig",
+      powerSourceAutoFallback: "Auto (basis)",
       followDepartureTitle: "Automatische start voor vertrek",
-      noDeparturePlanned: "Geen actief vertrek: schakel hieronder een dag in.",
+      noDeparturePlanned: "Geen actief vertrek: schakel een dag in bij Vertrek.",
+      smartAlreadyCharged: "Accu al vol",
+      smartLatePlugIn: "Direct laden (vertrek dichtbij)",
+      smartAwayBypass: "Niet thuis: direct laden",
+      smartDepartureOver24h: "Vertrek >24u: direct laden",
+      smartUnknownLocation: "Locatie onbekend: wachtend",
       closuresGroup: "Sluitingen en toegang",
       securityGroup: "Beveiliging en locatie",
       applyDeparture: "Toepassen op auto",
@@ -2649,6 +2668,8 @@
       this._listenersBound = false;
       this._latestActions = Object.create(null);
       this._optimisticChargeDays = null;
+      this._optimisticChargeWindowMode = null;
+      this._optimisticHomePowerAuto = null;
       this._currentChargeDays = [1, 2, 3, 4, 5, 6, 7];
       this._currentChargeDaysBaseSig = "";
       this._chargeDaysEntityId = null;
@@ -2656,6 +2677,7 @@
       this._chargeWindowModeState = null;
       this._homePowerAutoState = null;
       this._optimisticClimateExtras = null;
+      this._optimisticTimer = null;
       this._currentClimateExtras = [];
       this._currentClimateExtrasBaseSig = "";
       this._allowedClimateExtras = [];
@@ -2685,6 +2707,7 @@
       });
       this._onClick = this._handleClick.bind(this);
       this._onChange = this._handleChange.bind(this);
+      this._onFocusOut = this._handleFocusOut.bind(this);
       this._onKeyDown = this._handleKeyDown.bind(this);
       this._onBarFocusOrHover = this._handleBarFocusOrHover.bind(this);
       this._onStatsDialogClose = this._handleStatsDialogClose.bind(this);
@@ -2748,6 +2771,11 @@
 
     disconnectedCallback() {
       this._clearCmdTtlTimer();
+      this._clearOptimisticTimer();
+      this._optimisticChargeWindowMode = null;
+      this._optimisticHomePowerAuto = null;
+      this._optimisticChargeDays = null;
+      this._optimisticClimateExtras = null;
       this._dialogCtrl.destroy();
       this._pendingKeys.clear();
       this._statsOpen = false;
@@ -2762,6 +2790,57 @@
         clearTimeout(this._cmdTtlTimer);
         this._cmdTtlTimer = null;
       }
+    }
+
+    _clearOptimisticTimer() {
+      if (this._optimisticTimer != null) {
+        clearTimeout(this._optimisticTimer);
+        this._optimisticTimer = null;
+      }
+    }
+
+    _armOptimisticTimer() {
+      this._clearOptimisticTimer();
+      if (this.isConnected === false) return;
+      var keys = [
+        "_optimisticChargeWindowMode",
+        "_optimisticHomePowerAuto",
+        "_optimisticChargeDays",
+        "_optimisticClimateExtras",
+      ];
+      var now = Date.now();
+      var minRem = null;
+      for (var i = 0; i < keys.length; i += 1) {
+        var buf = this[keys[i]];
+        if (!buf || !Number.isFinite(buf.ts)) continue;
+        var rem = Math.max(1, OPTIMISTIC_TTL_MS - (now - buf.ts));
+        if (minRem === null || rem < minRem) minRem = rem;
+      }
+      if (minRem === null) return;
+      var self = this;
+      var t = setTimeout(function () {
+        self._optimisticTimer = null;
+        var checkNow = Date.now();
+        var expiredAny = false;
+        var hasActive = false;
+        for (var j = 0; j < keys.length; j += 1) {
+          var k = keys[j];
+          var cur = self[k];
+          if (!cur) continue;
+          if (!Number.isFinite(cur.ts) || (checkNow - cur.ts) >= OPTIMISTIC_TTL_MS) {
+            self[k] = null;
+            expiredAny = true;
+          } else {
+            hasActive = true;
+          }
+        }
+        if (hasActive) self._armOptimisticTimer();
+        if (expiredAny && self._hass && self.isConnected !== false) {
+          self._render(self._hass);
+        }
+      }, minRem);
+      if (t && typeof t.unref === "function") t.unref();
+      this._optimisticTimer = t;
     }
 
     _dead(s) {
@@ -2847,12 +2926,24 @@
       if (this._listenersBound || !this.shadowRoot) return;
       this.shadowRoot.addEventListener("click", this._onClick);
       this.shadowRoot.addEventListener("change", this._onChange);
+      this.shadowRoot.addEventListener("focusout", this._onFocusOut);
       this.shadowRoot.addEventListener("keydown", this._onKeyDown);
       this.shadowRoot.addEventListener("beforeinput", this._onBlockTimeEdit);
       this.shadowRoot.addEventListener("paste", this._onBlockTimeEdit);
       this.shadowRoot.addEventListener("focusin", this._onBarFocusOrHover);
       this.shadowRoot.addEventListener("mouseover", this._onBarFocusOrHover);
       this._listenersBound = true;
+    }
+
+    _handleFocusOut(ev) {
+      var target = ev && ev.target;
+      if (!target || !target.getAttribute) return;
+      var entId = target.getAttribute("data-entity-input");
+      if (!entId || !this._hass || this._pendingKeys.has("input:" + entId)) return;
+      var st = this._hass.states && this._hass.states[entId];
+      if (st && !this._dead(st)) {
+        target.value = entId.indexOf("time.") === 0 ? String(st.state || "").slice(0, 5) : String(st.state || "");
+      }
     }
 
     _isStatsDialogOpen(dlg) {
@@ -3035,6 +3126,7 @@
     _handleClick(ev) {
       var target = ev.target;
       if (!target || !target.closest) return;
+      var self = this;
 
       var dialogActEl = target.closest("[data-dialog-action]");
       if (dialogActEl) {
@@ -3174,11 +3266,23 @@
       var chgWinModeEl = target.closest("[data-charge-window-mode]");
       if (chgWinModeEl) {
         ev.stopPropagation();
-        if (chgWinModeEl.disabled) return;
+        if (chgWinModeEl.disabled || this._pendingKeys.has("charge_window_mode")) return;
         var nextWinMode = chgWinModeEl.getAttribute("data-charge-window-mode");
         var cwm = this._chargeWindowModeState;
         if (cwm && cwm.id && nextWinMode && nextWinMode !== cwm.state) {
-          this._callService("select", "select_option", { entity_id: cwm.id, option: nextWinMode }, "charge_window_mode");
+          if (!this._hass || typeof this._hass.callService !== "function") return;
+          this._optimisticChargeWindowMode = { value: nextWinMode, baseState: cwm.baseState, ts: Date.now() };
+          this._armOptimisticTimer();
+          this._callService(
+            "select",
+            "select_option",
+            { entity_id: cwm.id, option: nextWinMode },
+            "charge_window_mode",
+            function () {
+              self._optimisticChargeWindowMode = null;
+              self._armOptimisticTimer();
+            }
+          );
         }
         return;
       }
@@ -3186,14 +3290,25 @@
       var homePowerAutoEl = target.closest("[data-home-power-auto]");
       if (homePowerAutoEl) {
         ev.stopPropagation();
-        if (homePowerAutoEl.disabled) return;
+        if (homePowerAutoEl.disabled || this._pendingKeys.has("home_charge_power_auto")) return;
         var hpMode = homePowerAutoEl.getAttribute("data-home-power-auto");
         var hpa = this._homePowerAutoState;
-        if (hpa && hpa.id) {
-          if (hpMode === "on" && hpa.on !== true) {
-            this._callService("switch", "turn_on", { entity_id: hpa.id }, "home_charge_power_auto");
-          } else if (hpMode === "off" && hpa.on !== false) {
-            this._callService("switch", "turn_off", { entity_id: hpa.id }, "home_charge_power_auto");
+        if (hpa && hpa.id && (hpMode === "on" || hpMode === "off")) {
+          var nextOn = hpMode === "on";
+          if (nextOn ? (hpa.on !== true) : (hpa.on !== false)) {
+            if (!this._hass || typeof this._hass.callService !== "function") return;
+            this._optimisticHomePowerAuto = { on: nextOn, baseOn: hpa.baseOn, ts: Date.now() };
+            this._armOptimisticTimer();
+            this._callService(
+              "switch",
+              nextOn ? "turn_on" : "turn_off",
+              { entity_id: hpa.id },
+              "home_charge_power_auto",
+              function () {
+                self._optimisticHomePowerAuto = null;
+                self._armOptimisticTimer();
+              }
+            );
           }
         }
         return;
@@ -3344,7 +3459,7 @@
       this._callService(spec.domain, spec.service, spec.data, confirmKey);
     }
 
-    _callService(domain, service, data, pendingKey) {
+    _callService(domain, service, data, pendingKey, onFail) {
       if (!this._hass || typeof this._hass.callService !== "function") return;
       var self = this;
       var lang = getLang(this._hass);
@@ -3382,6 +3497,7 @@
             self._pendingKeys.delete(pendingKey);
             self._errorMsg = (err && err.message) ? String(err.message) : t.commandFailed;
             self._lastCmdFeedback = { ok: false, ts: Date.now() };
+            if (typeof onFail === "function") onFail(err);
             if (self._hass) self._render(self._hass);
           }
         );
@@ -3389,11 +3505,13 @@
         this._pendingKeys.delete(pendingKey);
         this._errorMsg = (syncErr && syncErr.message) ? String(syncErr.message) : t.commandFailed;
         this._lastCmdFeedback = { ok: false, ts: Date.now() };
+        if (typeof onFail === "function") onFail(syncErr);
         this._render(this._hass);
       }
     }
 
     _handleChargeDaysSelect(nextDays) {
+      if (this._pendingKeys.has("charge_days_select")) return;
       if (!this._hass || !Array.isArray(nextDays) || !nextDays.length) return;
       var curDays = this._currentChargeDays || [1, 2, 3, 4, 5, 6, 7];
       if (nextDays.join(",") === curDays.join(",")) return;
@@ -3404,7 +3522,8 @@
       var t = getTexts(lang);
 
       this._errorMsg = null;
-      this._optimisticChargeDays = { days: nextDays.slice(), baseSig: baseSig };
+      this._optimisticChargeDays = { days: nextDays.slice(), baseSig: baseSig, ts: Date.now() };
+      this._armOptimisticTimer();
       this._pendingKeys.add(pendingKey);
       this._render(this._hass);
 
@@ -3415,11 +3534,16 @@
         var fallbackPreset = presetForDays(nextDays);
         var selectId = self._chargeDaysEntityId;
         if (isServiceMissing && selectId && fallbackPreset && fallbackPreset !== "custom") {
-          self._optimisticChargeDays = { days: nextDays.slice(), baseSig: baseSig };
-          self._callService("select", "select_option", { entity_id: selectId, option: fallbackPreset }, pendingKey);
+          self._optimisticChargeDays = { days: nextDays.slice(), baseSig: baseSig, ts: Date.now() };
+          self._armOptimisticTimer();
+          self._callService("select", "select_option", { entity_id: selectId, option: fallbackPreset }, pendingKey, function () {
+            self._optimisticChargeDays = null;
+            self._armOptimisticTimer();
+          });
           return;
         }
         self._optimisticChargeDays = null;
+        self._armOptimisticTimer();
         self._errorMsg = msg;
         if (self._hass) self._render(self._hass);
       };
@@ -3458,7 +3582,8 @@
       var reqSeq = this._climateExtrasReqSeq;
 
       this._errorMsg = null;
-      this._optimisticClimateExtras = { extras: nextExtras.slice(), baseSig: baseSig };
+      this._optimisticClimateExtras = { extras: nextExtras.slice(), baseSig: baseSig, ts: Date.now() };
+      this._armOptimisticTimer();
       this._pendingKeys.add(pendingKey);
       this._render(this._hass);
 
@@ -3469,6 +3594,7 @@
         self._pendingKeys.delete(pendingKey);
         if (reqSeq === self._climateExtrasReqSeq) {
           self._optimisticClimateExtras = null;
+          self._armOptimisticTimer();
           self._errorMsg = (err && err.message) ? String(err.message) : t.commandFailed;
         }
         if (self._hass) self._render(self._hass);
@@ -5638,14 +5764,23 @@
       var depBox = root.querySelector('[data-bind="departureChargeBox"]');
       if (vm.chargeWindowMode) {
         this._syncChargeState = null;
-        var curWinMode = !this._dead(vm.chargeWindowMode.s) ? String(vm.chargeWindowMode.s.state || "").trim() : "";
-        if (!curWinMode && schedWinAlive && typeof swAttrs.window_mode === "string") {
-          curWinMode = swAttrs.window_mode.trim();
+        var rawWinMode = !this._dead(vm.chargeWindowMode.s) ? String(vm.chargeWindowMode.s.state || "").trim() : "";
+        if (!rawWinMode && schedWinAlive && typeof swAttrs.window_mode === "string") {
+          rawWinMode = swAttrs.window_mode.trim();
         }
-        if (!curWinMode && vm.syncCharge && !this._dead(vm.syncCharge.s)) {
-          curWinMode = this._isOn(vm.syncCharge) ? "smart_departure" : "off";
+        if (!rawWinMode && vm.syncCharge && !this._dead(vm.syncCharge.s)) {
+          rawWinMode = this._isOn(vm.syncCharge) ? "smart_departure" : "off";
         }
-        this._chargeWindowModeState = { id: vm.chargeWindowMode.id, state: curWinMode };
+        var curWinMode = rawWinMode;
+        if (this._optimisticChargeWindowMode) {
+          if ((Date.now() - this._optimisticChargeWindowMode.ts) < OPTIMISTIC_TTL_MS &&
+              this._optimisticChargeWindowMode.baseState === rawWinMode) {
+            curWinMode = this._optimisticChargeWindowMode.value;
+          } else {
+            this._optimisticChargeWindowMode = null;
+          }
+        }
+        this._chargeWindowModeState = { id: vm.chargeWindowMode.id, state: curWinMode, baseState: rawWinMode };
         var isCwmPending = this._pendingKeys.has("charge_window_mode");
         var cwmBtns = root.querySelectorAll("[data-charge-window-mode]");
         for (var cwi = 0; cwi < cwmBtns.length; cwi += 1) {
@@ -5660,6 +5795,7 @@
         if (manualBox) manualBox.classList.toggle("hidden", isSmartMode);
         if (depBox) depBox.classList.toggle("hidden", !showDepPreview);
       } else {
+        this._optimisticChargeWindowMode = null;
         this._chargeWindowModeState = null;
         this._syncChargeState = vm.syncCharge ? { id: vm.syncCharge.id, on: this._isOn(vm.syncCharge) } : null;
         var isDepMode = Boolean(this._syncChargeState && this._syncChargeState.on);
@@ -5679,34 +5815,60 @@
       var depChargeStartEl = root.querySelector('[data-bind="depChargeStartText"]');
       if (depChargeStartEl) {
         var pStartChg = vm.nextDep && vm.nextDep.s && vm.nextDep.s.attributes && vm.nextDep.s.attributes.planned_charge_start;
+        var nextDepRawState = (vm.nextDep && !this._dead(vm.nextDep.s) && vm.nextDep.s.state != null) ? String(vm.nextDep.s.state).trim() : "";
+        var nextDepSuffix = nextDepRawState ? (" · " + nextDepRawState) : "";
+        var hasNextDep = Boolean(vm.nextDep && !this._dead(vm.nextDep.s) && vm.nextDep.s.attributes && vm.nextDep.s.attributes.departure_at);
+        var planReason = (schedWinAlive && typeof swAttrs.plan_reason === "string") ? swAttrs.plan_reason : "";
         if (pStartChg) {
-          var nextDepState = (vm.nextDep && !this._dead(vm.nextDep.s)) ? (" · " + vm.nextDep.s.state) : "";
-          depChargeStartEl.textContent = t.chargeStartHint + ": " + pStartChg + nextDepState;
+          depChargeStartEl.textContent = t.chargeStartHint + ": " + pStartChg + nextDepSuffix;
+        } else if (hasNextDep) {
+          var reasonMap = {
+            already_charged: t.smartAlreadyCharged,
+            late_plug_in: t.smartLatePlugIn,
+            away_bypass: t.smartAwayBypass,
+            no_departure_24h: t.smartDepartureOver24h,
+            unknown_location: t.smartUnknownLocation,
+          };
+          var reasonLbl = Object.prototype.hasOwnProperty.call(reasonMap, planReason) ? reasonMap[planReason] : "";
+          depChargeStartEl.textContent = reasonLbl
+            ? (reasonLbl + nextDepSuffix)
+            : (t.chargeStartHint + ": —" + nextDepSuffix);
         } else {
           depChargeStartEl.textContent = t.noDeparturePlanned;
         }
       }
 
       // Home charging power row (Auto/Manual + decimal input + effective summary; never gated by car_in_use)
+      var effectiveHpaOn = null;
       if (vm.homePowerAuto && vm.homePowerAuto.s) {
         var hpaAlive = !this._dead(vm.homePowerAuto.s);
-        var hpaOn = hpaAlive ? this._isOn(vm.homePowerAuto) : null;
-        this._homePowerAutoState = { id: vm.homePowerAuto.id, on: hpaOn };
+        var rawHpaOn = hpaAlive ? this._isOn(vm.homePowerAuto) : null;
+        effectiveHpaOn = rawHpaOn;
+        if (this._optimisticHomePowerAuto) {
+          if ((Date.now() - this._optimisticHomePowerAuto.ts) < OPTIMISTIC_TTL_MS &&
+              this._optimisticHomePowerAuto.baseOn === rawHpaOn) {
+            effectiveHpaOn = this._optimisticHomePowerAuto.on;
+          } else {
+            this._optimisticHomePowerAuto = null;
+          }
+        }
+        this._homePowerAutoState = { id: vm.homePowerAuto.id, on: effectiveHpaOn, baseOn: rawHpaOn };
         var isHpaPending = this._pendingKeys.has("home_charge_power_auto");
         var autoPwrBtn = root.querySelector('[data-home-power-auto="on"]');
         var manualPwrBtn = root.querySelector('[data-home-power-auto="off"]');
         if (autoPwrBtn) {
-          autoPwrBtn.classList.toggle("is-active", hpaOn === true);
-          autoPwrBtn.classList.toggle("is-emerald", hpaOn === true);
+          autoPwrBtn.classList.toggle("is-active", effectiveHpaOn === true);
+          autoPwrBtn.classList.toggle("is-emerald", effectiveHpaOn === true);
           autoPwrBtn.classList.toggle("is-pending", isHpaPending);
-          autoPwrBtn.setAttribute("aria-pressed", hpaOn === true ? "true" : "false");
+          autoPwrBtn.setAttribute("aria-pressed", effectiveHpaOn === true ? "true" : "false");
         }
         if (manualPwrBtn) {
-          manualPwrBtn.classList.toggle("is-active", hpaOn === false);
+          manualPwrBtn.classList.toggle("is-active", effectiveHpaOn === false);
           manualPwrBtn.classList.toggle("is-pending", isHpaPending);
-          manualPwrBtn.setAttribute("aria-pressed", hpaOn === false ? "true" : "false");
+          manualPwrBtn.setAttribute("aria-pressed", effectiveHpaOn === false ? "true" : "false");
         }
       } else {
+        this._optimisticHomePowerAuto = null;
         this._homePowerAutoState = null;
       }
       var hpInputEl = root.querySelector('[data-bind="homePowerInput"]');
@@ -5727,16 +5889,33 @@
       if (homePowerSummary) {
         var pSource = (schedWinAlive && typeof swAttrs.power_source === "string") ? swAttrs.power_source : "manual";
         var effKwRaw = schedWinAlive ? swAttrs.effective_power_kw : null;
-        var effKw = (typeof effKwRaw === "number" && Number.isFinite(effKwRaw))
+        var parsedEffKw = (typeof effKwRaw === "number" && Number.isFinite(effKwRaw))
           ? effKwRaw
           : (typeof effKwRaw === "string" && effKwRaw.trim() !== "" && Number.isFinite(Number(effKwRaw)))
             ? Number(effKwRaw)
-            : (vm.homePower && !this._dead(vm.homePower.s) ? this._num(vm.homePower.s) : null);
-        var srcLbl = pSource === "learned_ac"
-          ? t.powerSourceAutoAc
-          : (pSource === "learned_dc" ? t.powerSourceAutoDc : t.powerSourceManual);
-        homePowerSummary.classList.toggle("is-emerald", pSource === "learned_ac");
-        homePowerSummary.classList.toggle("is-glacier", pSource === "learned_dc");
+            : null;
+        var manualPowerNum = (vm.homePower && !this._dead(vm.homePower.s)) ? this._num(vm.homePower.s) : null;
+        var effKw = parsedEffKw !== null ? parsedEffKw : manualPowerNum;
+        var srcLbl = t.powerSourceManual;
+        var isSummaryEmerald = false;
+        var isSummaryGlacier = false;
+        if (effectiveHpaOn === false) {
+          srcLbl = t.powerSourceManual;
+          // Prefer manual slider value during optimistic Auto -> Manual transition before sensor settles.
+          if (pSource !== "manual" && manualPowerNum !== null) {
+            effKw = manualPowerNum;
+          }
+        } else if (pSource === "learned_ac") {
+          srcLbl = t.powerSourceAutoAc;
+          isSummaryEmerald = true;
+        } else if (pSource === "learned_dc") {
+          srcLbl = t.powerSourceAutoDc;
+          isSummaryGlacier = true;
+        } else if (effectiveHpaOn === true) {
+          srcLbl = t.powerSourceAutoFallback;
+        }
+        homePowerSummary.classList.toggle("is-emerald", isSummaryEmerald);
+        homePowerSummary.classList.toggle("is-glacier", isSummaryGlacier);
         if (effKw !== null) {
           homePowerSummary.textContent = srcLbl + " · " + effKw.toFixed(1) + " kW";
           homePowerSummary.classList.remove("hidden");
@@ -5757,7 +5936,8 @@
       var entityDaysSig = entityDays.join(",");
       var activeChargeDays = entityDays;
       if (this._optimisticChargeDays) {
-        if (this._optimisticChargeDays.baseSig === entityDaysSig) {
+        if ((Date.now() - this._optimisticChargeDays.ts) < OPTIMISTIC_TTL_MS &&
+            this._optimisticChargeDays.baseSig === entityDaysSig) {
           activeChargeDays = this._optimisticChargeDays.days;
         } else {
           this._optimisticChargeDays = null;
@@ -5783,7 +5963,7 @@
       var syncInputVal = function (ent, slice5) {
         if (!ent || !ent.s) return;
         var el = root.querySelector('[data-entity-input="' + ent.id + '"]');
-        if (!el || root.activeElement === el) return;
+        if (!el || root.activeElement === el || self._pendingKeys.has("input:" + ent.id)) return;
         var nextV = slice5 ? String(ent.s.state || "").slice(0, 5) : String(ent.s.state || "");
         if (!self._dead(ent.s)) el.value = nextV;
       };
@@ -5930,11 +6110,19 @@
       var entityExtrasSig = entityExtras.join(",");
       var activeClimateExtras = entityExtras;
       if (this._optimisticClimateExtras) {
-        if (this._optimisticClimateExtras.baseSig === entityExtrasSig) {
+        if ((Date.now() - this._optimisticClimateExtras.ts) < OPTIMISTIC_TTL_MS &&
+            this._optimisticClimateExtras.baseSig === entityExtrasSig) {
           activeClimateExtras = this._optimisticClimateExtras.extras;
         } else {
           this._optimisticClimateExtras = null;
         }
+      }
+      if (this._optimisticTimer != null &&
+          !this._optimisticChargeWindowMode &&
+          !this._optimisticHomePowerAuto &&
+          !this._optimisticChargeDays &&
+          !this._optimisticClimateExtras) {
+        this._clearOptimisticTimer();
       }
       this._currentClimateExtras = activeClimateExtras.slice();
       this._currentClimateExtrasBaseSig = entityExtrasSig;

@@ -564,6 +564,7 @@ class LepasCoordinator(DataUpdateCoordinator):
         self._cached_travel_appoint: dict | None = None
         self._departure_lock: asyncio.Lock = asyncio.Lock()
         self._applied_schedule_sig: str | None = None
+        self._last_tick_ui_sig: tuple | None = None
 
     def feature_enabled(self, feature: str) -> bool:
         """True se la feature è abilitata per questo veicolo (fail-open su chiave assente)."""
@@ -2368,9 +2369,24 @@ class LepasCoordinator(DataUpdateCoordinator):
                             if self._timers.closing:
                                 return
 
+                ui_notified = False
                 if ui_dirty:
                     self.async_update_listeners()
                     ui_dirty = False
+                    ui_notified = True
+
+                plan = self.evaluate_charge_plan(now)
+                tick_ui_sig = (
+                    now.date(),
+                    occ.key if occ is not None else None,
+                    plan.action,
+                    plan.reason,
+                    plan.start_minutes,
+                    plan.duration_minutes,
+                    plan.away_bypass_active,
+                    plan.quick_override_active,
+                )
+                notified_after_sig = ui_notified
 
                 holding_quick = (
                     self._quick_native_until is not None and now < self._quick_native_until
@@ -2379,7 +2395,6 @@ class LepasCoordinator(DataUpdateCoordinator):
                 if self._charge_window_mode != "off":
                     at_home = self._safe_in_home_zone(self._current_position())
                     plugged = self._is_plugged()
-                    plan = self.evaluate_charge_plan(now)
                     if (
                         self._charge_window_mode == "smart_departure"
                         and plan.action == "enable"
@@ -2388,6 +2403,7 @@ class LepasCoordinator(DataUpdateCoordinator):
                     ):
                         self.charge_start_minutes = plan.start_minutes
                         self.async_update_listeners()
+                        notified_after_sig = True
 
                     if quick_expired:
                         self._last_attempted_charge_sig = None
@@ -2399,11 +2415,13 @@ class LepasCoordinator(DataUpdateCoordinator):
                             ):
                                 self._last_synced_charge_sig = None
                             self.async_update_listeners()
+                            notified_after_sig = True
                         elif at_home is True:
-                            await self._async_sync_charge_desired_locked(
+                            if await self._async_sync_charge_desired_locked(
                                 trigger="quick_expired",
                                 now=now,
-                            )
+                            ):
+                                notified_after_sig = True
                             if self._timers.closing:
                                 return
                     elif at_home is True and plugged and not holding_quick:
@@ -2441,10 +2459,11 @@ class LepasCoordinator(DataUpdateCoordinator):
                             should_sync = True
 
                         if should_sync:
-                            await self._async_sync_charge_desired_locked(
+                            if await self._async_sync_charge_desired_locked(
                                 trigger="tick",
                                 now=now,
-                            )
+                            ):
+                                notified_after_sig = True
                             if self._timers.closing:
                                 return
 
@@ -2467,23 +2486,39 @@ class LepasCoordinator(DataUpdateCoordinator):
                                 self._applied_schedule_sig = None
                                 self.native_departure_sync = False
                             self.async_update_listeners()
+                            notified_after_sig = True
                         elif sent_ok and not weekly_dirty:
                             if occ is not None:
                                 self._applied_schedule_sig = self.departure_schedule_signature()
                             elif self._applied_schedule_sig is not None:
                                 self._applied_schedule_sig = None
                             self.async_update_listeners()
+                            notified_after_sig = True
                     elif quick_expired and weekly_dirty and occ is not None:
                         self._quick_applied_native = False
 
                     if self.sync_battery_heat_to_departure:
                         if self._sync_battery_heat_start_local(occ):
                             self.async_update_listeners()
+                            notified_after_sig = True
                         if quick_expired:
                             self._last_attempted_battery_sig = None
+                        prev_bat_sig = self._last_synced_battery_sig
                         await self._async_sync_battery_for_occurrence(occ, force_off=quick_expired)
                         if self._timers.closing:
                             return
+                        if self._last_synced_battery_sig != prev_bat_sig:
+                            notified_after_sig = True
+
+                prev_sig = self._last_tick_ui_sig
+                self._last_tick_ui_sig = tick_ui_sig
+                if (
+                    prev_sig is not None
+                    and tick_ui_sig != prev_sig
+                    and not notified_after_sig
+                    and not self._timers.closing
+                ):
+                    self.async_update_listeners()
         finally:
             self._departure_busy = False
 

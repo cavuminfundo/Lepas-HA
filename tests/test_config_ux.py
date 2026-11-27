@@ -799,7 +799,8 @@ async def test_charging_window_and_next_departure_sensors_multilang_and_riepilog
             assert st.attributes["days"] == [1, 2, 3, 4, 5, 6, 7]
             assert st.attributes["synced_with_car"] is None
 
-        # Car reports matching vs mismatching plan
+        # Car reports matching vs mismatching plan (fixed schedule active)
+        coord.set_charge_window_mode("fixed", sync_charge=False)
         coord._update(
             {
                 "fields": {

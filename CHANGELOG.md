@@ -16,6 +16,24 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.34.1 — 2026-11-27
+
+### 🇬🇧 English
+
+- **Smart Departure Contextual Readout, Auto Fallback Power Label & Card/Backend Sync Hardening (`lepas-card.js`, `sensor.py`, `coordinator.py`)**:
+  - **Contextual Smart Departure Status (`lepas-card.js`)**: Updated `depChargeStartText` so `noDeparturePlanned` (`"No active departure: enable a day in Departures."` / IT / NL) is only shown when `departure_at` is absent or `sensor.lepas_next_departure` is unavailable; when a departure is active (`departure_at` set) and `planned_charge_start` is `null`, the card now shows the real `plan_reason` (`already_charged`, `late_plug_in`, `away_bypass`, `no_departure_24h`, `unknown_location`, or explicit `—` fallback) alongside the next departure without double separators.
+  - **Coherent Home Power Badge (`lepas-card.js`)**: When `switch.lepas_home_charge_power_auto` is `on` with zero learned sessions (`power_source === "manual"`), the badge now displays `Auto (fallback) · <kW>` (IT `Auto (base)`, NL `Auto (basis)`) instead of `Manual`, and optimistic `Auto → Manual` switches immediately show `Manual` using `number.lepas_home_charge_power` with rollback on error.
+  - **Card DOM & Optimistic Sync Hardening (`lepas-card.js`)**: Added `focusout` input resynchronization guarded against in-flight `input:*` pending calls, `syncInputVal` pending protection, double-click pending guards on `charge_window_mode`, `home_charge_power_auto`, and `charge_days`, `_callService(..., onFail)` error rollback, unified `10s` optimistic TTL (`OPTIMISTIC_TTL_MS`), and full timer/buffer cleanup on `disconnectedCallback()`, bumping card assets to `?v=1.34.1`.
+  - **Plan-Aware Sync & Tick Listener Dedup (`sensor.py`, `coordinator.py`)**: Updated `LepasScheduledChargingWindowSensor._synced_with_car()` to respect `plan.action` (`noop` → `None`, `disable` → `switchStatus == False`, `enable` + `switchStatus == False` → `False` before decoding), and added deduplicated `_last_tick_ui_sig` listener notifications (including `now.date()` rollover) in `_departure_tick_cb` when state transitions occur while unplugged without cloud commands.
+
+### 🇮🇹 Italiano
+
+- **Stato Contestuale Partenza Smart, Etichetta Potenza Auto Base & Hardening Sincronizzazione Card/Backend (`lepas-card.js`, `sensor.py`, `coordinator.py`)**:
+  - **Messaggi Contestuali Partenza Smart (`lepas-card.js`)**: Aggiornato `depChargeStartText` in modo che `noDeparturePlanned` (*"Nessuna partenza attiva: abilita un giorno in Partenze."*, IT/EN/NL) appaia solo quando `departure_at` è assente o `sensor.lepas_next_departure` non è disponibile; con partenza attiva (`departure_at` valorizzato) e `planned_charge_start` nullo viene mostrato il motivo reale (`already_charged`, `late_plug_in`, `away_bypass`, `no_departure_24h`, `unknown_location` o fallback esplicito `—`) insieme alla prossima partenza senza doppio separatore.
+  - **Coerenza Badge Potenza Domestica (`lepas-card.js`)**: Con `switch.lepas_home_charge_power_auto` attivo e zero sessioni apprese (`power_source === "manual"`), il badge mostra `Auto (base) · <kW>` (EN `Auto (fallback)`, NL `Auto (basis)`) anziché `Manuale`, e il passaggio ottimistico `Auto → Manuale` mostra subito `Manuale` con il valore di `number.lepas_home_charge_power` e rollback su errore.
+  - **Hardening Sincronizzazione DOM & Controlli (`lepas-card.js`)**: Aggiunti resync su `focusout` protetto per chiamate `input:*` in volo, guardia pending in `syncInputVal`, blocco doppio click su `charge_window_mode`, `home_charge_power_auto` e `charge_days`, rollback `onFail` in `_callService`, TTL ottimistico unificato a `10s` (`OPTIMISTIC_TTL_MS`) e pulizia completa in `disconnectedCallback()`, aggiornando gli asset della card a `?v=1.34.1`.
+  - **Verifica `synced_with_car` & Notifiche Tick Deduplicate (`sensor.py`, `coordinator.py`)**: Aggiornato `LepasScheduledChargingWindowSensor._synced_with_car()` per rispettare `plan.action` (`noop` → `None`, `disable` → `switchStatus == False`, `enable` + `switchStatus == False` → `False` prima della decodifica), e aggiunta notifica listener deduplicata su `_last_tick_ui_sig` (incluso cambio mezzanotte `now.date()`) in `_departure_tick_cb` alle transizioni temporali ad auto scollegata senza comandi cloud.
+
 ## v1.34.0 — 2026-11-27
 
 ### 🇬🇧 English
