@@ -16,6 +16,20 @@ dell'integrazione: aggiorna da **HACS → Lepas Connect → Aggiorna**.
 
 ## [Non rilasciato]
 
+## v1.34.4 — 2026-11-28
+
+### 🇬🇧 English
+
+- **Contextual & Adaptive Charging Schedule Timeline (`lepas-card.js`)**:
+  - **Live Remaining-Time Bar in Immediate Charging & Away Bypass**: In `smart_departure` (`late_plug_in`, `no_departure_24h`) and `away_bypass`, the charging timeline no longer displays the stale manual fallback window (e.g. `10:15 → 18:15`); when actively charging with a valid `remaining_charge_time` (or `estimated_duration_min` fallback), it renders a live bar from current time to estimated completion (`HH:MM → ~HH:MM`, supporting midnight wrap), or an empty track with localized status text (`Immediate charging when plugged` / `Away from home: immediate charging`) when idle.
+  - **Mode-Aware Visibility & Fixed-Slot Estimated End**: Hides the timeline in `Off` mode (including optimistic selector transitions), shows empty status text for `already_charged` / `unknown_location` / no active window, and appends `· Est. ~HH:MM` on active `Fixed schedule` / `Smart departure` windows while charging. Bumped card assets to `?v=1.34.4`.
+
+### 🇮🇹 Italiano
+
+- **Barra Temporale Ricarica Contestuale & Adattiva (`lepas-card.js`)**:
+  - **Barra Live su Residuo Reale in Ricarica Immediata e Bypass Fuori Casa**: In `Partenza Smart` (`late_plug_in`, `no_departure_24h`) e `away_bypass`, la timeline non mostra più il vecchio fallback manuale (es. `10:15 → 18:15`); durante la ricarica attiva con `remaining_charge_time` valido (o fallback `estimated_duration_min`) disegna la barra reale dall'ora attuale alla fine stimata (`HH:MM → ~HH:MM`, con supporto oltre mezzanotte), oppure svuota la barra mostrando lo stato localizzato (*"Ricarica immediata al collegamento"* / *"Fuori casa: ricarica immediata"*) a veicolo fermo.
+  - **Visibilità Contestuale & Fine Stimata su Orario Fisso**: Nasconde la timeline in modalità `Spenta` (anche su switch ottimistico), mostra stato dedicato per `Batteria già carica` / `Posizione non nota` / nessuna finestra attiva, e aggiunge `· Fine ~HH:MM` durante la ricarica nelle finestre `Orario fisso` / `Partenza Smart` attive. Aggiornati gli asset della card a `?v=1.34.4`.
+
 ## v1.34.3 — 2026-11-27
 
 ### 🇬🇧 English

@@ -6083,3 +6083,319 @@ test("Pending guards, charge_days fallback rollback, optimistic 10s TTL expirati
     Date.now = origDateNow;
   }
 });
+
+test("Adaptive charging timeline (Option A): off, fixed, smart scheduled, smart immediate live/idle, already_charged, away_bypass, midnight wrap, optimistic switch, and legacy fallback", async () => {
+  const h = LepasCard._helpers;
+  assert.equal(typeof h.minutesToHhmm, "function", "minutesToHhmm helper must be exported");
+  assert.equal(typeof h.parseRemainingChargeMinutes, "function", "parseRemainingChargeMinutes helper must be exported");
+  assert.equal(typeof h.resolveChargeTimelineState, "function", "resolveChargeTimelineState helper must be exported");
+
+  const tIt = h.getTexts("it");
+  const tEn = h.getTexts("en");
+  const tNl = h.getTexts("nl");
+  const now1206 = new Date(2026, 10, 28, 12, 6, 0, 0);
+  const now2310 = new Date(2026, 10, 28, 23, 10, 0, 0);
+
+  // parseRemainingChargeMinutes edge cases
+  assert.equal(h.parseRemainingChargeMinutes(makeState("sensor.lepas_remaining_charge_time", "101", { unit_of_measurement: "min" })), 101);
+  assert.equal(h.parseRemainingChargeMinutes(makeState("sensor.lepas_remaining_charge_time", "1.5", { unit_of_measurement: "h" })), 90);
+  assert.equal(h.parseRemainingChargeMinutes(makeState("sensor.lepas_remaining_charge_time", "0", { unit_of_measurement: "min" })), null);
+  assert.equal(h.parseRemainingChargeMinutes(makeState("sensor.lepas_remaining_charge_time", "65535", { unit_of_measurement: "min" })), null);
+  assert.equal(h.parseRemainingChargeMinutes(makeState("sensor.lepas_remaining_charge_time", "unknown")), null);
+
+  // 1. Screenshot scenario: smart_departure + late_plug_in + charging (101 min) -> live 12:06 → ~13:47 (ignores 10:15 → 18:15)
+  const liveSmart = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: {
+      start_time: "10:15",
+      end_time: "18:15",
+      next_day: false,
+      window_mode: "smart_departure",
+      effective_action: "disable",
+      plan_reason: "late_plug_in",
+    },
+    swState: "10:15 → 18:15 · Tutti i giorni",
+    winMode: "smart_departure",
+    isCharging: true,
+    remMinutes: 101,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(liveSmart.visible, true);
+  assert.equal(liveSmart.kind, "live");
+  assert.equal(liveSmart.segs.length, 1);
+  assert.equal(liveSmart.segs[0].left, (((12 * 60 + 6) / 1440) * 100).toFixed(2));
+  assert.equal(liveSmart.label, "12:06 → ~13:47");
+
+  // 2. Midnight wrap in live mode: 23:10 + 101 min -> 00:51 (2 segments)
+  const liveWrap = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: {
+      start_time: "10:15",
+      end_time: "18:15",
+      window_mode: "smart_departure",
+      effective_action: "disable",
+      plan_reason: "late_plug_in",
+    },
+    winMode: "smart_departure",
+    isCharging: true,
+    remMinutes: 101,
+    nowDate: now2310,
+    t: tIt,
+  });
+  assert.equal(liveWrap.kind, "live");
+  assert.equal(liveWrap.segs.length, 2);
+  assert.equal(liveWrap.label, "23:10 → ~00:51");
+
+  // 3. Fallback to estimated_duration_min when remMinutes is null while charging
+  const liveEstFallback = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: {
+      window_mode: "smart_departure",
+      effective_action: "disable",
+      plan_reason: "late_plug_in",
+      estimated_duration_min: 90,
+    },
+    winMode: "smart_departure",
+    isCharging: true,
+    remMinutes: null,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(liveEstFallback.kind, "live");
+  assert.equal(liveEstFallback.label, "12:06 → ~13:36");
+
+  // 4. Smart immediate idle (not charging) -> empty bar + localized idle text (IT / EN / NL)
+  const idleIt = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "10:15", end_time: "18:15", window_mode: "smart_departure", effective_action: "disable", plan_reason: "late_plug_in" },
+    winMode: "smart_departure",
+    isCharging: false,
+    remMinutes: null,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(idleIt.visible, true);
+  assert.equal(idleIt.kind, "empty");
+  assert.equal(idleIt.segs.length, 0);
+  assert.equal(idleIt.label, tIt.timelineImmediateIdle);
+  assert.equal(
+    h.resolveChargeTimelineState({
+      schedWinAlive: true,
+      swAttrs: { window_mode: "smart_departure", effective_action: "disable", plan_reason: "no_departure_24h" },
+      winMode: "smart_departure",
+      isCharging: false,
+      remMinutes: null,
+      nowDate: now1206,
+      t: tEn,
+    }).label,
+    tEn.timelineImmediateIdle
+  );
+  assert.equal(
+    h.resolveChargeTimelineState({
+      schedWinAlive: true,
+      swAttrs: { window_mode: "smart_departure", effective_action: "disable", plan_reason: "no_departure_24h" },
+      winMode: "smart_departure",
+      isCharging: false,
+      remMinutes: null,
+      nowDate: now1206,
+      t: tNl,
+    }).label,
+    tNl.timelineImmediateIdle
+  );
+
+  // 5. Smart already_charged -> empty bar + smartAlreadyCharged
+  const fullSmart = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "10:15", end_time: "18:15", window_mode: "smart_departure", effective_action: "noop", plan_reason: "already_charged" },
+    winMode: "smart_departure",
+    isCharging: false,
+    remMinutes: null,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(fullSmart.kind, "empty");
+  assert.equal(fullSmart.segs.length, 0);
+  assert.equal(fullSmart.label, tIt.smartAlreadyCharged);
+
+  // 6. Smart scheduled (enable) -> adaptive window bar
+  const schedSmart = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "03:45", end_time: "07:30", next_day: false, window_mode: "smart_departure", effective_action: "enable", plan_reason: "smart_home" },
+    winMode: "smart_departure",
+    isCharging: false,
+    remMinutes: null,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(schedSmart.kind, "scheduled");
+  assert.equal(schedSmart.segs.length, 1);
+  assert.equal(schedSmart.label, "03:45 → 07:30");
+
+  // 7. Fixed mode (enable): idle vs charging with estimated end
+  const fixedIdle = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "10:15", end_time: "18:15", next_day: false, window_mode: "fixed", effective_action: "enable", plan_reason: "fixed_home" },
+    winMode: "fixed",
+    isCharging: false,
+    remMinutes: null,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(fixedIdle.kind, "scheduled");
+  assert.equal(fixedIdle.segs.length, 1);
+  assert.equal(fixedIdle.label, "10:15 → 18:15");
+
+  const fixedCharging = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "10:15", end_time: "18:15", next_day: false, window_mode: "fixed", effective_action: "enable", plan_reason: "fixed_home" },
+    winMode: "fixed",
+    isCharging: true,
+    remMinutes: 101,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(fixedCharging.kind, "scheduled");
+  assert.equal(fixedCharging.segs.length, 1);
+  assert.equal(fixedCharging.label, "10:15 → 18:15 · " + tIt.timelineEstEnd + " ~13:47");
+
+  // 8. Fixed + away_bypass: idle -> empty smartAwayBypass; charging -> live
+  const awayIdle = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "10:15", end_time: "18:15", window_mode: "fixed", effective_action: "disable", plan_reason: "away_bypass", away_bypass_active: true },
+    winMode: "fixed",
+    isCharging: false,
+    remMinutes: null,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(awayIdle.kind, "empty");
+  assert.equal(awayIdle.segs.length, 0);
+  assert.equal(awayIdle.label, tIt.smartAwayBypass);
+
+  const awayLive = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "10:15", end_time: "18:15", window_mode: "fixed", effective_action: "disable", plan_reason: "away_bypass", away_bypass_active: true },
+    winMode: "fixed",
+    isCharging: true,
+    remMinutes: 101,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(awayLive.kind, "live");
+  assert.equal(awayLive.segs.length, 1);
+  assert.equal(awayLive.label, "12:06 → ~13:47");
+
+  // 9. Mode Off -> hidden
+  const offState = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "10:15", end_time: "18:15", window_mode: "off", effective_action: "noop", plan_reason: "mode_off" },
+    winMode: "off",
+    isCharging: true,
+    remMinutes: 101,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(offState.visible, false);
+  assert.equal(offState.kind, "hidden");
+  assert.equal(offState.segs.length, 0);
+
+  // 10. Legacy backend (no winMode, no effective_action, no window_mode) -> preserves scheduled bar
+  const legacy = h.resolveChargeTimelineState({
+    schedWinAlive: true,
+    swAttrs: { start_time: "23:00", end_time: "05:00", next_day: true },
+    swState: "23:00 → (+1g) 05:00",
+    winMode: "",
+    isCharging: false,
+    remMinutes: null,
+    nowDate: now1206,
+    t: tIt,
+  });
+  assert.equal(legacy.visible, true);
+  assert.equal(legacy.kind, "scheduled");
+  assert.equal(legacy.segs.length, 2);
+  assert.equal(legacy.label, "23:00 → 05:00");
+
+  // DOM integration checks on compact charging tab
+  const makeTimelineHass = (overrides = {}) => makeFullHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "smart_departure", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "sensor.lepas_remaining_charge_time": makeState("sensor.lepas_remaining_charge_time", "101", { unit_of_measurement: "min" }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "10:15 → 18:15 · Tutti i giorni", {
+      start_time: "10:15",
+      end_time: "18:15",
+      next_day: false,
+      window_mode: "smart_departure",
+      effective_action: "disable",
+      plan_reason: "late_plug_in",
+      away_bypass_active: false,
+      quick_override_active: false,
+    }),
+    ...overrides,
+  }, "it");
+
+  // DOM 1: smart_departure + late_plug_in + charging -> live bar with .is-live and no 10:15 → 18:15
+  const card = createCard({ layout: "compact", default_tab: "charging" }, makeTimelineHass());
+  const root = card.shadowRoot;
+  const wrap = root.querySelector('[data-bind="timelineWrap"]');
+  const track = root.querySelector('[data-bind="timelineTrack"]');
+  const swTxt = root.querySelector('[data-bind="schedWindowText"]');
+  assert.ok(wrap && track && swTxt);
+  assert.equal(wrap.hidden, false);
+  assert.equal(wrap.classList.contains("hidden"), false);
+  assert.equal(track.getAttribute("data-timeline-kind"), "live");
+  const liveSegs = root.querySelectorAll("[data-timeline-seg]");
+  assert.ok(liveSegs.length >= 1 && liveSegs.length <= 2);
+  assert.equal(liveSegs[0].classList.contains("is-live"), true);
+  assert.ok(swTxt.textContent.includes("→ ~"), "Live timeline text must show estimated end (~HH:MM)");
+  assert.equal(swTxt.textContent.includes("10:15 → 18:15"), false, "Must NOT display stale 10:15 → 18:15 in immediate charge");
+
+  // DOM 2: smart_departure + late_plug_in + not charging -> empty track + idle text
+  card.hass = makeTimelineHass({
+    "switch.lepas_charging": makeState("switch.lepas_charging", "off"),
+    "sensor.lepas_charging_status": makeState("sensor.lepas_charging_status", "Not charging"),
+    "sensor.lepas_charging_power": makeState("sensor.lepas_charging_power", "0"),
+  });
+  assert.equal(wrap.hidden, false);
+  assert.equal(track.getAttribute("data-timeline-kind"), "empty");
+  assert.equal(root.querySelectorAll("[data-timeline-seg]").length, 0);
+  assert.equal(swTxt.textContent, tIt.timelineImmediateIdle);
+
+  // DOM 3: mode off -> hides timelineWrap and clears segments
+  card.hass = makeTimelineHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "off", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "10:15 → 18:15", {
+      start_time: "10:15",
+      end_time: "18:15",
+      window_mode: "off",
+      effective_action: "noop",
+      plan_reason: "mode_off",
+    }),
+  });
+  assert.equal(wrap.hidden, true);
+  assert.equal(wrap.classList.contains("hidden"), true);
+  assert.equal(root.querySelectorAll("[data-timeline-seg]").length, 0);
+
+  // DOM 4: fixed active -> optimistic click to off immediately hides timelineWrap
+  card.hass = makeTimelineHass({
+    "select.lepas_charge_window_mode": makeState("select.lepas_charge_window_mode", "fixed", {
+      options: ["off", "fixed", "smart_departure"],
+    }),
+    "sensor.lepas_scheduled_charging_window": makeState("sensor.lepas_scheduled_charging_window", "10:15 → 18:15", {
+      start_time: "10:15",
+      end_time: "18:15",
+      window_mode: "fixed",
+      effective_action: "enable",
+      plan_reason: "fixed_home",
+    }),
+  });
+  assert.equal(wrap.hidden, false);
+  assert.equal(track.getAttribute("data-timeline-kind"), "scheduled");
+  root.querySelector('[data-charge-window-mode="off"]').click();
+  await Promise.resolve();
+  assert.equal(wrap.hidden, true);
+  assert.equal(wrap.classList.contains("hidden"), true);
+});

@@ -1,5 +1,5 @@
 /*
- * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.34.3).
+ * Lepas vehicle card — Matte Titanium OEM edition (Lepas Connect v1.34.4).
  *
  * Adaptive single-bundle Web Component:
  *   - Compact 4-tab layout below 680px (Overview, Climate, Charging, Security)
@@ -11,7 +11,7 @@
  *   - No top-level ES module import/export (passes CJS syntax checks and HA module loading)
  */
 (function () {
-  var CARD_VERSION = "1.34.3";
+  var CARD_VERSION = "1.34.4";
   var _socGradSeq = 0;
   var VALID_COLORS = ["grey", "teal", "violet", "black", "white"];
   var VALID_LAYOUTS = ["auto", "compact", "cockpit"];
@@ -96,13 +96,13 @@
   };
 
   var HERO_IMAGES = {
-    grey: "/lepas_card/lepas-hero-grey.png?v=1.34.3",
-    teal: "/lepas_card/lepas-hero-teal.png?v=1.34.3",
-    violet: "/lepas_card/lepas-hero-violet.png?v=1.34.3",
-    black: "/lepas_card/lepas-hero-black.png?v=1.34.3",
-    white: "/lepas_card/lepas-hero-white.png?v=1.34.3",
+    grey: "/lepas_card/lepas-hero-grey.png?v=1.34.4",
+    teal: "/lepas_card/lepas-hero-teal.png?v=1.34.4",
+    violet: "/lepas_card/lepas-hero-violet.png?v=1.34.4",
+    black: "/lepas_card/lepas-hero-black.png?v=1.34.4",
+    white: "/lepas_card/lepas-hero-white.png?v=1.34.4",
   };
-  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.34.3";
+  var DEFAULT_HERO = "/lepas_card/lepas-hero.png?v=1.34.4";
 
   var CONFIRM_ACTIONS = Object.freeze({
     wake_car: true,
@@ -302,6 +302,9 @@
       smartAwayBypass: "Fuori casa: ricarica immediata",
       smartDepartureOver24h: "Partenza oltre 24h: ricarica immediata",
       smartUnknownLocation: "Posizione non nota: in attesa",
+      timelineImmediateIdle: "Ricarica immediata al collegamento",
+      timelineNoWindow: "Nessuna finestra attiva",
+      timelineEstEnd: "Fine",
       closuresGroup: "Aperture e accessi",
       securityGroup: "Sicurezza e posizione",
       applyDeparture: "Applica su auto",
@@ -532,6 +535,9 @@
       smartAwayBypass: "Away from home: immediate charging",
       smartDepartureOver24h: "Departure >24h away: immediate charging",
       smartUnknownLocation: "Location unknown: waiting",
+      timelineImmediateIdle: "Immediate charging when plugged",
+      timelineNoWindow: "No active window",
+      timelineEstEnd: "Est.",
       closuresGroup: "Closures and access",
       securityGroup: "Security and location",
       applyDeparture: "Apply to car",
@@ -762,6 +768,9 @@
       smartAwayBypass: "Niet thuis: direct laden",
       smartDepartureOver24h: "Vertrek >24u: direct laden",
       smartUnknownLocation: "Locatie onbekend: wachtend",
+      timelineImmediateIdle: "Direct laden bij aansluiten",
+      timelineNoWindow: "Geen actief venster",
+      timelineEstEnd: "Einde",
       closuresGroup: "Sluitingen en toegang",
       securityGroup: "Beveiliging en locatie",
       applyDeparture: "Toepassen op auto",
@@ -960,6 +969,131 @@
     var mm = parseInt(parts[1], 10);
     if (isNaN(hh) || isNaN(mm)) return null;
     return ((hh * 60 + mm) % 1440 + 1440) % 1440;
+  }
+
+  function minutesToHhmm(mins) {
+    var norm = ((Math.round(mins) % 1440) + 1440) % 1440;
+    var hh = Math.floor(norm / 60);
+    var mm = norm % 60;
+    return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+  }
+
+  function parseRemainingChargeMinutes(remState) {
+    if (!remState || remState.state == null) return null;
+    var rawStr = String(remState.state).trim();
+    var lower = rawStr.toLowerCase();
+    if (!rawStr || lower === "unknown" || lower === "unavailable" || lower === "none") return null;
+    var raw = parseFloat(rawStr.replace(",", "."));
+    if (!Number.isFinite(raw) || raw <= 0) return null;
+    var unit = (remState.attributes && remState.attributes.unit_of_measurement)
+      ? String(remState.attributes.unit_of_measurement).trim().toLowerCase()
+      : "";
+    var mins = (unit === "h" || unit === "hr" || unit === "hrs" || unit === "hour" || unit === "hours")
+      ? Math.round(raw * 60)
+      : Math.round(raw);
+    return (mins > 0 && mins <= 1440) ? mins : null;
+  }
+
+  function computeTimelineSegments(startMin, endMin, nextDay) {
+    if (startMin === null || endMin === null) return [];
+    var sPct = (startMin / 1440) * 100;
+    var ePct = (endMin / 1440) * 100;
+    if (nextDay || endMin <= startMin) {
+      return [
+        { left: sPct.toFixed(2), width: (100 - sPct).toFixed(2) },
+        { left: "0", width: ePct.toFixed(2) },
+      ];
+    }
+    return [{ left: sPct.toFixed(2), width: Math.max(2, ePct - sPct).toFixed(2) }];
+  }
+
+  function resolveChargeTimelineState(opts) {
+    var o = opts || {};
+    var schedWinAlive = Boolean(o.schedWinAlive);
+    var swAttrs = o.swAttrs || {};
+    var swState = o.swState != null ? String(o.swState) : "";
+    var winMode = o.winMode ? String(o.winMode) : "";
+    var isCharging = Boolean(o.isCharging);
+    var remMinutes = (typeof o.remMinutes === "number" && Number.isFinite(o.remMinutes) && o.remMinutes > 0 && o.remMinutes <= 1440)
+      ? Math.round(o.remMinutes)
+      : null;
+    var t = o.t || {};
+    var now = (o.nowDate instanceof Date && !isNaN(o.nowDate.getTime())) ? o.nowDate : new Date();
+    var nowMin = now.getHours() * 60 + now.getMinutes();
+
+    var effectiveAction = (schedWinAlive && typeof swAttrs.effective_action === "string") ? swAttrs.effective_action : "";
+    var planReason = (schedWinAlive && typeof swAttrs.plan_reason === "string") ? swAttrs.plan_reason : "";
+    var backendWinMode = (schedWinAlive && typeof swAttrs.window_mode === "string") ? swAttrs.window_mode : "";
+    var isLegacy = !winMode && !effectiveAction && !backendWinMode;
+
+    var estAttr = (schedWinAlive && typeof swAttrs.estimated_duration_min === "number" && Number.isFinite(swAttrs.estimated_duration_min) && swAttrs.estimated_duration_min > 0 && swAttrs.estimated_duration_min <= 1440)
+      ? Math.round(swAttrs.estimated_duration_min)
+      : null;
+    var liveDurMin = isCharging ? (remMinutes !== null ? remMinutes : estAttr) : null;
+
+    function makeLive() {
+      var endTotal = nowMin + liveDurMin;
+      var endMin = endTotal % 1440;
+      var crossesMidnight = endTotal >= 1440;
+      return {
+        visible: true,
+        kind: "live",
+        segs: computeTimelineSegments(nowMin, endMin, crossesMidnight),
+        label: minutesToHhmm(nowMin) + " → ~" + minutesToHhmm(endMin),
+        segKey: "live|" + nowMin + "|" + endMin + "|" + (crossesMidnight ? "1" : "0"),
+      };
+    }
+
+    function makeEmpty(label) {
+      return { visible: true, kind: "empty", segs: [], label: label, segKey: "empty" };
+    }
+
+    function makeScheduled(appendLiveEst) {
+      var sMin = hhmmToMinutes(swAttrs.start_time || "23:00");
+      var eMin = hhmmToMinutes(swAttrs.end_time || "05:00");
+      var nd = Boolean(swAttrs.next_day);
+      var segs = computeTimelineSegments(sMin, eMin, nd);
+      var label = (swAttrs.start_time && swAttrs.end_time)
+        ? (swAttrs.start_time + " → " + swAttrs.end_time)
+        : swState;
+      if (appendLiveEst && isCharging && remMinutes !== null) {
+        label = label + " · " + (t.timelineEstEnd || "Est.") + " ~" + minutesToHhmm(nowMin + remMinutes);
+      }
+      return {
+        visible: true,
+        kind: "scheduled",
+        segs: segs,
+        label: label,
+        segKey: "sched|" + (swAttrs.start_time || "") + "|" + (swAttrs.end_time || "") + "|" + (nd ? "1" : "0"),
+      };
+    }
+
+    if (winMode === "off" || (!winMode && planReason === "mode_off")) {
+      return { visible: false, kind: "hidden", segs: [], label: "", segKey: "hidden" };
+    }
+    if (!schedWinAlive) {
+      return makeEmpty("—");
+    }
+    if (isLegacy) {
+      return makeScheduled(false);
+    }
+    if (winMode && backendWinMode && winMode !== backendWinMode) {
+      if (winMode === "fixed") return makeScheduled(true);
+      if (winMode === "smart_departure") return makeEmpty("—");
+    }
+    if (effectiveAction === "disable" || swAttrs.away_bypass_active === true) {
+      if (liveDurMin !== null) return makeLive();
+      if (planReason === "away_bypass" || swAttrs.away_bypass_active === true) {
+        return makeEmpty(t.smartAwayBypass || "—");
+      }
+      return makeEmpty(t.timelineImmediateIdle || "—");
+    }
+    if (winMode === "smart_departure" && effectiveAction !== "enable") {
+      if (planReason === "already_charged") return makeEmpty(t.smartAlreadyCharged || "—");
+      if (planReason === "unknown_location") return makeEmpty(t.smartUnknownLocation || "—");
+      return makeEmpty(t.timelineNoWindow || "—");
+    }
+    return makeScheduled(true);
   }
 
   function formatTimestamp(raw, lang) {
@@ -2308,7 +2442,8 @@
       ".home-power-unit { font-size: 0.78rem; font-weight: 600; color: var(--lp-text-secondary); }",
       ".timeline-track { position: relative; height: 14px; border-radius: 7px; background: var(--lp-elevated); border: 1px solid var(--lp-border); overflow: hidden; }",
       ".timeline-seg { position: absolute; top: 0; bottom: 0; background: var(--lp-emerald); opacity: 0.85; border-radius: 4px; }",
-      ".timeline-axis { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--lp-text-muted); margin-top: 3px; }",
+      ".timeline-seg.is-live { opacity: 1; }",
+      ".timeline-axis { display: flex; justify-content: space-between; gap: 6px; text-align: center; font-size: 0.68rem; color: var(--lp-text-muted); margin-top: 3px; }",
       ".field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }",
       ".field-subhdr { display: flex; align-items: center; justify-content: space-between; min-height: 0; padding-top: 2px; }",
       ".field-lbl { font-size: 0.82rem; color: var(--lp-text-secondary); }",
@@ -4553,7 +4688,7 @@
       ) : "";
 
       var timelineHtml = ctx.schedWindow ? (
-        '<div>' +
+        '<div data-bind="timelineWrap">' +
           '<div class="timeline-track" data-bind="timelineTrack"></div>' +
           '<div class="timeline-axis num"><span>00:00</span><span data-bind="schedWindowText"></span><span>24:00</span></div>' +
         "</div>"
@@ -5678,35 +5813,6 @@
       var schedWinAlive = Boolean(vm.schedWindow && vm.schedWindow.s && !this._dead(vm.schedWindow.s));
       var swAttrs = (vm.schedWindow && vm.schedWindow.s && vm.schedWindow.s.attributes) ? vm.schedWindow.s.attributes : {};
       if (vm.schedWindow && vm.schedWindow.s) {
-        var trackEl = root.querySelector('[data-bind="timelineTrack"]');
-        if (trackEl) {
-          var segKey = (swAttrs.start_time || "") + "|" + (swAttrs.end_time || "") + "|" + (swAttrs.next_day ? "1" : "0");
-          if (trackEl.getAttribute("data-seg-key") !== segKey) {
-            trackEl.setAttribute("data-seg-key", segKey);
-            var sMin = hhmmToMinutes(swAttrs.start_time || "23:00");
-            var eMin = hhmmToMinutes(swAttrs.end_time || "05:00");
-            var segs = [];
-            if (sMin !== null && eMin !== null) {
-              var sPct = (sMin / 1440) * 100;
-              var ePct = (eMin / 1440) * 100;
-              if (swAttrs.next_day || eMin <= sMin) {
-                segs.push({ left: sPct.toFixed(2), width: (100 - sPct).toFixed(2) });
-                segs.push({ left: "0", width: ePct.toFixed(2) });
-              } else {
-                segs.push({ left: sPct.toFixed(2), width: Math.max(2, ePct - sPct).toFixed(2) });
-              }
-            }
-            trackEl.innerHTML = segs.map(function (sg) {
-              return '<div class="timeline-seg" data-timeline-seg style="left:' + sg.left + "%;width:" + sg.width + '%"></div>';
-            }).join("");
-          }
-        }
-        var swTxt = root.querySelector('[data-bind="schedWindowText"]');
-        if (swTxt) {
-          swTxt.textContent = (swAttrs.start_time && swAttrs.end_time)
-            ? swAttrs.start_time + " → " + swAttrs.end_time
-            : vm.schedWindow.s.state;
-        }
         var syncBadge = root.querySelector('[data-bind="schedSyncBadge"]');
         if (syncBadge) {
           if (swAttrs.synced_with_car === true || swAttrs.synced_with_car === false) {
@@ -5762,6 +5868,7 @@
       // Window mode selector (Phase 2 select) or legacy sync_charge_to_departure fallback
       var manualBox = root.querySelector('[data-bind="manualChargeBox"]');
       var depBox = root.querySelector('[data-bind="departureChargeBox"]');
+      var resolvedWinMode = "";
       if (vm.chargeWindowMode) {
         this._syncChargeState = null;
         var rawWinMode = !this._dead(vm.chargeWindowMode.s) ? String(vm.chargeWindowMode.s.state || "").trim() : "";
@@ -5781,6 +5888,7 @@
           }
         }
         this._chargeWindowModeState = { id: vm.chargeWindowMode.id, state: curWinMode, baseState: rawWinMode };
+        resolvedWinMode = curWinMode;
         var isCwmPending = this._pendingKeys.has("charge_window_mode");
         var cwmBtns = root.querySelectorAll("[data-charge-window-mode]");
         for (var cwi = 0; cwi < cwmBtns.length; cwi += 1) {
@@ -5798,6 +5906,7 @@
         this._optimisticChargeWindowMode = null;
         this._chargeWindowModeState = null;
         this._syncChargeState = vm.syncCharge ? { id: vm.syncCharge.id, on: this._isOn(vm.syncCharge) } : null;
+        resolvedWinMode = (schedWinAlive && typeof swAttrs.window_mode === "string") ? swAttrs.window_mode.trim() : "";
         var isDepMode = Boolean(this._syncChargeState && this._syncChargeState.on);
         var modeManualBtn = root.querySelector('[data-charge-mode="manual"]');
         var modeDepBtn = root.querySelector('[data-charge-mode="departure"]');
@@ -5811,6 +5920,39 @@
         }
         if (manualBox) manualBox.classList.toggle("hidden", isDepMode);
         if (depBox) depBox.classList.toggle("hidden", !isDepMode);
+      }
+      if (vm.schedWindow && vm.schedWindow.s) {
+        var wrapEl = root.querySelector('[data-bind="timelineWrap"]');
+        var trackEl = root.querySelector('[data-bind="timelineTrack"]');
+        var swTxt = root.querySelector('[data-bind="schedWindowText"]');
+        var remMins = (vm.remTime && !this._dead(vm.remTime.s)) ? parseRemainingChargeMinutes(vm.remTime.s) : null;
+        var tl = resolveChargeTimelineState({
+          schedWinAlive: schedWinAlive,
+          swAttrs: swAttrs,
+          swState: vm.schedWindow.s.state,
+          winMode: resolvedWinMode,
+          isCharging: isCharging,
+          remMinutes: remMins,
+          nowDate: new Date(),
+          t: t,
+        });
+        if (wrapEl) {
+          wrapEl.classList.toggle("hidden", !tl.visible);
+          wrapEl.hidden = !tl.visible;
+        }
+        if (trackEl) {
+          if (trackEl.getAttribute("data-seg-key") !== tl.segKey) {
+            trackEl.setAttribute("data-seg-key", tl.segKey);
+            trackEl.setAttribute("data-timeline-kind", tl.kind);
+            var segCls = "timeline-seg" + (tl.kind === "live" ? " is-live" : "");
+            trackEl.innerHTML = tl.segs.map(function (sg) {
+              return '<div class="' + segCls + '" data-timeline-seg style="left:' + sg.left + "%;width:" + sg.width + '%"></div>';
+            }).join("");
+          }
+        }
+        if (swTxt) {
+          swTxt.textContent = tl.label;
+        }
       }
       var depChargeStartEl = root.querySelector('[data-bind="depChargeStartText"]');
       if (depChargeStartEl) {
@@ -6395,6 +6537,9 @@
     formatCarNextDeparture: formatCarNextDeparture,
     resolveSocChargingState: resolveSocChargingState,
     buildChargingChartData: buildChargingChartData,
+    minutesToHhmm: minutesToHhmm,
+    parseRemainingChargeMinutes: parseRemainingChargeMinutes,
+    resolveChargeTimelineState: resolveChargeTimelineState,
     svgIcon: svgIcon,
   };
 
